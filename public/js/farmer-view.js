@@ -186,8 +186,8 @@ async function loadFarmer() {
 <div class="info-grid">
   <div class="info-item full"><b>Broker URL:</b> ${f.controller?.mqtt?.brokerUrl || "-"}</div>
   <div class="info-item"><b>Port:</b> ${f.controller?.mqtt?.port || "-"}</div>
-  <div class="info-item"><b>Username:</b> ${f.controller?.mqtt?.username || "-"}</div>
-  <div class="info-item"><b>Password:</b> ${f.controller?.mqtt?.password || "-"}</div>
+  <div class="info-item full"><b>Username:</b> ${f.controller?.mqtt?.username || "-"}</div>
+  <div class="info-item full muted-note">Password is shown once at issuance (MCU / Controller page) and is never stored — it can't be displayed here.</div>
 </div>
 
  <!-- SIM -->

@@ -505,6 +505,51 @@
   text-decoration: underline;
 }
 
+/* MQTT PROVISIONING */
+.mqtt-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.mqtt-status-pill {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.mqtt-status-pill.issued {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.mqtt-status-pill.none {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.mqtt-reveal-box {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #0b1f14;
+  color: #d1fae5;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.8;
+  word-break: break-all;
+}
+
+.mqtt-reveal-box .warn {
+  color: #fca5a5;
+  font-family: inherit;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
 /* Scrollbar */
 .fb-side-body::-webkit-scrollbar {
   width: 6px;

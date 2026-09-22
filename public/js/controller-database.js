@@ -21,6 +21,8 @@ import {
   subscribe
 } from "/js/data-store.js";
 
+import { API_BASE_URL } from "/js/config.js";
+
 /* ================= CACHE ================= */
 
 let activeStatus = "ALL";
@@ -451,7 +453,7 @@ if (status === "assigned" && !farmer) {
 if (c.status === "assigned" && farmer) {
   farmerCell = `
     <span class="farmer-link"
-      onclick="openFarmerPanel('${farmer.farmBuddieId}')">
+      onclick="openFarmerPanel('${farmer.farmBuddieId}', '${c.id}')">
       ${farmer.farmBuddieId}
     </span>`;
 }
@@ -544,7 +546,8 @@ document.getElementById("smartUnmapped").textContent = smart.unmapped;
 }
 
 /* ================= FARMER SIDE PANEL (1:1 WITH ONBOARDING) ================= */
-window.openFarmerPanel = async function (farmBuddieId) {
+window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
+  window.__currentControllerDocId = controllerDocId || null;
 
   let panel = document.getElementById("farmerPanel");
   if (!panel) {
@@ -700,9 +703,17 @@ const f = snap.docs[0].data();
 <div class="info-grid">
   <div class="info-item full"><b>Broker URL:</b> ${f.controller?.mqtt?.brokerUrl || "-"}</div>
   <div class="info-item"><b>Port:</b> ${f.controller?.mqtt?.port || "-"}</div>
-  <div class="info-item"><b>Username:</b> ${f.controller?.mqtt?.username || "-"}</div>
-  <div class="info-item"><b>Password:</b> ${f.controller?.mqtt?.password || "-"}</div>
+  <div class="info-item full"><b>Username:</b> ${f.controller?.mqtt?.username || "-"}</div>
 </div>
+<div class="mqtt-actions">
+  <span class="mqtt-status-pill ${f.controller?.mqtt?.username ? "issued" : "none"}">
+    ${f.controller?.mqtt?.username ? "Credentials issued" : "No credentials yet"}
+  </span>
+  <button class="fb-btn-primary small" onclick="provisionDeviceMqtt(${!!f.controller?.mqtt?.username})">
+    ${f.controller?.mqtt?.username ? "🔄 Rotate MQTT Credentials" : "🔑 Generate MQTT Credentials"}
+  </button>
+</div>
+<div id="mqttRevealBox"></div>
 
   <!-- MOTOR & TNEB CONFIG -->
 <div class="section-title">⚡ Motor & TNEB Configuration</div>
@@ -859,4 +870,61 @@ document.getElementById("tabUnmapped").onclick = () => {
   activeStatus = "sold";
   activateStatusTab("tabUnmapped");
   renderControllers();
+};
+
+/* ================= MQTT PROVISIONING ================= */
+window.provisionDeviceMqtt = async function (isRotate) {
+
+  const controllerDocId = window.__currentControllerDocId;
+  const revealBox = document.getElementById("mqttRevealBox");
+
+  if (!controllerDocId) {
+    alert("❌ Could not determine which controller this is. Reopen the farmer panel and try again.");
+    return;
+  }
+
+  if (isRotate && !confirm(
+    "This will invalidate the device's current MQTT credentials immediately. " +
+    "The device won't reconnect until it's given the new password. Continue?"
+  )) {
+    return;
+  }
+
+  try {
+
+    if (revealBox) revealBox.innerHTML = `<div class="mqtt-reveal-box">Issuing credentials…</div>`;
+
+    const idToken = await auth.currentUser.getIdToken();
+
+    const res = await fetch(`${API_BASE_URL}/provision/device`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ controllerDocId, rotate: !!isRotate })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || `Request failed (${res.status})`);
+    }
+
+    if (revealBox) {
+      revealBox.innerHTML = `
+        <div class="mqtt-reveal-box">
+          <div class="warn">⚠ Shown once — copy it now, it will not be shown again.</div>
+          <div><b>Broker:</b> ${data.brokerUrl}:${data.port}</div>
+          <div><b>Client ID / Username:</b> ${data.username}</div>
+          <div><b>Password:</b> ${data.password}</div>
+        </div>
+      `;
+    }
+
+  } catch (err) {
+    console.error("MQTT provisioning error:", err);
+    if (revealBox) revealBox.innerHTML = "";
+    alert("❌ " + err.message);
+  }
 };
