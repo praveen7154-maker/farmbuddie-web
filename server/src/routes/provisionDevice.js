@@ -125,7 +125,10 @@ provisionDeviceRouter.post("/", async (req, res) => {
       ...metadata,
       password, // returned once — not stored anywhere in plaintext
       clientId,
-      topicPrefix
+      topicPrefix,
+      farmId,
+      nodeId: "MOTOR_1", // the master hub's own fixed NODE_ID (see Motor firmware's config.h) — only it holds an MQTT credential
+      farmerName: farmer.name || ""
     });
   } catch (err) {
     console.error("provision/device error:", err);
