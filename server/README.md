@@ -136,8 +136,16 @@ read+write since it relays both directions:
 # from the VPS, with TBMQ admin token already obtained (see earlier steps)
 curl -s -X POST http://127.0.0.1:8083/api/mqtt/client/credentials \
   -H "X-Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"bridge","credentialsType":"MQTT_BASIC","credentialsValue":"{\"clientId\":\"bridge\",\"userName\":\"bridge\",\"password\":\"CHOOSE_A_PASSWORD\",\"authRules\":{\"pubAuthRulePatterns\":[\"farm/+/.*\"],\"subAuthRulePatterns\":[\"farm/+/.*\"]}}"}'
+  -d '{"name":"bridge","credentialsType":"MQTT_BASIC","credentialsValue":"{\"clientId\":\"bridge\",\"userName\":\"bridge\",\"password\":\"CHOOSE_A_PASSWORD\",\"authRules\":{\"pubAuthRulePatterns\":[\"farm/[^/]+/.*\"],\"subAuthRulePatterns\":[\"farm/[^/]+/.*\"]}}"}'
 ```
+
+`authRulePatterns` are **regex**, not MQTT wildcard syntax — `farm/+/.*` looks
+right but isn't: as a regex, `+` quantifies the preceding `/` ("one or more
+slashes"), so it only matches topics with a *double* slash after `farm` and
+silently rejects every real one (confirmed live: TBMQ returned SUBACK code
+128 for every subscribe attempt with that pattern). `farm/[^/]+/.*` ("one or
+more non-slash characters" for the farmId segment) is the correct regex
+equivalent of MQTT's `+` wildcard.
 
 ### `.env` additions
 
