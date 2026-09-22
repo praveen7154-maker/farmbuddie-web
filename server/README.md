@@ -105,3 +105,81 @@ copy+restart hook already in place at `/etc/letsencrypt/renewal-hooks/deploy/`).
 cd /root/farmbuddie-web && git pull
 cd /root && docker compose up -d --build provision-api
 ```
+
+## 6. The bridge service (device ↔ TBMQ ↔ VPS ↔ app/web)
+
+A second, separate long-running service (`server/src/bridge`) — not the
+REST API above. Holds the one persistent MQTT connection that relays
+everything: subscribes to `farm/+/#`, writes every event into Postgres
+(15-day rolling history, auto-cleaned hourly) and mirrors live status into
+Firestore; exposes `POST /command/device` and `GET /telemetry/:farmId` so
+neither the admin panel nor the Irrigo app ever needs its own MQTT
+credential.
+
+### Postgres database (same instance as TBMQ's, separate database)
+
+```bash
+docker exec -it root-postgres-1 psql -U postgres -c "CREATE DATABASE farmbuddie_bridge;"
+docker exec -it root-postgres-1 psql -U postgres -c "CREATE USER bridge WITH PASSWORD 'CHOOSE_A_PASSWORD';"
+docker exec -it root-postgres-1 psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE farmbuddie_bridge TO bridge;"
+```
+
+(Container name may differ — check with `docker compose ps`.)
+
+### Bridge's own TBMQ credential
+
+Infrastructure-level, not per-customer — created once directly via TBMQ's
+REST API (same pattern used elsewhere in this session), with broad
+read+write since it relays both directions:
+
+```bash
+# from the VPS, with TBMQ admin token already obtained (see earlier steps)
+curl -s -X POST http://127.0.0.1:8083/api/mqtt/client/credentials \
+  -H "X-Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"bridge","credentialsType":"MQTT_BASIC","credentialsValue":"{\"clientId\":\"bridge\",\"userName\":\"bridge\",\"password\":\"CHOOSE_A_PASSWORD\",\"authRules\":{\"pubAuthRulePatterns\":[\"farm/+/.*\"],\"subAuthRulePatterns\":[\"farm/+/.*\"]}}"}'
+```
+
+### `.env` additions
+
+Add to the same `server/.env` used by `provision-api` (see `.env.example`):
+`BRIDGE_MQTT_USERNAME`, `BRIDGE_MQTT_PASSWORD` (from above), `BRIDGE_PG_CONNECTION_STRING`
+(`postgresql://bridge:PASSWORD@postgres:5432/farmbuddie_bridge` — service
+name `postgres`, not `127.0.0.1`, since this runs in the same docker
+network), `BRIDGE_PORT` (default 4100).
+
+### docker-compose service
+
+```yaml
+  bridge:
+    build: /root/farmbuddie-web/server
+    container_name: bridge
+    restart: unless-stopped
+    command: ["node", "src/bridge/index.js"]
+    depends_on:
+      - tbmq
+      - postgres
+    env_file:
+      - /root/farmbuddie-web/server/.env
+    volumes:
+      - /root/secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
+    ports:
+      - "127.0.0.1:4100:4100"
+    mem_limit: 256m
+    cpus: 0.5
+```
+
+Same image as `provision-api` (same `Dockerfile`, same `package.json`),
+just a different `command:` — no second Dockerfile needed. Expose
+`GET /telemetry/*` and `POST /command/device` publicly the same way as
+`provision-api` (nginx + TLS, a new site block or reusing `api.farmbuddie.com`
+with a path prefix) once ready to wire up the app/web panel against it.
+
+### Known follow-up
+
+`device-view.js` (the web panel's live device page) still reads an older
+Firestore schema (`deviceStatus.m1/m2/m3`, `.lora.packets_*`) from a
+superseded architecture. The bridge writes the *current* firmware's real
+shape instead (`deviceStatus.pumpA`/`pumpB`, raw payload as published) —
+`device-view.js` needs a matching update before it'll show anything
+real, not done as part of this change to keep it scoped to the bridge
+itself.
