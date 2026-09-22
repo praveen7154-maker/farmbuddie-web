@@ -169,6 +169,17 @@ uploadBtn.addEventListener("click", async () => {
 
 });
 
+// A controller's Unique ID becomes its device's MQTT farmId verbatim
+// (controllers.uniqueId), and the firmware builds every topic it uses as
+// farm/<farmId>/... via snprintf(..., "%04u", farmId) - a plain 4-digit
+// decimal string, zero-padded. Anything else (the old template's
+// "FBIRRIGO26AA10001X"-style example, a typo, a copy-paste from the wrong
+// column) silently creates a controller no device can ever actually reach -
+// caught here, before it ever reaches Firestore.
+function isValidUniqueId(uniqueId) {
+    return /^\d{4}$/.test(String(uniqueId ?? "").trim());
+}
+
 /* ================= Preview Excel ================= */
 function previewExcel(rows) {
 
@@ -176,6 +187,8 @@ function previewExcel(rows) {
     tbody.innerHTML = "";
 
     rows.forEach((row, index) => {
+
+        const valid = isValidUniqueId(row["Unique ID"]);
 
         tbody.innerHTML += `
             <tr>
@@ -186,9 +199,10 @@ function previewExcel(rows) {
                 <td>${row["Variant"] || "-"}</td>
 
                 <td>
-                    <span class="status-ready">
-                        Ready
-                    </span>
+                    ${valid
+                        ? `<span class="status-ready">Ready</span>`
+                        : `<span class="status-invalid">Invalid Unique ID (must be 4 digits, e.g. "0001") - got "${row["Unique ID"] ?? ""}"</span>`
+                    }
                 </td>
             </tr>
         `;
@@ -232,11 +246,17 @@ async function uploadControllers(){
             const sim = row["SIM Number"];
             const msisdn = row["SIM MSISDN"];
 
+            if (!isValidUniqueId(uniqueId)) {
+                console.error(`Skipped row (invalid Unique ID "${uniqueId}"): must be 4 digits, e.g. "0001"`);
+                failed++;
+                continue;
+            }
+
             const controllers = getControllers();
 
             const duplicate = controllers.find(c =>
                 c.serialNumber === serial ||
-                c.uniqueId === uniqueId ||
+                c.uniqueId === String(uniqueId).trim() ||
                 c.imeiNumber === imei ||
                 (sim && c.simNumber === sim) ||
                 (msisdn && c.simMsisdn === msisdn)
@@ -255,7 +275,7 @@ async function uploadControllers(){
 
                 serialNumber:row["Serial Number"],
 
-                uniqueId:row["Unique ID"],
+                uniqueId:String(uniqueId).trim(),
 
                 imeiNumber:row["IMEI Number"],
 

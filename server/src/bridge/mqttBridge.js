@@ -1,7 +1,7 @@
 import mqtt from "mqtt";
 import { config } from "../config.js";
 import { insertEvent } from "./postgres.js";
-import { mirrorStatus } from "./firestoreMirror.js";
+import { mirrorStatus, mirrorHealth } from "./firestoreMirror.js";
 import { sendAlertPush } from "./pushNotifications.js";
 
 let client = null;
@@ -100,6 +100,14 @@ export function connectBridge() {
       // on the app side.
       if (payload && typeof payload === "object" && payload.event !== undefined) {
         await sendAlertPush(farmId, nodeId, motorNum, payload);
+      }
+    }
+
+    if (category === "health") {
+      try {
+        await mirrorHealth(farmId, nodeId, payload);
+      } catch (err) {
+        console.error("[bridge] firestore health mirror failed:", err);
       }
     }
   });

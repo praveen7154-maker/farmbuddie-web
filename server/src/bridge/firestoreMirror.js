@@ -32,10 +32,9 @@ export function startFarmerDocCacheRefresh() {
  * listeners. This writes the firmware's actual payload as-is under
  * deviceStatus.motor1/motor2 (motor NUMBER, not a "pumpA/pumpB" letter —
  * verified directly against connectivity.cpp's real topic-building code,
- * not the Motor repo's README, which describes a stale/different design)
- * — device-view.js still reads an OLDER shape (m1/m2/m3, lora.packets_*)
- * from a superseded architecture and needs updating separately to match;
- * not done here to keep this change scoped to the bridge itself.
+ * not the Motor repo's README, which describes a stale/different design).
+ * See mirrorHealth() below for the separate `health` topic's own payload
+ * (deviceStatus.health) - device-view.js reads both.
  */
 export async function mirrorStatus(farmId, nodeId, motorNum, payload) {
   const farmerDocId = await resolveFarmerDocId(farmId);
@@ -55,6 +54,37 @@ export async function mirrorStatus(farmId, nodeId, motorNum, payload) {
           nodeId,
           lastSeen: new Date(),
           [motorKey]: payload
+        }
+      },
+      { merge: true }
+    );
+}
+
+/**
+ * Same idea as mirrorStatus() above, for the device's separate `health`
+ * topic (uptime/transport/signal/reset_reason/fw_version - see Irrigo
+ * app's model/PumpModels.kt HealthStatus) — a different cadence and
+ * payload shape from motor status, so it gets its own field
+ * (deviceStatus.health) rather than being merged into motor1/motor2.
+ * Also bumps lastSeen, same as mirrorStatus() - either message type is
+ * equally valid proof the device is alive right now.
+ */
+export async function mirrorHealth(farmId, nodeId, payload) {
+  const farmerDocId = await resolveFarmerDocId(farmId);
+  if (!farmerDocId) {
+    console.warn(`[bridge] health for unknown farmId=${farmId}, no matching controller — dropped`);
+    return;
+  }
+
+  await db
+    .collection("farmers")
+    .doc(farmerDocId)
+    .set(
+      {
+        deviceStatus: {
+          nodeId,
+          lastSeen: new Date(),
+          health: payload
         }
       },
       { merge: true }

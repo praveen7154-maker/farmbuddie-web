@@ -243,12 +243,20 @@ function downloadControllerSample() {
         "SIM Number"
     ]];
 
+    // Unique ID MUST be a plain 4-digit decimal string ("0001", not
+    // "FBIRRIGO26AA10001X") - this becomes the device's MQTT farmId
+    // as-is (controllers.uniqueId), and the firmware builds every topic
+    // it publishes/subscribes to as farm/<farmId>/... using
+    // snprintf(..., "%04u", farmId) - a plain 4-digit number, zero-padded.
+    // Anything else here creates a controller no device can ever actually
+    // reach. See Motor's connectivity.cpp buildTopics() for the firmware
+    // side of this format.
     const rows = [
 
         [
             "IRRIGO",
             "IRRIGO26AA10001",
-            "FBIRRIGO26AA10001X",
+            "0001",
             "865487120001234",
             "919876543210",
             "9876543210"
@@ -257,7 +265,7 @@ function downloadControllerSample() {
         [
             "IRRIGO_PLUS",
             "IRRIGOPLUS26PP10001",
-            "FBPLUS26PP10001X",
+            "0002",
             "865487120001235",
             "919876543211",
             "9876543211"
@@ -266,7 +274,7 @@ function downloadControllerSample() {
         [
             "IRRIGO_SMART_PLUS",
             "IRRIGOSMART26SS10001",
-            "FBSMART26SS10001X",
+            "0003",
             "865487120001236",
             "919876543212",
             "9876543212"
