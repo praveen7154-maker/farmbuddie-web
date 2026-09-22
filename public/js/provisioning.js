@@ -44,6 +44,9 @@ export async function renderMqttCredentialReveal(container, data) {
         <b>Device setup QR</b> — scan with the Irrigo app to pair this device:
       </div>
       <canvas id="mqttQrCanvas" style="margin-top:8px;border-radius:8px;"></canvas>
+      <button id="mqttQrDownloadBtn" class="fb-btn-primary small" style="margin-top:10px;display:none;">
+        ⬇ Download QR (to send to the installer)
+      </button>
     </div>
   `;
 
@@ -66,6 +69,21 @@ export async function renderMqttCredentialReveal(container, data) {
     const clampedBytes = new Uint8ClampedArray(encryptedBytes);
     const canvas = container.querySelector("#mqttQrCanvas");
     await QRCode.toCanvas(canvas, [{ data: clampedBytes, mode: "byte" }], { width: 220 });
+
+    // Onboarding (office) and physical install (field) are usually
+    // different people/visits — the QR has to travel between them
+    // somehow, so give the office admin an image file to send over
+    // WhatsApp/etc. rather than assuming they're standing at the device.
+    const downloadBtn = container.querySelector("#mqttQrDownloadBtn");
+    if (downloadBtn) {
+      downloadBtn.style.display = "block";
+      downloadBtn.onclick = () => {
+        const link = document.createElement("a");
+        link.download = `${data.username || "device"}-setup-qr.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      };
+    }
   } catch (qrErr) {
     console.error("QR generation error:", qrErr);
   }
