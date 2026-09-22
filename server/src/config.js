@@ -29,5 +29,14 @@ export const config = {
   bridgeAdminOrigins: (process.env.ADMIN_ORIGIN || "")
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean)
+    .filter(Boolean),
+
+  // One shared secret compiled into every device's firmware (like
+  // GPRS_APN — "normal for this device class", per the firmware's own
+  // README) — proves "this is a legitimate Farm Buddie device" to
+  // /provision/bootstrap, NOT a master key to anything: the endpoint
+  // still only ever issues credentials for a farmId that's already been
+  // assigned to a farmer server-side. A leaked secret lets someone probe
+  // farmIds, not take over an arbitrary farm.
+  deviceProvisioningSecret: () => required("DEVICE_PROVISIONING_SECRET")
 };

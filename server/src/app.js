@@ -7,6 +7,7 @@ import { verifyFirebaseToken } from "./middleware/verifyFirebaseToken.js";
 import { provisionDeviceRouter } from "./routes/provisionDevice.js";
 import { provisionAppRouter } from "./routes/provisionApp.js";
 import { provisionMonitorRouter } from "./routes/provisionMonitor.js";
+import { provisionBootstrapRouter } from "./routes/provisionBootstrap.js";
 
 export const app = express();
 
@@ -38,3 +39,16 @@ app.use("/provision/app", provisionLimiter, verifyFirebaseToken, provisionAppRou
 // that route's own top-of-file comment for why it needs its own explicit
 // admin check instead of relying on CORS.
 app.use("/provision/monitor", provisionLimiter, verifyFirebaseToken, provisionMonitorRouter);
+
+// /provision/bootstrap is called by a device itself, before it has ever
+// touched MQTT — no Firebase token exists for it to send. Authenticated
+// entirely inside the route by its own shared secret (see that file's own
+// comment) instead of verifyFirebaseToken. Tighter rate limit — this is
+// the one endpoint reachable with no per-caller identity at all.
+const bootstrapLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use("/provision/bootstrap", bootstrapLimiter, provisionBootstrapRouter);
