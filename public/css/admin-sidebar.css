@@ -1,0 +1,122 @@
+/* ======================================================
+   ADMIN SIDEBAR – PREMIUM MODERN VERSION
+====================================================== */
+
+.fb-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f7f8;
+}
+
+.fb-sidebar {
+  width: 280px;
+  padding: 20px;
+
+  /* Smooth soft gradient */
+  background: linear-gradient(
+    180deg,
+    #eef8f5 0%,
+    #e6f3ef 40%,
+    #dff0eb 100%
+  );
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  /* Remove harsh border */
+  border-right: none;
+
+  /* Soft shadow instead of line */
+  box-shadow: 8px 0 24px rgba(0,0,0,0.04);
+
+  position: relative;
+}
+
+/* Soft fade edge effect */
+.fb-sidebar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(0,0,0,0.04),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* ======================================================
+   SIDEBAR LOGO
+====================================================== */
+
+.fb-brand {
+  padding: 16px 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.fb-brand img {
+  width: 230px;
+  height: auto;
+  transition: transform 0.3s ease;
+}
+
+.fb-brand img:hover {
+  transform: scale(1.04);
+}
+
+/* ======================================================
+   MENU
+====================================================== */
+
+.fb-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.fb-menu a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  color: #245d52;
+  transition: all 0.3s ease;
+}
+
+/* Hover */
+.fb-menu a:hover {
+  background: rgba(46,125,50,0.08);
+  transform: translateX(6px);
+}
+
+/* Active */
+.fb-menu a.active {
+  background: linear-gradient(
+    135deg,
+    rgba(46,125,50,0.35),
+    rgba(46,125,50,0.15)
+  );
+  color: #11463c;
+  font-weight: 600;
+  box-shadow: 0 8px 22px rgba(46,125,50,0.25);
+}
+
+/* Logout */
+.fb-menu a.logout {
+  margin-top: 22px;
+  color: #7a1f1f;
+}
+
+.fb-menu a.logout:hover {
+  background: rgba(220, 38, 38, 0.12);
+}

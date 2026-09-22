@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Dashboard | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- ✅ Favicon -->
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+  
+  
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/dashboard-panel.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+</head>
+
+<body class="fb-layout">
+
+<!-- SIDEBAR -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a class="active" href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/hr/hrconnect.html">👥 HR Connect</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1> 📊 Admin Dashboard</h1>
+  <span class="fb-user">Admin</span>
+</header>
+
+<section class="fb-stats">
+  <div class="fb-stat-card" data-filter="all">
+    <p>Total Farmers</p>
+    <h2 id="totalFarmers">0</h2>
+  </div>
+
+  <div class="fb-stat-card" data-filter="active">
+    <p>Active Farmers</p>
+    <h2 id="activeCount">0</h2>
+  </div>
+
+  <div class="fb-stat-card" data-filter="inactive">
+    <p>Inactive Farmers</p>
+    <h2 id="inactiveCount">0</h2>
+  </div>
+
+  <div class="fb-stat-card" data-filter="sim-expiry">
+    <p>AMC / SIM Expiry Alerts (30 days)</p>
+    <h2 id="simExpiryCount">0</h2>
+  </div>
+
+  <div class="fb-stat-card distributor-card" data-dist-filter="all">
+  <p>Total Distributors</p>
+  <h2 id="totalDistributors">0</h2>
+</div>
+
+<div class="fb-stat-card distributor-card" data-dist-filter="active">
+  <p>Active Distributors</p>
+  <h2 id="activeDistributorCount">0</h2>
+</div>
+
+<div class="fb-stat-card distributor-card" data-dist-filter="inactive">
+  <p>Inactive Distributors</p>
+  <h2 id="inactiveDistributorCount">0</h2>
+</div>
+
+</section>
+
+<!-- ================= RIGHT SIDE FARMER PANEL ================= -->
+<div id="dashboardFarmerPanel" class="fb-side-panel hidden">
+
+  <!-- HEADER -->
+  <div class="panel-header">
+    <h2>👨‍🌾 Farmer Details</h2>
+    <button class="panel-close" id="closePanelBtn">✕</button>
+  </div>
+
+  <!-- SEARCH -->
+ <div class="panel-top-actions">
+
+
+  <input
+    type="text"
+    id="searchInput"
+    placeholder="Search by Farm Buddie ID">
+
+</div>
+
+  <!-- TABLE + PAGINATION INSIDE PANEL -->
+  <div class="panel-table-wrapper">
+
+    <table class="panel-table fb-table">
+      <thead>
+  <tr>
+
+    <!-- 🔢 SERIAL NUMBER COLUMN -->
+    <th>#</th>
+
+    <!-- FARM ID -->
+    <th>
+      <div class="fb-th-wrapper">
+        <span class="fb-th-label">Farm Buddie ID</span>
+        <span class="fb-filter-icon" data-col="1">
+          <svg viewBox="0 0 24 24" width="13" height="13">
+            <path fill="currentColor"
+              d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+          </svg>
+        </span>
+        <div class="fb-filter-dropdown"></div>
+      </div>
+    </th>
+
+    <th>Name</th>
+    <th>Variant</th>
+
+    <!-- ❌ DEVICE ID REMOVED -->
+
+    <th>
+      <div class="fb-th-wrapper">
+        <span class="fb-th-label">Mobile</span>
+        <span class="fb-filter-icon" data-col="4">
+          <svg viewBox="0 0 24 24" width="13" height="13">
+            <path fill="currentColor"
+              d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+          </svg>
+        </span>
+        <div class="fb-filter-dropdown"></div>
+      </div>
+    </th>
+
+    <th>Status</th>
+
+  </tr>
+</thead>
+
+
+      <tbody id="panelFarmerTable"></tbody>
+    </table>
+
+    <!-- ✅ Pagination INSIDE PANEL -->
+    <div class="fb-table-pagination">
+      <div class="fb-page-info">
+        Showing <span id="fbStart">0</span> to 
+        <span id="fbEnd">0</span> of 
+        <span id="fbTotal">0</span> entries
+      </div>
+      <div class="fb-pagination-controls" id="fbPagination"></div>
+    </div>
+
+  </div>
+
+</div>
+
+</main>
+
+<!-- Pagination Logic -->
+<script src="/js/table-pagination.js"></script>
+
+<!-- Page Logic -->
+<script type="module" src="/js/index.js"></script>
+
+</body>
+</html>

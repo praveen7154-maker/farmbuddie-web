@@ -1,0 +1,658 @@
+/* =====================================================
+   ADMIN TABLE SYSTEM – CLEAN PROFESSIONAL VERSION
+===================================================== */
+
+/* ================= TABLE CARD ================= */
+.fb-table-card {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 16px;
+  padding: 18px;
+  border: 1px solid rgba(46,163,107,0.12);
+  box-shadow:
+    0 14px 30px rgba(0,0,0,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.5);
+}
+
+/* ================= TABLE ================= */
+.fb-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+}
+
+.fb-table thead th {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 8px 12px;
+  color: #14532d;
+}
+
+.fb-table td {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #1f2937;
+  vertical-align: middle;
+}
+
+.fb-table tbody tr {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.05);
+  transition: all 0.2s ease;
+}
+
+.fb-table tbody tr:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.1);
+}
+
+.fb-table tbody tr.inactive-row {
+  opacity: 0.55;
+  filter: grayscale(0.3);
+}
+
+/* ================= STATUS ================= */
+.status-online {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.status-offline {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+/* ================= ACTION COLUMN ================= */
+.action-cell {
+  width: 140px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+/* ================= ICON BUTTONS ================= */
+.icon-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s ease;
+}
+
+.icon-btn:hover {
+  transform: scale(1.1);
+}
+
+.icon-btn.view { color: #2563eb; }
+.icon-btn.edit { color: #16a34a; }
+.icon-btn.toggle { color: #ea580c; }
+.icon-btn.delete { color: #dc2626; }
+.icon-btn.locked { color: #9ca3af; cursor: not-allowed; }
+
+/* =====================================================
+   TOP ACTIONS (SEARCH + BUTTON AREA)
+===================================================== */
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 20px 0 24px;
+  flex-wrap: wrap;
+}
+
+.top-actions input {
+  width: 260px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid #d1d5db;
+  font-size: 12px;
+  background: #ffffff;
+  transition: 0.2s ease;
+}
+
+.top-actions input:focus {
+  outline: none;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.15);
+}
+
+.fb-btn-primary.small {
+  height: 38px;
+  padding: 0 18px;
+  font-size: 12px;
+  border-radius: 14px;
+}
+
+/* =====================================================
+   PAGINATION
+===================================================== */
+.fb-table-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(46,163,107,0.15);
+  font-size: 13px;
+}
+
+.fb-page-info {
+  color: #475569;
+  font-weight: 500;
+}
+
+.fb-pagination-controls {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.fb-page-btn {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #d1e7dd;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: 0.18s ease;
+}
+
+.fb-page-btn:hover:not(.active) {
+  background: #ecfdf5;
+  transform: translateY(-1px);
+}
+
+.fb-page-btn.active {
+  background: #16a34a;
+  color: #ffffff;
+  border-color: #16a34a;
+}
+
+.fb-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* =====================================================
+   FILTER DROPDOWN
+===================================================== */
+.fb-th-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fb-filter-icon {
+  cursor: pointer;
+  color: #64748b;
+  opacity: 0.7;
+  transition: 0.2s ease;
+}
+
+.fb-filter-icon:hover {
+  color: #16a34a;
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.fb-filter-icon.active {
+  color: #16a34a;
+  opacity: 1;
+}
+
+.fb-filter-dropdown {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  width: 220px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 14px 28px rgba(0,0,0,0.12);
+  border: 1px solid #e2e8f0;
+  display: none;
+  z-index: 100;
+}
+
+.fb-filter-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fb-filter-box input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+}
+
+.fb-filter-box input:focus {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22,163,74,0.15);
+}
+
+.fb-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.fb-apply-filter {
+  background: #16a34a;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.fb-clear-filter {
+  background: #f1f5f9;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+/* ======================================================
+   GLOBAL STATUS BADGES (FOR FARM + EMPLOYEE)
+====================================================== */
+
+.fb-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  display: inline-block;
+  border: 1px solid transparent;
+  transition: 0.2s ease;
+}
+
+.fb-badge:hover {
+  transform: translateY(-1px);
+}
+
+/* Active */
+.fb-badge.active {
+  background: rgba(34,197,94,0.12);
+  color: #166534;
+  border-color: rgba(34,197,94,0.25);
+}
+
+/* Inactive / Blocked */
+.fb-badge.inactive,
+.fb-badge.blocked {
+  background: rgba(239,68,68,0.12);
+  color: #7f1d1d;
+  border-color: rgba(239,68,68,0.25);
+}
+
+/* Pending */
+.fb-badge.pending {
+  background: rgba(234,179,8,0.15);
+  color: #854d0e;
+  border-color: rgba(234,179,8,0.3);
+}
+/* ======================================================
+   FARM BADGE SYSTEM
+====================================================== */
+
+.farm-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  display: inline-block;
+  border: 1px solid transparent;
+  transition: 0.2s ease;
+}
+
+.farm-1 {
+  background: rgba(47,111,237,0.12);
+  color: #2f6fed;
+  border-color: rgba(47,111,237,0.25);
+}
+
+.farm-2 {
+  background: rgba(0,184,148,0.12);
+  color: #00b894;
+  border-color: rgba(0,184,148,0.25);
+}
+
+.farm-3 {
+  background: rgba(34,166,153,0.12);
+  color: #22a699;
+  border-color: rgba(34,166,153,0.25);
+}
+
+.farm-4 {
+  background: rgba(39,174,96,0.12);
+  color: #27ae60;
+  border-color: rgba(39,174,96,0.25);
+}
+
+.farm-5 {
+  background: rgba(16,172,132,0.12);
+  color: #10ac84;
+  border-color: rgba(16,172,132,0.25);
+}
+
+.farm-inline-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 3px 7px;
+  font-size: 9px;
+  border-radius: 10px;
+  font-weight: 550;
+}
+
+.primary-farm {
+  background: rgba(40,167,69,0.15);
+  color: #198754;
+}
+
+.secondary-farm {
+  background: rgba(13,110,253,0.15);
+  color: #0d6efd;
+}
+
+/* ======================================================
+   ACTION BUTTONS (ACTIVATE / BLOCK)
+====================================================== */
+
+.fb-action-btn{
+  padding:5px 10px;
+  font-size:11px;
+  font-weight:600;
+  border-radius:10px;
+  backdrop-filter: blur(6px);
+  transition: all .18s ease;
+  border:1px solid transparent;
+  cursor:pointer;
+}
+
+/* ACTIVATE */
+
+.fb-action-btn.activate{
+  background:rgba(34,197,94,0.12);
+  border-color:rgba(34,197,94,0.25);
+  color:#166534;
+}
+
+.fb-action-btn.activate:hover:not(:disabled){
+  background:rgba(34,197,94,0.20);
+  border-color:rgba(34,197,94,0.35);
+  transform:translateY(-1px);
+}
+
+/* BLOCK */
+
+.fb-action-btn.block{
+  background:rgba(239,68,68,0.12);
+  border-color:rgba(239,68,68,0.25);
+  color:#7f1d1d;
+}
+
+.fb-action-btn.block:hover:not(:disabled){
+  background:rgba(239,68,68,0.20);
+  border-color:rgba(239,68,68,0.35);
+  transform:translateY(-1px);
+}
+
+/* DISABLED */
+
+.fb-action-btn:disabled{
+  opacity:.35;
+  cursor:not-allowed;
+}
+
+
+/* ======================================================
+   FARM GLASS BOX
+====================================================== */
+
+.farm-box{
+  background:rgba(255,255,255,0.65);
+  backdrop-filter:blur(10px);
+  padding:10px 14px;
+  margin-bottom:10px;
+  border-radius:14px;
+  border:1px solid rgba(0,0,0,0.06);
+  box-shadow:0 6px 18px rgba(0,0,0,0.05);
+}
+
+
+/* ======================================================
+   NETWORK ICON
+====================================================== */
+
+.icon-btn.network{
+  font-size:14px;
+  border:none;
+  background:none;
+  cursor:pointer;
+  transition:all .18s ease;
+}
+
+/* ACTIVE */
+
+.icon-btn.network.active{
+  color:#22c55e;
+}
+
+/* BLOCKED */
+
+.icon-btn.network.blocked{
+  color:#ef4444;
+}
+
+/* hover */
+
+.icon-btn.network:hover{
+  transform:scale(1.15);
+}
+
+
+/* ======================================================
+   MODAL OVERLAY
+====================================================== */
+
+.fb-modal-overlay{
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  background:rgba(0,0,0,0.35);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+
+
+/* ================= POPUP CARD ================= */
+
+.fb-modal-glass{
+background:rgba(255,255,255,0.88);
+backdrop-filter:blur(16px);
+border-radius:18px;
+padding:30px 36px;
+width:420px;
+box-shadow:0 20px 50px rgba(0,0,0,.25);
+font-family:inherit;
+animation:popupFade .18s ease;
+}
+
+/* popup animation */
+
+@keyframes popupFade{
+from{opacity:0;transform:scale(.95)}
+to{opacity:1;transform:scale(1)}
+}
+
+
+/* ================= HEADER ================= */
+
+.fb-popup-title{
+font-size:18px;
+font-weight:600;
+margin-bottom:8px;
+}
+
+.fb-popup-id{
+font-size:16px;
+font-weight:600;
+color:#1f2937;
+margin-bottom:6px;
+}
+
+/* FARM BADGE */
+
+.fb-popup-badge{
+display:inline-block;
+background:#e6f4ea;
+color:#15803d;
+padding:3px 10px;
+border-radius:8px;
+font-size:12px;
+font-weight:500;
+}
+
+
+/* ================= FARMER + PHONE ================= */
+
+.fb-popup-section{
+display:flex;
+justify-content:space-between;
+gap:30px;
+margin-top:14px;
+margin-bottom:12px;
+}
+
+.fb-popup-farmer.main{
+font-size:14px;
+font-weight:600;
+margin-bottom:4px;
+}
+
+.fb-popup-farmer.sub{
+font-size:13px;
+opacity:.85;
+margin-bottom:3px;
+}
+
+.fb-popup-phone{
+font-size:13px;
+margin-bottom:3px;
+text-align:right;
+}
+
+
+/* ================= MCU ================= */
+
+.fb-popup-mcu{
+margin-top:10px;
+font-size:14px;
+}
+
+
+/* ================= BUTTONS ================= */
+
+.fb-popup-actions{
+margin-top:20px;
+display:flex;
+justify-content:center;
+gap:14px;
+}
+
+.fb-btn{
+padding:9px 18px;
+border-radius:12px;
+border:none;
+font-size:14px;
+font-weight:600;
+cursor:pointer;
+transition:all .18s ease;
+}
+
+/* ACTIVATE */
+
+.fb-btn.activate{
+background:#22c55e;
+color:white;
+}
+
+.fb-btn.activate:hover{
+background:#16a34a;
+}
+
+/* BLOCK */
+
+.fb-btn.block{
+background:#ef4444;
+color:white;
+}
+
+.fb-btn.block:hover{
+background:#dc2626;
+}
+
+/* CLOSE */
+
+.fb-btn.close{
+background:#cfd4da;
+}
+
+.fb-btn.close:hover{
+background:#e5e7eb;
+}
+
+/* DISABLED */
+
+.fb-btn.disabled,
+.fb-btn:disabled{
+background:#cbd5e1;
+color:#64748b;
+cursor:not-allowed;
+}
+
+
+.mcu-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.icon-btn.view{
+  border:none;
+  background:transparent;
+  cursor:pointer;
+  font-size:13px;
+  color:#2563eb;
+}
+
+.icon-btn.view:hover{
+  transform:scale(1.05);
+}

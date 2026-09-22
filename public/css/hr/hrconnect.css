@@ -1,0 +1,50 @@
+/* =====================================================
+   HR CONNECT DASHBOARD
+===================================================== */
+
+.hr-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 26px;
+  margin-top: 30px;
+}
+
+/* Card */
+.hr-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 28px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 12px 26px rgba(0,0,0,0.06);
+  border: 1px solid rgba(46,163,107,0.12);
+}
+
+/* Hover */
+.hr-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 18px 36px rgba(0,0,0,0.08);
+  border-color: rgba(22,163,74,0.4);
+}
+
+/* Icon */
+.hr-icon {
+  font-size: 38px;
+  margin-bottom: 14px;
+}
+
+/* Title */
+.hr-card h3 {
+  font-size: 17px;
+  margin-bottom: 8px;
+  color: #14532d;
+  font-weight: 700;
+}
+
+/* Description */
+.hr-card p {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}

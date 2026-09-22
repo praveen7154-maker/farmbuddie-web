@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+  <meta charset="UTF-8">
+  <title>Controller Details | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Favicon -->
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <!-- GLOBAL CSS -->
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-controller-detail.css">
+
+</head>
+
+<body class="fb-layout">
+
+<!-- ================= SIDEBAR ================= -->
+
+<aside class="fb-sidebar">
+
+    <div class="fb-brand">
+        <img src="/assets/logo.png" alt="Farm Buddie Logo">
+    </div>
+
+    <nav class="fb-menu">
+
+        <a href="/admin/index.html">📊 Dashboard</a>
+
+        <a href="/admin/farmer-onboarding.html">
+            🧑‍🌾 Farmer Onboarding
+        </a>
+
+        <a href="/admin/farmer-database.html">
+            📋 Farmer Database
+        </a>
+
+        <a class="active" href="/admin/controller-database.html">
+            🧠 MCU / Controller
+        </a>
+
+        <!--<a href="/admin/phone-auth.html">
+            📱 Phone Authentication
+        </a>-->
+
+        <a href="/admin/analytics.html">
+            📈 Analytics
+        </a>
+
+        <a href="/admin/distributor-database.html">
+            🏢 Distributor Database
+        </a>
+
+        <a href="/admin/hr/hrconnect.html">
+            👥 HR Connect
+        </a>
+
+        <a href="#" id="logoutBtn" class="logout">
+            🚪 Logout
+        </a>
+
+    </nav>
+
+</aside>
+
+<!-- ================= MAIN ================= -->
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+
+    <h1>🧠 Controller Details</h1>
+
+    <button
+        class="fb-back-btn"
+        onclick="history.back()">
+
+        ← Back
+
+    </button>
+
+</header>
+
+<!-- ================= ACTION BUTTONS ================= -->
+
+<div class="view-actions">
+
+    <button
+        class="fb-btn-primary small"
+        onclick="printController()">
+
+        🖨 Print
+
+    </button>
+
+    <button
+        class="fb-btn-primary small"
+        onclick="downloadPDF()">
+
+        📄 Save as PDF
+
+    </button>
+
+</div>
+
+<!-- ================= DETAILS CARD ================= -->
+
+<div class="admin-container">
+
+    <div
+        id="viewBox"
+        class="admin-card">
+
+        Loading Controller Details...
+
+    </div>
+
+</div>
+
+</main>
+
+<!-- html2pdf -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<!-- Controller JS -->
+
+<script
+type="module"
+src="/js/controller-view.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Farmer Database | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ 
+   <!-- ✅ Favicon -->
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <!-- GLOBAL -->
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  <link rel="stylesheet" href="/css/distributor.css">
+  
+
+</head>
+
+<body class="fb-layout">
+
+<!-- ================= SIDEBAR ================= -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+   <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a class="active" href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/hr/hrconnect.html">👥 HR Connect</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>🏢 Distributor Onboarding</h1>
+  <span class="fb-user">Admin</span>
+</header>
+    
+
+<div class="fb-form-wrapper">
+
+<form id="distributorForm">
+
+  <!-- ================= BASIC DETAILS ================= -->
+  <div class="fb-card">
+    <h2>Basic Distributor Details</h2>
+
+    <div class="fb-grid">
+
+      <div class="fb-field">
+        <label>Individual / Company Name *</label>
+        <input type="text" id="name" required>
+      </div>
+
+      <div class="fb-field">
+        <label>Phone Number *</label>
+        <input type="text" id="primaryMobile" required>
+      </div>
+
+      <div class="fb-field">
+        <label>Gmail ID *</label>
+        <input type="email" id="email" required>
+      </div>
+
+      <div class="fb-field">
+        <label>GST Number</label>
+        <input type="text" id="gstNumber">
+      </div>
+
+      <div class="fb-field">
+        <label>PAN Number *</label>
+        <input type="text" id="panNumber" required>
+      </div>
+
+      <div class="fb-field">
+        <label>Aadhaar (Authorised Person) *</label>
+        <input type="text" id="aadhaarNumber" required>
+      </div>
+
+      <div class="fb-field">
+        <label>MSME Number</label>
+        <input type="text" id="msmeNumber">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= COMPANY ADDRESS ================= -->
+  <div class="fb-card">
+    <h2>Company Address</h2>
+
+    <div class="fb-grid">
+
+      <div class="fb-field">
+        <label>Address Line 1</label>
+        <input type="text" id="addressLine1">
+      </div>
+
+      <div class="fb-field">
+        <label>Address Line 2</label>
+        <input type="text" id="addressLine2">
+      </div>
+
+      <div class="fb-field">
+        <label>City</label>
+        <input type="text" id="city">
+      </div>
+
+      <div class="fb-field">
+        <label>District</label>
+        <input type="text" id="district">
+      </div>
+
+      <div class="fb-field">
+        <label>State</label>
+        <input type="text" id="state">
+      </div>
+
+      <div class="fb-field">
+        <label>Pincode</label>
+        <input type="text" id="pincode">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= BANK DETAILS ================= -->
+  <div class="fb-card">
+    <h2>Bank Details</h2>
+
+    <div class="fb-grid">
+
+      <div class="fb-field">
+        <label>Account Holder Name</label>
+        <input type="text" id="accountName">
+      </div>
+
+      <div class="fb-field">
+        <label>Account Number</label>
+        <input type="text" id="accountNumber">
+      </div>
+
+      <div class="fb-field">
+        <label>IFSC Code</label>
+        <input type="text" id="ifsc">
+      </div>
+
+      <div class="fb-field">
+        <label>Branch Location</label>
+        <input type="text" id="branchLocation">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= DOCUMENTS ================= -->
+  <div class="fb-card">
+    <h2>Documents Upload (Max 2MB each)</h2>
+
+    <div class="fb-grid">
+
+      <div class="fb-field">
+        <label>GST Certificate</label>
+        <input type="file" id="gstFile" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+      <div class="fb-field">
+        <label>PAN Card *</label>
+        <input type="file" id="panFile" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+      <div class="fb-field">
+        <label>Aadhaar *</label>
+        <input type="file" id="aadhaarFile" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+      <div class="fb-field">
+        <label>Cancelled Cheque *</label>
+        <input type="file" id="chequeFile" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+      <div class="fb-field">
+        <label>MSME Certificate</label>
+        <input type="file" id="msmeFile" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+      <div class="fb-field">
+        <label>Last Year ITR</label>
+        <input type="file" id="itrFile" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+      <div class="fb-field">
+        <label>Other Document 1</label>
+        <input type="file" id="otherDoc1" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+      <div class="fb-field">
+        <label>Other Document 2</label>
+        <input type="file" id="otherDoc2" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+      <div class="fb-field">
+        <label>Other Document 3</label>
+        <input type="file" id="otherDoc3" accept=".pdf,.jpg,.jpeg">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= ACTIONS ================= -->
+  <div class="fb-actions">
+    <button type="button" class="fb-back-primary" onclick="goBack()">
+      ← Back
+    </button>
+     
+    <button type="submit" class="fb-btn-primary">
+      💾 Save Distributor
+    </button>
+  </div>
+
+</form>
+</div>
+</main>
+
+<!-- ===== GLOBAL LOADER ===== -->
+<div id="globalLoader" class="global-loader">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <p>Saving Distributor...</p>
+  </div>
+</div>
+
+<script type="module" src="/js/distributor-onboarding.js"></script>
+
+</body>
+</html>

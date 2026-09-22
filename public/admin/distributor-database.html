@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Farmer Database | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+    <!-- ✅ Favicon -->
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <!-- GLOBAL -->
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  
+
+</head>
+
+<body class="fb-layout">
+
+<!-- ================= SIDEBAR ================= -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+   <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a class="active" href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/hr/hrconnect.html">👥 HR Connect</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>🏢 Distributor Database</h1>
+<span class="fb-user">Admin</span>
+</header>
+
+<div class="top-actions">
+
+  <input 
+    type="text" 
+    id="searchInput" 
+    placeholder="Search Distributors by ID">
+
+  <button class="fb-btn-primary small"
+    onclick="goToDistributorOnboarding()">
+    ➕ Add New Distributor
+  </button>
+
+</div>
+
+<div class="fb-table-card">
+  <table class="fb-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Distributor ID</th>
+        <th>Company/Person Name</th>
+        <th>Mobile</th>
+        <th>Status</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="distributorTableBody"></tbody>
+  </table>
+</div>
+
+
+<!-- ================= PAGINATION ================= -->
+<div class="fb-table-pagination">
+  <div class="fb-page-info">
+    Showing <span id="fbStart">0</span> to 
+    <span id="fbEnd">0</span> of 
+    <span id="fbTotal">0</span> entries
+  </div>
+  <div class="fb-pagination-controls" id="fbPagination"></div>
+</div>
+
+</main>
+
+<script type="module" src="/js/distributor-database.js"></script>
+<script src="/js/table-pagination.js"></script>
+</body>
+</html>

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Controller Database | Farm Buddie</title>
+   
+  <!-- ✅ Favicon -->
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <!-- GLOBAL -->
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  <link rel="stylesheet" href="/css/controller-database.css">
+</head>
+
+<body class="fb-layout">
+
+<!-- SIDEBAR -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+   <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a class="active" href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/hr/hrconnect.html">👥 HR Connect</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>🧠 Controller Database</h1>
+  <span class="fb-user">Admin</span>
+</header>
+
+<section class="controller-stats">
+  <div class="stat stat-total" id="tabTotal">
+  Total <b id="totalCount">0</b>
+</div>
+
+ <div class="stat stat-available" id="tabAvailable">
+    Available <b id="availableCount">0</b>
+  </div>
+
+  <div class="stat stat-assigned" id="tabAssigned">
+    Assigned <b id="assignedCount">0</b>
+  </div>
+
+  <div class="stat stat-sold" id="tabUnmapped">
+    Unmapped <b id="unmappedCount">0</b>
+  </div>
+  
+</section>
+
+<div class="variant-summary">
+
+  <div class="variant-card" id="tabIrrigo">
+    <h4>IRRIGO</h4>
+    <p>Total: <span id="irrigoTotal">0</span></p>
+    <p>Available: <span id="irrigoAvailable">0</span></p>
+    <p>Assigned: <span id="irrigoAssigned">0</span></p>
+    <p>Unmapped: <span id="irrigoUnmapped">0</span></p>
+  </div>
+
+  <div class="variant-card" id="tabPlus">
+    <h4>IRRIGO PLUS</h4>
+    <p>Total: <span id="plusTotal">0</span></p>
+    <p>Available: <span id="plusAvailable">0</span></p>
+    <p>Assigned: <span id="plusAssigned">0</span></p>
+    <p>Unmapped: <span id="plusUnmapped">0</span></p>
+  </div>
+
+  <div class="variant-card" id="tabSmart">
+    <h4>IRRIGO SMART PLUS</h4>
+    <p>Total: <span id="smartTotal">0</span></p>
+    <p>Available: <span id="smartAvailable">0</span></p>
+    <p>Assigned: <span id="smartAssigned">0</span></p>
+    <p>Unmapped: <span id="smartUnmapped">0</span></p>
+  </div>
+
+</div>
+
+<!-- ===========================================================
+UPLOAD CONTROLLERS
+============================================================ -->
+
+<div class="controller-upload-card">
+
+    <div class="upload-left">
+
+        <div class="upload-title">
+            📤 Controller Excel Upload
+        </div>
+
+        <div class="upload-sub">
+            Upload production controller data.
+            Duplicate Serial No, Unique ID, IMEI,
+            SIM MSISDN and SIM Number are automatically rejected.
+        </div>
+
+    </div>
+
+    <div class="upload-actions">
+
+        <input
+            type="file"
+            id="controllerExcel"
+            accept=".xlsx,.xls,.csv">
+
+        <button
+            class="fb-btn-primary"
+            id="uploadExcelBtn">
+
+            Upload Excel
+
+        </button>
+
+        <button
+            class="fb-btn-secondary"
+            onclick="downloadControllerSample()">
+
+            Sample Excel
+
+        </button>
+
+        
+    </div>
+
+</div>
+
+<div class="fb-table-card">
+  <table class="fb-table">
+
+    <thead>
+<tr>
+
+    <th>#</th>
+
+    <th>
+        <div class="fb-th-wrapper">
+            <span class="fb-th-label">Variant</span>
+            <span class="fb-filter-icon" data-col="1">
+                <svg viewBox="0 0 24 24" width="14" height="14">
+                    <path fill="currentColor"
+                    d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+                </svg>
+            </span>
+            <div class="fb-filter-dropdown"></div>
+        </div>
+    </th>
+
+    <th>
+        <div class="fb-th-wrapper">
+            <span class="fb-th-label">Username</span>
+            <span class="fb-filter-icon" data-col="2">
+                <svg viewBox="0 0 24 24" width="14" height="14">
+                    <path fill="currentColor"
+                    d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+                </svg>
+            </span>
+            <div class="fb-filter-dropdown"></div>
+        </div>
+    </th>
+
+    <th>
+        <div class="fb-th-wrapper">
+            <span class="fb-th-label">Farmer ID</span>
+            <span class="fb-filter-icon" data-col="3">
+                <svg viewBox="0 0 24 24" width="14" height="14">
+                    <path fill="currentColor"
+                    d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+                </svg>
+            </span>
+            <div class="fb-filter-dropdown"></div>
+        </div>
+    </th>
+
+    <th>
+        <div class="fb-th-wrapper">
+            <span class="fb-th-label">Status</span>
+            <span class="fb-filter-icon" data-col="4">
+                <svg viewBox="0 0 24 24" width="14" height="14">
+                    <path fill="currentColor"
+                    d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
+                </svg>
+            </span>
+            <div class="fb-filter-dropdown"></div>
+        </div>
+    </th>
+
+    
+</tr>
+</thead>
+
+    <tbody id="controllerTable"></tbody>
+
+  </table>
+</div>
+
+<!-- ✅ Pagination -->
+<div class="fb-table-pagination">
+  <div class="fb-page-info">
+    Showing <span id="fbStart">0</span> to 
+    <span id="fbEnd">0</span> of 
+    <span id="fbTotal">0</span> entries
+  </div>
+  <div class="fb-pagination-controls" id="fbPagination"></div>
+</div>
+
+<input
+type="file"
+id="hiddenExcelInput"
+accept=".xlsx,.xls,.csv"
+style="display:none;">
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script type="module" src="/js/controller-database.js?v=2000"></script>
+<script src="/js/table-pagination.js"></script>
+
+<script>
+function downloadControllerSample() {
+
+    const headers = [[
+        "Variant",
+        "Serial Number",
+        "Unique ID",
+        "MQTT URL",
+        "MQTT Port",
+        "Username",
+        "Password",
+        "IMEI Number",
+        "SIM MSISDN",
+        "SIM Number"
+    ]];
+
+    const rows = [
+
+        [
+            "IRRIGO",
+            "IRRIGO26AA10001",
+            "FBIRRIGO26AA10001X",
+            "ssl://farmbuddie.hivemq.cloud",
+            8883,
+            "farm001",
+            "Password@123",
+            "865487120001234",
+            "919876543210",
+            "9876543210"
+        ],
+
+        [
+            "IRRIGO_PLUS",
+            "IRRIGOPLUS26PP10001",
+            "FBPLUS26PP10001X",
+            "ssl://farmbuddie.hivemq.cloud",
+            8883,
+            "farm002",
+            "Password@123",
+            "865487120001235",
+            "919876543211",
+            "9876543211"
+        ],
+
+        [
+            "IRRIGO_SMART_PLUS",
+            "IRRIGOSMART26SS10001",
+            "FBSMART26SS10001X",
+            "ssl://farmbuddie.hivemq.cloud",
+            8883,
+            "farm003",
+            "Password@123",
+            "865487120001236",
+            "919876543212",
+            "9876543212"
+        ]
+
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet([
+        ...headers,
+        ...rows
+    ]);
+
+    worksheet["!cols"] = [
+        { wch: 18 }, // Variant
+        { wch: 24 }, // Serial Number
+        { wch: 30 }, // Unique ID
+        { wch: 35 }, // MQTT URL
+        { wch: 12 }, // MQTT Port
+        { wch: 18 }, // Username
+        { wch: 18 }, // Password
+        { wch: 22 }, // IMEI Number
+        { wch: 18 }, // SIM MSISDN
+        { wch: 18 }  // SIM Number
+    ];
+
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        "Controllers"
+    );
+
+    XLSX.writeFile(
+        workbook,
+        "FarmBuddie_Controller_Upload_Template.xlsx"
+    );
+
+}
+</script>
+
+<!-- ===== PAGE LOADER ===== -->
+<div id="pageLoader" class="page-loader" style="display:none;">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <p>Uploading...</p>
+  </div>
+</div>
+
+
+<!-- ===========================================================
+UPLOAD PREVIEW MODAL
+============================================================ -->
+
+<div
+id="uploadPreviewModal"
+class="fb-modal hidden">
+
+<div class="fb-modal-content">
+
+<div class="fb-modal-header">
+
+<h2>
+
+📋 Upload Preview
+
+</h2>
+
+<button
+id="closePreview">
+
+✕
+
+</button>
+
+</div>
+
+<div class="modal-card">
+
+<div
+id="previewSummary">
+
+</div>
+
+<div class="preview-table-wrapper">
+
+<table
+class="fb-table">
+
+<thead>
+
+<tr>
+    <th style="width:60px">#</th>
+    <th style="width:220px">Serial No</th>
+    <th style="width:180px">Variant</th>
+    <th style="width:140px">Status</th>
+</tr>
+
+</thead>
+
+<tbody
+id="previewTable">
+
+</tbody>
+
+</table>
+
+</div>
+
+<div
+class="preview-footer">
+
+<button
+class="fb-btn-secondary"
+id="cancelPreview">
+
+Cancel
+
+</button>
+
+<button
+class="fb-btn-primary"
+id="confirmUpload">
+
+Confirm Upload
+
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- ===========================================================
+UPLOAD HISTORY
+============================================================ -->
+
+<div
+id="uploadHistoryModal"
+class="fb-modal hidden">
+
+<div class="fb-modal-content">
+
+<div class="fb-modal-header">
+
+<h2>
+
+📜 Upload History
+
+</h2>
+
+<button
+id="closeHistory">
+
+✕
+
+</button>
+
+</div>
+
+<div class="modal-card">
+  <div class="history-table-wrapper">
+<table class="fb-table">
+
+<thead>
+
+<tr>
+
+<th>Date</th>
+
+<th>User</th>
+
+<th>File Name</th>
+
+<th>Total</th>
+
+<th>Uploaded</th>
+
+<th>Failed</th>
+
+<th>Status</th>
+
+</tr>
+
+</thead>
+
+<tbody
+id="uploadHistoryTable">
+
+</tbody>
+
+</table>
+</div>
+
+
+</div>
+
+</div>
+
+</div>
+<!-- ===========================================================
+UPLOAD RESULT
+============================================================ -->
+
+<div
+id="uploadResultModal"
+class="fb-modal hidden">
+
+<div class="fb-modal-content">
+
+<div class="fb-modal-header">
+
+<h2>
+
+✅ Upload Completed
+
+</h2>
+
+</div>
+
+<div class="modal-card">
+
+<div id="uploadResult">
+
+</div>
+
+<div
+style="margin-top:25px;text-align:right;">
+
+<button
+class="fb-btn-primary"
+id="closeUploadResult">
+
+Close
+
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+</body>
+</html>

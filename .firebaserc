@@ -1,0 +1,18 @@
+[
+  {
+    "origin": [
+      "https://farmbuddie-cloud.web.app",
+      "https://farmbuddie-cloud.firebaseapp.com",
+      "http://localhost:5000"
+    ],
+    "method": [
+      "GET",
+      "HEAD"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "Access-Control-Allow-Origin"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -1,0 +1,272 @@
+/* ======================================================
+   DASHBOARD RIGHT SIDE PANEL (CONTENT STYLING ONLY)
+====================================================== */
+
+/* ================= HEADER ================= */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+}
+
+.panel-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f7a4d;
+  margin: 0;
+}
+
+/* close button */
+.panel-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+  color: #444;
+}
+
+.panel-close:hover {
+  color: #d32f2f;
+}
+
+/* ================= SEARCH ================= */
+.panel-search {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.panel-search input {
+  width: 280px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #dcdcdc;
+  font-size: 12px;
+}
+
+.panel-search input:focus {
+  outline: none;
+  border-color: #1f7a4d;
+}
+
+/* ================= TABLE ================= */
+.panel-table-wrapper {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.panel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.panel-table thead th {
+  background: #f6f8f7;
+  color: #1f7a4d;
+  font-weight: 600;
+  text-align: left;
+  padding: 14px 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.panel-table tbody td {
+  padding: 14px 12px;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.panel-table tbody tr:hover {
+  background: #f2faf6;
+}
+
+/* inactive row */
+.panel-table .inactive-row {
+  opacity: 0.6;
+}
+
+/* scrollbar */
+.panel-table-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel-table-wrapper::-webkit-scrollbar-thumb {
+  background: #cfd8d3;
+  border-radius: 10px;
+}
+/* =========================
+   DASHBOARD PANEL TOP ACTIONS
+========================= */
+
+.panel-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.panel-top-actions input {
+  width: 205px;
+  height: 40px;
+  padding: 0 18px;
+
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.panel-top-actions input:focus {
+  outline: none;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.15);
+}
+/* ======================================================
+   DASHBOARD RIGHT SIDE PANEL – POLISHED VERSION
+====================================================== */
+
+/* ================= PANEL CONTAINER ================= */
+#dashboardFarmerPanel {
+  width: 640px;                     /* Increased width */
+  max-width: 92vw;
+
+  border-left: 1px solid rgba(0,0,0,0.05);
+  border-top-left-radius: 22px;
+  border-bottom-left-radius: 22px;
+
+  box-shadow: -14px 0 40px rgba(0,0,0,0.08);
+
+  padding: 28px 30px;
+  background: #ffffff;
+
+  transition: all 0.3s ease;
+}
+
+/* Add breathing space from dashboard */
+.fb-main {
+  padding-right: 20px;
+}
+
+/* ================= HEADER ================= */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 14px;
+  margin-bottom: 22px;
+}
+
+.panel-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f7a4d;
+  margin: 0;
+}
+
+.panel-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  color: #444;
+  transition: 0.2s ease;
+}
+
+.panel-close:hover {
+  color: #d32f2f;
+  transform: scale(1.1);
+}
+
+/* ================= SEARCH ================= */
+.panel-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.panel-top-actions input {
+  width: 230px;
+  height: 40px;
+  padding: 0 18px;
+
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.panel-top-actions input:hover {
+  border-color: #cfd8d3;
+}
+
+.panel-top-actions input:focus {
+  outline: none;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.15);
+}
+
+/* ================= TABLE WRAPPER ================= */
+.panel-table-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 8px;
+  padding-right: 6px;
+}
+
+/* ================= TABLE ================= */
+.panel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.panel-table thead th {
+  background: #f6f8f7;
+  color: #1f7a4d;
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.panel-table tbody td {
+  padding: 10px 10px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.panel-table tbody tr {
+  height: 48px;
+  transition: background 0.2s ease;
+}
+
+.panel-table tbody tr:hover {
+  background: #f5faf7;
+}
+
+/* Inactive row */
+.panel-table .inactive-row {
+  opacity: 0.6;
+}
+
+/* ================= SCROLLBAR ================= */
+.panel-table-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel-table-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.12);
+  border-radius: 10px;
+}
+
+.panel-table-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>HR Module | Farm Buddie</title>
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  <link rel="stylesheet" href="/css/hr-pages.css">
+</head>
+
+<body class="fb-layout">
+
+<!-- SIDEBAR -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <a href="/admin/phone-auth.html">📱 Phone Authentication</a>
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+
+    <!-- 🔥 Updated Path -->
+    <a class="active" href="/admin/hr/hrconnect.html">👥 HR Connect</a>
+
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <div class="topbar-left">
+    <button onclick="goBack()" class="fb-back-btn">← Back</button>
+    <h1 id="pageTitle">Page Title</h1>
+  </div>
+  <span class="fb-user">Admin</span>
+</header>
+
+<section class="hr-page-content">
+  <!-- dynamic content here -->
+</section>
+
+</main>
+
+<script type="module" src="/admin/hr/hr-common.js"></script>
+</body>
+</html>

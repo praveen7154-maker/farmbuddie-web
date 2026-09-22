@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Employee List | Farm Buddie</title>
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  <link rel="stylesheet" href="/css/hr/hr-pages.css">
+</head>
+
+<body class="fb-layout">
+
+<!-- SIDEBAR -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <a href="/admin/phone-auth.html">📱 Phone Authentication</a>
+    <a href="/admin/analytics.html">📈 Analytics</a>
+
+    <!-- 🔥 Updated Path -->
+    <a class="active" href="/admin/hr/hrconnect.html">👥 HR Connect</a>
+
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>👥 Employee List</h1>
+  <button class="hr-back-btn" onclick="goBackHR()">← Back</button>
+</header>
+
+<div class="fb-table-card">
+
+<table class="fb-table">
+<thead>
+<tr>
+
+<th>#</th>
+
+<th>
+  <div class="fb-th-wrapper">
+    <span>Employee ID</span>
+  </div>
+</th>
+
+<th>Name</th>
+
+<th>
+  <div class="fb-th-wrapper">
+    <span>Department</span>
+  </div>
+</th>
+
+<th>
+  <div class="fb-th-wrapper">
+    <span>Mobile</span>
+  </div>
+</th>
+
+<th>Status</th>
+
+<th>Actions</th>
+
+</tr>
+</thead>
+
+<tbody id="employeeTableBody"></tbody>
+
+</table>
+</div>
+
+<!-- Pagination -->
+<div class="fb-table-pagination">
+  <div class="fb-page-info">
+    Showing <span id="fbStart">0</span> to
+    <span id="fbEnd">0</span> of
+    <span id="fbTotal">0</span> entries
+  </div>
+  <div class="fb-pagination-controls" id="fbPagination"></div>
+</div>
+
+</main>
+
+<script src="/js/table-pagination.js"></script>
+<script type="module" src="/admin/hr/employee-list.js"></script>
+
+<script>
+setTimeout(() => {
+  initTablePagination(".fb-table", 10);
+}, 400);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Add Farm | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- ✅ Favicon -->
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <!-- GLOBAL -->
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/farmer-onboarding.css">
+</head>
+
+<body class="fb-layout">
+
+<!-- SIDEBAR -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a class="active" href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/hr/hrconnect.html">👥 HR Connect</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>🌱 Add New Farm to Existing Farmer</h1>
+  <button class="fb-back-btn" onclick="history.back()">← Back</button>
+</header>
+
+<!-- ================= SELECT FARMER ================= -->
+<section class="fb-card">
+  <h2>👤 Select Existing Farmer</h2>
+
+  <div class="fb-field">
+    <label>Search Farmer (Farm Buddie ID Only)</label>
+    <input 
+      type="text" 
+      id="farmerSearchInput" 
+      placeholder="Enter Farm Buddie ID and press Enter"
+    />
+  </div>
+
+  <div id="farmerSearchResults" class="search-results"></div>
+
+  <input type="hidden" id="selectedFarmerDocId">
+
+</section>
+
+
+<!-- =====================================================
+  SECTION 1: FARMER IDENTITY & KYC
+===================================================== -->
+<section class="fb-card">
+  <h2>👨‍🌾 Farmer Identity & KYC</h2>
+
+  <div class="fb-grid">
+
+    <div class="fb-field">
+      <label>Title</label>
+      <select id="title" disabled>
+        <option>Mr</option>
+        <option>Mrs</option>
+        <option>Ms</option>
+      </select>
+    </div>
+
+    <div class="fb-field">
+      <label>Farmer Name *</label>
+      <input type="text" id="farmerName" readonly>
+    </div>
+
+    <div class="fb-field">
+      <label>Primary Mobile *</label>
+      <input type="tel" id="primaryMobile" readonly>
+    </div>
+
+    <div class="fb-field">
+      <label>Secondary Mobile</label>
+      <input type="tel" id="secondaryMobile" readonly>
+    </div>
+
+    <div class="fb-field">
+      <label>Aadhaar Number *</label>
+      <input type="tel" id="aadhaarNumber" readonly>
+    </div>
+
+    <div class="fb-field">
+      <label>Email ID</label>
+      <input type="email" id="emailId" placeholder="Enter Email (Optional)">
+    </div>
+
+    <div class="fb-field">
+      <label>Customer Lead Source</label>
+      <input type="text" id="leadSourceDisplay" readonly>
+    </div>
+
+    <div class="fb-field full">
+      <label>Address</label>
+      <textarea id="address" readonly></textarea>
+    </div>
+
+<div class="fb-field">
+  <label>Farm Number</label>
+  <input type="text" id="farmNumber" readonly>
+</div>
+
+  </div>
+</section>
+
+<!-- =====================================================
+  SECTION 2: FARM & APP USER DETAILS
+===================================================== -->
+<section class="fb-card">
+  <h2>🌾 Farm & App User Details</h2>
+
+  <div class="fb-grid">
+
+    <!-- Farm Location -->
+    
+
+    <div class="fb-field full">
+      <label>Farm Location *</label>
+      <textarea id="farmLocation" required></textarea>
+    </div>
+
+    <!-- Latitude -->
+    <div class="fb-field">
+      <label>Farm Latitude </label>
+      <input type="text" id="farmLatitude"
+        placeholder="e.g. 11.1271">
+    </div>
+
+    <!-- Longitude -->
+    <div class="fb-field">
+      <label>Farm Longitude</label>
+      <input type="text" id="farmLongitude"
+        placeholder="e.g. 78.6569">
+    </div>
+
+    <!-- APP USER 2 -->
+    <div class="fb-field">
+      <label>App User 2 – Name</label>
+      <input type="text" id="appUser2Name">
+    </div>
+
+    <div class="fb-field">
+      <label>App User 2 – Mobile</label>
+      <input type="tel" id="appUser2Mobile"
+        maxlength="10"
+        inputmode="numeric"
+        pattern="[6-9][0-9]{9}"
+        onkeypress="return event.charCode >= 48 && event.charCode <= 57"
+        onpaste="return false">
+    </div>
+
+    <!-- APP USER 3 -->
+    <div class="fb-field">
+      <label>App User 3 – Name</label>
+      <input type="text" id="appUser3Name">
+    </div>
+
+    <div class="fb-field">
+      <label>App User 3 – Mobile</label>
+      <input type="tel" id="appUser3Mobile"
+        maxlength="10"
+        inputmode="numeric"
+        pattern="[6-9][0-9]{9}">
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ================= MCU ================= -->
+<section class="fb-card">
+  <h2>🧠 MCU / Device Mapping</h2>
+
+  <div class="fb-grid">
+
+    <div class="fb-field">
+      <label>MCU Variant *</label>
+     <select id="mcuVariant" onchange="handleMcuVariant()" required>
+        <option value="" disabled selected>Select Variant</option>
+        <option value="IRRIGO">Irrigo</option>
+        <option value="IRRIGO_PLUS">Irrigo Plus</option>
+        <!--<option value="IRRIGO_SMART_PLUS">Irrigo Smart Plus</option>-->
+     </select>
+    </div>
+
+    <div class="fb-field" id="serialField" style="display:none;">
+      <label>MCU Serial Number *</label>
+      <input
+        type="text"
+        id="mcuSerial"
+        list="mcuSerialList"
+        placeholder="Type or select serial"
+        autocomplete="off"
+        onblur="validateMcuSerial()"
+    required
+      >
+      <datalist id="mcuSerialList"></datalist>
+    </div>
+
+    <div class="fb-field">
+      <label>Warranty Start Date</label>
+      <input type="date" id="warrantyStart" onchange="calculateWarrantyEnd()">
+    </div>
+
+    <div class="fb-field">
+      <label>Warranty End Date (Auto)</label>
+      <input type="date" id="warrantyEnd" readonly>
+    </div>
+
+  </div>
+</section>
+
+<!-- =====================================================
+  SECTION 2: NETWORK MANAGEMENT
+===================================================== -->
+<section class="fb-card">
+  <h2>🌐 Network Management</h2>
+
+  <div class="fb-grid">
+
+    <!-- Network Type -->
+    <!-- Network Type -->
+<div class="fb-field">
+    <label>Network Type *</label>
+    <select id="networkType" onchange="handleNetworkType()" required>
+        <option value="" disabled selected>Select Network Type</option>
+        <option value="SIM">SIM</option>
+        <option value="WIFI_FARMER">WIFI_Farmer</option>
+    </select>
+</div>
+
+<!-- SIM Number -->
+<div class="fb-field network-field">
+    <label>SIM Number</label>
+    <input
+        type="text"
+        id="simNumber"
+        readonly
+        placeholder="Auto fetched from selected controller">
+</div>
+
+<!-- SIM MSISDN -->
+<div class="fb-field network-field">
+    <label>SIM MSISDN</label>
+    <input
+        type="text"
+        id="simMsisdn"
+        readonly
+        placeholder="Auto fetched from selected controller">
+</div>
+
+<!-- SIM IMEI -->
+<div class="fb-field network-field">
+    <label>SIM IMEI Number</label>
+    <input
+        type="text"
+        id="simImei"
+        readonly
+        placeholder="Auto fetched from selected controller">
+</div>
+
+<!-- SIM Type -->
+<div class="fb-field network-field">
+    <label>SIM Type</label>
+    <select id="simType">
+        <option value="M2M" selected>M2M</option>
+        <option value="IoT">IoT</option>
+        <option value="Normal">Normal</option>
+    </select>
+</div>
+
+<!-- Billing -->
+<div class="fb-field">
+    <label>Billing Cycle</label>
+    <select id="billingCycle">
+        <option value="Quarterly">Quarterly</option>
+        <option value="Yearly" selected>Yearly</option>
+    </select>
+</div>
+
+<!-- Activation -->
+<div class="fb-field">
+    <label>SIM / AMC Activation Date *</label>
+    <input
+        type="date"
+        id="activationDate"
+        required>
+</div>
+
+  </div>
+</section>
+
+<!-- ================= MOTOR / TNEB CONFIG ================= -->
+<section class="fb-card" id="motorConfigSection" style="display:none;">
+  <h2>⚡ Motor / TNEB Configuration</h2>
+
+  <div class="motor-layout">
+
+    <!-- LEFT SIDE (PUMPS) -->
+    <div class="motor-left">
+
+      <div class="fb-field">
+        <label>No of Motors *</label>
+        <select id="motorCount"></select>
+      </div>
+
+      <div id="pumpHpContainer" class="motor-grid"></div>
+
+ 
+
+    </div>
+
+    <!-- RIGHT SIDE (SERVICES) -->
+    <div class="motor-right">
+
+      <div class="fb-field">
+        <label>No of TNEB Services *</label>
+        <select id="serviceCount">
+          <!--<option value="">Select Services</option>-->
+          <option value="1">1 Service</option>
+          <option value="2">2 Services</option>
+          <option value="3">3 Services</option>
+        </select>
+      </div>
+
+      <div id="serviceHpContainer" class="service-grid"></div>
+
+    </div>
+
+  </div>
+</section>
+<!-- ================= VALVE CONFIG ================= -->
+<section class="fb-card" id="valveConfigSection" style="display:none;">
+  <h2>⚙️ Valve Configuration</h2>
+
+  <div class="fb-grid">
+
+    <div class="fb-field">
+      <label>No of 24V AC Valves *</label>
+      <input type="text"
+             id="valve24Count"
+             class="small-input"
+             maxlength="3"
+             inputmode="numeric"
+             pattern="\d*"
+             value="0">
+    </div>
+
+    <div class="fb-field" id="valve9Field">
+      <label>No of 9V DC Valves *</label>
+      <input type="text"
+             id="valve9Count"
+             class="small-input"
+             maxlength="3"
+             inputmode="numeric"
+             pattern="\d*"
+             value="0">
+    </div>
+
+  </div>
+  <!-- 🔥 IRRIGO PLUS EXTRA FEATURES -->
+<div id="irrigoPlusExtras" style="display:none; margin-top:18px;">
+  <h2 class="sub-section-title">🔥 Additional Features</h2>
+
+  <div class="fb-grid">
+
+    <div class="fb-field">
+      <label>No of Filter Backwash *</label>
+      <input type="text"
+             id="filterBackwashCount"
+             maxlength="3"
+             inputmode="numeric"
+             pattern="\d*"
+             value="0">
+    </div>
+
+    <div class="fb-field">
+      <label>Water Level Monitoring *</label>
+      <select id="waterLevelMonitoring">
+        <option value="0" selected>No</option>
+        <option value="1">1 Sensor</option>
+        <option value="2">2 Sensors</option>
+        <option value="3">3 Sensors</option>
+      </select>
+    </div>
+
+  </div>
+</div>
+</section>
+
+<!-- ================= ACTION ================= -->
+<div class="fb-actions">
+  <button 
+    type="button" 
+    id="saveFarmerBtn"
+    class="fb-btn-primary" 
+    onclick="saveFarmer()">
+    Save Farm
+  </button>
+</div>
+
+</main>
+
+<!-- ================= SCRIPT ================= -->
+<script type="module" src="/js/add-farm.js"></script>
+
+<div id="globalLoader" class="global-loader">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <p>Saving New Farm...</p>
+  </div>
+</div>
+
+</body>
+</html>

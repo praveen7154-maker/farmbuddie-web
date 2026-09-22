@@ -1,0 +1,225 @@
+.device-industrial {
+  font-size: 12px;
+  color: #1f2937;
+}
+
+/* HEADER */
+.device-header-industrial {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.title-left {
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.back-industrial {
+  background: rgba(0,0,0,0.05);
+  border: none;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+/* CARD */
+.card-industrial {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+}
+
+/* SECTION TITLE */
+.section-title {
+  margin: 20px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* STATUS */
+.status-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 7px;
+}
+
+.status-box {
+  background: rgba(0,0,0,0.05);
+  border-radius: 9px;
+  padding: 8px 12px;
+  min-width: 100px;
+  text-align: center;
+}
+
+.status-box span {
+  display: block;
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.status-box strong {
+  font-size: 12px;
+}
+
+/* STATUS PILL */
+.status-pill {
+  padding: 4px 10px;
+  border-radius: 18px;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.status-online {
+  background: rgba(34,197,94,0.15);
+  color: #16a34a;
+}
+
+.status-offline {
+  background: rgba(239,68,68,0.15);
+  color: #dc2626;
+}
+
+/* ================= MOTOR LAYOUT UPGRADE ================= */
+
+.motor-card {
+  background: rgba(0,0,0,0.04);
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid rgba(0,0,0,0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Left content */
+.motor-left {
+  flex: 1;
+}
+
+/* Right image container */
+.motor-visual {
+  width: 80px;
+  text-align: center;
+}
+
+.motor-visual img {
+  width: 60px;
+  transition: transform 0.3s ease;
+}
+
+/* Animation when running */
+.motor-running img {
+  animation: spin 1.2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ================= MOTORS ================= */
+
+.motor-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 900px;
+}
+
+.motor-card {
+  background: rgba(0,0,0,0.04);
+  border-radius: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+.motor-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.motor-info {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+/* ================= PHASE INLINE ================= */
+
+.phase-inline {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+}
+
+/* R Phase */
+.phase-r {
+  background: rgba(239,68,68,0.12);
+  color: #b91c1c;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* Y Phase */
+.phase-y {
+  background: rgba(234,179,8,0.15);
+  color: #a16207;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* B Phase */
+.phase-b {
+  background: rgba(59,130,246,0.15);
+  color: #1e40af;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* VALVES */
+.valve-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 8px;
+}
+
+.valve-box {
+  background: rgba(0,0,0,0.05);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.valve-open {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.valve-offline {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+
+.motor-light{
+  margin-top:6px;
+  font-size:13px;
+  color:#555;
+}
+
+.motor-light span{
+  padding:3px 8px;
+  border-radius:6px;
+}

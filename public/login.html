@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Login | Farm Buddie</title>
+
+  <!-- Main CSS -->
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+
+<body class="login-body login-page">
+
+  <div class="login-container">
+
+    <!-- LOGO -->
+    <img src="/assets/logo.png" alt="Farm Buddie Logo" class="login-logo">
+
+    <h2>Admin Login</h2>
+    <p class="login-subtitle">Sign in to manage farms & controllers</p>
+
+    <!-- EMAIL -->
+    <input
+      type="email"
+      id="email"
+      placeholder="Admin Email"
+      autocomplete="username"
+    >
+
+    <!-- PASSWORD -->
+    <input
+      type="password"
+      id="password"
+      placeholder="Password"
+      autocomplete="current-password"
+    >
+
+    <!-- ERROR MESSAGE -->
+    <div id="error-msg" class="error-text" style="display:none;"></div>
+
+    <!-- LOGIN BUTTON -->
+    <button class="login-btn" id="loginBtn" type="button">
+      Login
+    </button>
+
+  </div>
+
+  <!-- Firebase Login Logic (CORRECT VERSION) -->
+  <script type="module">
+    import { auth } from "/js/firebase-init.js";
+    import { signInWithEmailAndPassword }
+      from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const errorMsg = document.getElementById("error-msg");
+    const loginBtn = document.getElementById("loginBtn");
+
+    function login() {
+      console.log("LOGIN CLICKED");
+
+      const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      errorMsg.style.display = "none";
+
+      if (!email || !password) {
+        errorMsg.textContent = "Please enter email and password";
+        errorMsg.style.display = "block";
+        return;
+      }
+
+      loginBtn.disabled = true;
+      loginBtn.textContent = "Signing in...";
+
+      signInWithEmailAndPassword(auth, email, password)
+        .then((cred) => {
+          console.log("LOGIN SUCCESS:", cred.user.uid);
+          window.location.href = "/admin/index.html";
+        })
+        .catch((error) => {
+          console.error("LOGIN ERROR:", error);
+          errorMsg.textContent = error.message;
+          errorMsg.style.display = "block";
+        })
+        .finally(() => {
+          loginBtn.disabled = false;
+          loginBtn.textContent = "Login";
+        });
+    }
+
+    loginBtn.addEventListener("click", login);
+  </script>
+
+</body>
+</html>

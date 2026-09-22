@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Device View | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+   <!-- ✅ Favicon -->
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <!-- GLOBAL -->
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-device-view.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="fb-layout">
+
+<!-- SIDEBAR -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a class="active" href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/hr/hrconnect.html">👥 HR Connect</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main device-industrial">
+
+<header class="device-header-industrial">
+  <div class="title-left">
+    📈 Device Dashboard
+    <span id="deviceStatusBadge" class="status-pill">Checking</span>
+  </div>
+  <button class="back-industrial" onclick="history.back()">← Back</button>
+</header>
+
+<!-- FARM INFO -->
+<section class="card-industrial farm-info">
+  <div><strong>Farm Buddie ID:</strong> <span id="farmId">--</span></div>
+  <div><strong>Controller Unique ID:</strong> <span id="uniqueId">--</span></div>
+</section>
+
+<!-- DEVICE STATUS -->
+<h4 class="section-title">Device Status</h4>
+<section class="status-row">
+  <div class="status-box"><span>Status</span><strong id="statusText">--</strong></div>
+  <div class="status-box"><span>WiFi RSSI</span><strong id="wifi">-</strong></div>
+  <div class="status-box"><span>Firmware</span><strong id="fw">-</strong></div>
+  <div class="status-box"><span>Last Seen</span><strong id="lastSeenTime">-</strong></div>
+  <div class="status-box">
+    <span>Packets Sent</span>
+    <strong id="packetsSent">-</strong>
+  </div>
+
+  <div class="status-box">
+    <span>Packets Received</span>
+    <strong id="packetsRecv">-</strong>
+  </div>
+
+  <div class="status-box">
+    <span>Packets Lost</span>
+    <strong id="packetsLost">-</strong>
+  </div>
+</section>
+
+<!-- MOTORS -->
+<h4 class="section-title">Motors</h4>
+<section id="motorGrid" class="motor-grid"></section>
+
+<!-- VALVES -->
+<h4 class="section-title">Valves</h4>
+<section id="valveGrid" class="valve-grid"></section>
+
+</main>
+
+<script type="module" src="/js/device-view.js"></script>
+</body>
+</html>

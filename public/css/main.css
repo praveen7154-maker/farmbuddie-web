@@ -1,0 +1,494 @@
+/* =====================================================
+   GLOBAL RESET
+===================================================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  
+}
+
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #ffffff;
+}
+
+/* Slight global font scale */
+html {
+  font-size: 12px;
+}
+
+body {
+  font-size: 0.94rem;
+}
+
+/* Headings */
+h1 { font-size: 0.92em; }
+h2 { font-size: 0.94em; }
+h3 { font-size: 0.95em; }
+
+/* =====================================================
+   GLOBAL BASE
+===================================================== */
+
+html, body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* =====================================================
+   SCROLL CONTROL (ISOLATED)
+===================================================== */
+
+/* Home Page Only */
+body.home-page {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Login Page Only */
+body.login-page {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* =====================================================
+   HOME PAGE – PREMIUM VERSION
+===================================================== */
+
+/* ================= GLASS HEADER ================= */
+
+.home-header {
+  height: 125px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 80px 12px 80px;
+
+  background: rgba(255, 255, 255, 0.70);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  position: relative;
+  z-index: 10;
+}
+
+.home-logo {
+  max-height: 115px;
+  width: auto;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.home-logo:hover {
+  transform: scale(1.04);
+}
+
+/* ================= HERO ================= */
+
+.home-hero {
+  height: calc(100vh - 175px); /* 125 header + 50 footer */
+
+  background: linear-gradient(
+    135deg,
+    #eef8f5 0%,
+    #dff3ed 50%,
+    #d2ebe3 100%
+  );
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  text-align: center;
+  padding: 0 20px;
+
+  animation: fadeUp 1.2s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(25px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.home-hero h1 {
+  font-size: 45px;
+  margin-bottom: 20px;
+  color: #1e2e2a;
+  line-height: 1.25;
+}
+
+.home-hero p {
+  font-size: 18px;
+  margin-bottom: 35px;
+  color: #4a5e58;
+  max-width: 650px;
+}
+
+/* ================= CTA BUTTON ================= */
+
+.home-cta-btn {
+  background: linear-gradient(135deg, #2e7d32, #1f5c25);
+  color: #ffffff;
+  padding: 16px 38px;
+  text-decoration: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 25px rgba(46,125,50,0.35);
+}
+
+.home-cta-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px rgba(46,125,50,0.45);
+}
+
+/* ================= FOOTER ================= */
+
+.home-footer {
+  height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #0a2540;
+  color: #ffffff;
+  font-size: 12px;
+}
+
+/* =====================================================
+   LOGIN PAGE – PREMIUM GLASS VERSION
+===================================================== */
+
+.login-body {
+  height: 100vh;
+  margin: 0;
+
+  background: linear-gradient(
+    135deg,
+    #eef8f5 0%,
+    #dff3ed 50%,
+    #d2ebe3 100%
+  );
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  animation: gradientFade 1.2s ease forwards;
+}
+
+@keyframes gradientFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.login-container {
+  width: 420px;
+  padding: 50px 45px;
+  border-radius: 20px;
+  text-align: center;
+
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+
+  box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+
+  animation: fadeUpLogin 1s ease forwards;
+  transform: translateY(20px);
+  opacity: 0;
+}
+
+@keyframes fadeUpLogin {
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.login-logo {
+  max-width: 220px;
+  height: auto;
+  margin: 0 auto 25px;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.login-logo:hover {
+  transform: scale(1.05);
+}
+
+.login-container h2 {
+  margin-bottom: 20px;
+  color: #1e2e2a;
+  font-size: 18px;
+}
+
+.login-container input {
+  width: 100%;
+  padding: 14px;
+  margin: 12px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.1);
+  font-size: 12px;
+  background: rgba(255,255,255,0.85);
+  transition: all 0.3s ease;
+}
+
+.login-container input:focus {
+  outline: none;
+  border-color: #2e7d32;
+  box-shadow: 0 0 0 3px rgba(46,125,50,0.15);
+}
+
+.login-btn {
+  width: 100%;
+  padding: 14px;
+  margin-top: 20px;
+
+  background: linear-gradient(135deg, #2e7d32, #1f5c25);
+  color: #ffffff;
+
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 25px rgba(46,125,50,0.3);
+}
+
+.login-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 35px rgba(46,125,50,0.4);
+}
+
+.error-text {
+  color: #d32f2f;
+  margin-top: 12px;
+  display: none;
+  font-size: 12px;
+}
+/* =====================================================
+   ADMIN LAYOUT
+===================================================== */
+/* Admin Pages (fb-layout) */
+body.fb-layout {
+  height: auto;
+  overflow: auto;
+}
+
+.fb-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f7f8;
+}
+
+/* Sidebar */
+.fb-sidebar {
+  width: 260px;
+  background: linear-gradient(180deg, #eef8f5, #dff1ea);
+  border-right: 1px solid #cfe6dd;
+  padding: 20px;
+}
+
+/* Logo */
+.fb-brand {
+  background: #ffffff;
+  padding: 16px;
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+/* ================= SIDEBAR LOGO PERFECT CENTER ================= */
+
+.fb-brand {
+  padding: 18px 0;              /* remove side padding */
+  display: flex;
+  justify-content: center;      /* horizontal center */
+  align-items: center;          /* vertical center */
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.fb-brand img {
+  width: 250px;                 /* balanced size */
+  max-width: 85%;               /* prevents overflow */
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+
+/* Sidebar Menu */
+.fb-menu a {
+  display: block;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  color: #245d52;
+  text-decoration: none;
+  font-size: 0.92em;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.fb-menu a:hover {
+  background: rgba(72, 181, 163, 0.15);
+}
+
+.fb-menu a.active {
+  background: rgba(72, 181, 163, 0.28);
+  color: #11463c;
+  font-weight: 600;
+}
+
+/* Main Area */
+.fb-main {
+  flex: 1;
+  padding: 30px 40px;
+  overflow-y: auto;   /* 🔥 ensures scrolling inside main */
+}
+
+/* Top Bar */
+.fb-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.fb-topbar h1 {
+  font-size: 1.6rem;
+  color: #1c2b28;
+}
+
+.fb-user {
+  background: #ffffff;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+/* =====================================================
+   DASHBOARD CARDS
+===================================================== */
+.fb-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 25px;
+}
+
+.fb-stat-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 26px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+  transition: transform 0.2s ease;
+}
+
+.fb-stat-card:hover {
+  transform: translateY(-4px);
+}
+
+.fb-stat-card.clickable {
+  cursor: pointer;
+}
+
+.fb-stat-card.clickable:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 14px 28px rgba(0,0,0,0.12);
+}
+
+.fb-stat-card p {
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #6a7f7a;
+}
+
+.fb-stat-card h2 {
+  font-size: 30px;
+  color: #2e7d32;
+}
+
+/* =====================================================
+   BASE BUTTON
+===================================================== */
+.fb-btn-primary {
+  background: #2e7d32;
+  color: #ffffff;
+  padding: 14px 26px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+/* Upload button variation */
+button.fb-btn-primary.small {
+  background: #ffffff !important;
+  color: #1f2937 !important;
+  border: 1px solid rgba(0,0,0,0.12) !important;
+  border-radius: 12px;
+  padding: 10px 20px !important;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  transition: box-shadow 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+}
+
+button.fb-btn-primary.small:hover {
+  border-color: rgba(0,0,0,0.18);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+}
+
+button.fb-btn-primary.small:active {
+  transform: scale(0.97);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.10);
+}
+
+/* =====================================================
+   SIDE PANEL
+===================================================== */
+.fb-side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 520px;
+  height: 100%;
+  background: #ffffff;
+  box-shadow: -10px 0 30px rgba(0,0,0,0.15);
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+}
+
+.fb-side-panel.hidden {
+  display: none;
+}
+
+.fb-side-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.fb-side-body {
+  padding: 20px;
+  overflow-y: auto;
+}
