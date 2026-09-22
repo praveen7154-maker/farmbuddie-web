@@ -64,7 +64,15 @@ provisionDeviceRouter.post("/", async (req, res) => {
       return res.status(409).json({ error: "Farmer is missing farmBuddieId" });
     }
 
-    const clientId = controller.uniqueId;
+    // Real topic tree (see irrigo-admin's mqtt/Topics.kt) is
+    // farm/{farmId}/{nodeId}/motor/.../..., where farmId is this same short
+    // controllers.uniqueId (e.g. "0001") — NOT farmBuddieId's "FARM-2026-xxxx"
+    // format. The master hub is the only thing with an MQTT connection and
+    // relays for any BLE-linked secondary nodes (motor-node/valve/filter)
+    // under the same farmId, so the ACL is scoped to the whole farm subtree
+    // rather than just its own "MOTOR_1" segment.
+    const farmId = controller.uniqueId;
+    const clientId = `FBIRG${farmId}`;
     const existing = await findCredentialsByName(clientId);
 
     if (existing && !rotate) {
@@ -79,7 +87,7 @@ provisionDeviceRouter.post("/", async (req, res) => {
     }
 
     const password = generateMqttPassword();
-    const topicPrefix = `farms/${farmBuddieId}/devices/${clientId}`;
+    const topicPrefix = `farm/${farmId}`;
 
     const created = await createBasicCredentials({
       name: clientId,

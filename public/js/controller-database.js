@@ -257,14 +257,6 @@ async function uploadControllers(){
 
                 uniqueId:row["Unique ID"],
 
-                mqttUrl: row["MQTT URL"],
-
-                mqttPort: Number(row["MQTT Port"]) || 8883,
-
-                username:row["Username"],
-
-                password:row["Password"],
-
                 imeiNumber:row["IMEI Number"],
 
                 simMsisdn:row["SIM MSISDN"],

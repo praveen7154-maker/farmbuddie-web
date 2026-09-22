@@ -49,15 +49,21 @@ provisionAppRouter.post("/", async (req, res) => {
     const subAuthRulePatterns = [];
     const farmIds = [];
 
+    // Real topic tree (see irrigo-admin's mqtt/Topics.kt) is
+    // farm/{farmId}/{nodeId}/motor/.../..., where farmId is controllers.uniqueId
+    // (NOT farmBuddieId's "FARM-2026-xxxx" format). Pub is scoped to the same
+    // whole-farm subtree as sub rather than just .../cmd, since valve/filter
+    // command topics live under other node segments within the same farmId
+    // that aren't fully enumerable here — tightening this to command-only
+    // patterns is a reasonable follow-up once that full topic set is confirmed.
     farmsSnap.forEach((docSnap) => {
       const farm = docSnap.data();
-      const farmBuddieId = farm.farmBuddieId;
-      const deviceId = farm.controller?.uniqueId;
-      if (!farmBuddieId || !deviceId) return;
+      const farmId = farm.controller?.uniqueId;
+      if (!farmId) return;
 
-      farmIds.push(farmBuddieId);
-      subAuthRulePatterns.push(`farms/${farmBuddieId}/devices/${deviceId}/.*`);
-      pubAuthRulePatterns.push(`farms/${farmBuddieId}/devices/${deviceId}/cmd`);
+      farmIds.push(farmId);
+      subAuthRulePatterns.push(`farm/${farmId}/.*`);
+      pubAuthRulePatterns.push(`farm/${farmId}/.*`);
     });
 
     if (farmIds.length === 0) {
