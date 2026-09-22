@@ -23,10 +23,12 @@ import {
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-storage.js";
 
-import { 
+import {
   fullPhoneSync,
   validatePhones
  } from "/js/phone-auth.js";
+
+import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisioning.js";
 
 /* ✅ INITIALIZE STORAGE */
 const storage = getStorage();
@@ -1105,6 +1107,21 @@ pumpServiceMapping: Array.from({ length: parseInt(motorCount || 0) })
       `Farm Buddie ID: ${farmBuddieId}\n` +
       `Created At: ${formattedTime}`
     );
+
+    // 🔥 AUTO-PROVISION MQTT CREDENTIALS — the farmer itself is already
+    // saved at this point regardless of what happens here, so a failure
+    // here is a warning, not a save error (retry later via the controller
+    // panel's Generate MQTT Credentials button).
+    try {
+      const mqttData = await provisionDeviceCredentials(auth, controllerDoc.id);
+      await showMqttCredentialModal(mqttData);
+    } catch (mqttErr) {
+      console.error("MQTT auto-provisioning error:", mqttErr);
+      alert(
+        "⚠ Farmer saved, but MQTT credential generation failed: " + mqttErr.message +
+        "\n\nYou can retry from the MCU / Controller page."
+      );
+    }
 
     await commitFarmCounter(nextCounter);
 

@@ -21,8 +21,7 @@ import {
   subscribe
 } from "/js/data-store.js";
 
-import { API_BASE_URL } from "/js/config.js";
-import { encryptRaw } from "/js/qrCrypto.js";
+import { provisionDeviceCredentials, renderMqttCredentialReveal } from "/js/provisioning.js";
 
 /* ================= CACHE ================= */
 
@@ -884,66 +883,11 @@ window.provisionDeviceMqtt = async function (isRotate) {
   }
 
   try {
-
     if (revealBox) revealBox.innerHTML = `<div class="mqtt-reveal-box">Issuing credentials…</div>`;
 
-    const idToken = await auth.currentUser.getIdToken();
+    const data = await provisionDeviceCredentials(auth, controllerDocId, { rotate: !!isRotate });
 
-    const res = await fetch(`${API_BASE_URL}/provision/device`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${idToken}`
-      },
-      body: JSON.stringify({ controllerDocId, rotate: !!isRotate })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || `Request failed (${res.status})`);
-    }
-
-    if (revealBox) {
-      revealBox.innerHTML = `
-        <div class="mqtt-reveal-box">
-          <div class="warn">⚠ Shown once — copy it now, it will not be shown again.</div>
-          <div><b>Broker:</b> ${data.brokerUrl}:${data.port}</div>
-          <div><b>Client ID / Username:</b> ${data.username}</div>
-          <div><b>Password:</b> ${data.password}</div>
-          <div style="margin-top:12px;">
-            <b>Device setup QR</b> — scan with the Irrigo app to pair this device:
-          </div>
-          <canvas id="mqttQrCanvas" style="margin-top:8px;border-radius:8px;"></canvas>
-        </div>
-      `;
-
-      // Same JSON shape as irrigo-admin's model/FarmSetupPayload.kt (which
-      // the farmer app's QR scanner decodes into) — encrypted the same way
-      // (see /js/qrCrypto.js) so an already-provisioned scanning flow
-      // doesn't need to change on the farmer app's side at all.
-      const qrPayload = JSON.stringify({
-        name: data.farmerName || "",
-        mqtt_host: data.brokerUrl,
-        mqtt_port: data.port,
-        mqtt_username: data.username,
-        mqtt_password: data.password,
-        farm_id: data.farmId,
-        node_id: data.nodeId
-      });
-
-      try {
-        const encryptedBytes = await encryptRaw(qrPayload);
-        // qrcode's segment API documents Uint8ClampedArray (or a Node
-        // Buffer) for byte mode — converting explicitly rather than
-        // relying on a plain Uint8Array being treated as "compatible".
-        const clampedBytes = new Uint8ClampedArray(encryptedBytes);
-        const canvas = document.getElementById("mqttQrCanvas");
-        await QRCode.toCanvas(canvas, [{ data: clampedBytes, mode: "byte" }], { width: 220 });
-      } catch (qrErr) {
-        console.error("QR generation error:", qrErr);
-      }
-    }
+    if (revealBox) await renderMqttCredentialReveal(revealBox, data);
 
   } catch (err) {
     console.error("MQTT provisioning error:", err);

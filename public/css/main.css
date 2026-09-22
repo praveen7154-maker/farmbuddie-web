@@ -423,6 +423,30 @@ body.fb-layout {
 }
 
 /* =====================================================
+   MQTT CREDENTIAL REVEAL
+   Shared by the controller panel (controller-database.js)
+   and the onboarding pages' credential modal (provisioning.js).
+===================================================== */
+.mqtt-reveal-box {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #0b1f14;
+  color: #d1fae5;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.8;
+  word-break: break-all;
+}
+
+.mqtt-reveal-box .warn {
+  color: #fca5a5;
+  font-family: inherit;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+/* =====================================================
    BASE BUTTON
 ===================================================== */
 .fb-btn-primary {
