@@ -8,6 +8,7 @@ import { provisionDeviceRouter } from "./routes/provisionDevice.js";
 import { provisionAppRouter } from "./routes/provisionApp.js";
 import { provisionMonitorRouter } from "./routes/provisionMonitor.js";
 import { provisionBootstrapRouter } from "./routes/provisionBootstrap.js";
+import { fcmTokenRouter } from "./routes/fcmToken.js";
 
 export const app = express();
 
@@ -39,6 +40,10 @@ app.use("/provision/app", provisionLimiter, verifyFirebaseToken, provisionAppRou
 // that route's own top-of-file comment for why it needs its own explicit
 // admin check instead of relying on CORS.
 app.use("/provision/monitor", provisionLimiter, verifyFirebaseToken, provisionMonitorRouter);
+
+// /provision/fcm-token is called by the Irrigo app, same trust model as
+// /provision/app (signed-in phone user, no CORS restriction — not a browser caller).
+app.use("/provision/fcm-token", provisionLimiter, verifyFirebaseToken, fcmTokenRouter);
 
 // /provision/bootstrap is called by a device itself, before it has ever
 // touched MQTT — no Firebase token exists for it to send. Authenticated

@@ -6,7 +6,7 @@ import { db } from "../firebaseAdmin.js";
 // (new device) and periodically in case a controller gets reassigned.
 const farmIdToFarmerDoc = new Map();
 
-async function resolveFarmerDocId(farmId) {
+export async function resolveFarmerDocId(farmId) {
   if (farmIdToFarmerDoc.has(farmId)) return farmIdToFarmerDoc.get(farmId);
 
   const snap = await db

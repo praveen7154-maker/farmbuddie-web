@@ -2,6 +2,7 @@ import mqtt from "mqtt";
 import { config } from "../config.js";
 import { insertEvent } from "./postgres.js";
 import { mirrorStatus } from "./firestoreMirror.js";
+import { sendAlertPush } from "./pushNotifications.js";
 
 let client = null;
 
@@ -91,6 +92,14 @@ export function connectBridge() {
         await mirrorStatus(farmId, nodeId, motorNum, payload);
       } catch (err) {
         console.error("[bridge] firestore mirror failed:", err);
+      }
+
+      // Alerts share the status topic with plain telemetry (see
+      // connectivity.cpp's publishAlert()) - an "event" key is what
+      // distinguishes the two, same discriminator PumpRepository.kt uses
+      // on the app side.
+      if (payload && typeof payload === "object" && payload.event !== undefined) {
+        await sendAlertPush(farmId, nodeId, motorNum, payload);
       }
     }
   });
