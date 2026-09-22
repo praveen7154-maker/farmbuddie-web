@@ -12,6 +12,19 @@ import { fcmTokenRouter } from "./routes/fcmToken.js";
 
 export const app = express();
 
+// This container only ever binds to 127.0.0.1 (see docker-compose.yml) -
+// nginx on the same host is the only thing that can reach it, terminating
+// TLS and setting X-Forwarded-For for the real client IP. "loopback" tells
+// Express/express-rate-limit to trust that header specifically from
+// loopback callers (nginx) - without it, express-rate-limit throws
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every request and falls back to
+// treating every caller as the same IP (nginx's), which would bucket every
+// farmer's device/app together under one shared rate limit once traffic
+// picks up. Not a blanket `true` - that would trust X-Forwarded-For from
+// literally any source, a spoofing risk this deployment doesn't need to
+// take since nginx is the only real caller.
+app.set("trust proxy", "loopback");
+
 app.use(express.json());
 
 app.get("/healthz", (req, res) => res.json({ ok: true }));
