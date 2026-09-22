@@ -29,21 +29,22 @@ export function startFarmerDocCacheRefresh() {
 /**
  * Mirrors a device's live status into farmers/{docId}.deviceStatus — the
  * "what's true right now" copy the web panel/app read via Firestore
- * listeners. This writes the NEW firmware's actual payload shape
- * (pump: "A"|"B", active, state, fault, ...) under deviceStatus.pumpA/
- * pumpB — device-view.js still reads an OLDER shape (m1/m2/m3,
- * lora.packets_*) from a superseded architecture and needs updating
- * separately to match; not done here to keep this change scoped to the
- * bridge itself.
+ * listeners. This writes the firmware's actual payload as-is under
+ * deviceStatus.motor1/motor2 (motor NUMBER, not a "pumpA/pumpB" letter —
+ * verified directly against connectivity.cpp's real topic-building code,
+ * not the Motor repo's README, which describes a stale/different design)
+ * — device-view.js still reads an OLDER shape (m1/m2/m3, lora.packets_*)
+ * from a superseded architecture and needs updating separately to match;
+ * not done here to keep this change scoped to the bridge itself.
  */
-export async function mirrorStatus(farmId, nodeId, pump, payload) {
+export async function mirrorStatus(farmId, nodeId, motorNum, payload) {
   const farmerDocId = await resolveFarmerDocId(farmId);
   if (!farmerDocId) {
     console.warn(`[bridge] status for unknown farmId=${farmId}, no matching controller — dropped`);
     return;
   }
 
-  const pumpKey = pump === "B" ? "pumpB" : "pumpA";
+  const motorKey = motorNum === "2" ? "motor2" : "motor1";
 
   await db
     .collection("farmers")
@@ -53,7 +54,7 @@ export async function mirrorStatus(farmId, nodeId, pump, payload) {
         deviceStatus: {
           nodeId,
           lastSeen: new Date(),
-          [pumpKey]: payload
+          [motorKey]: payload
         }
       },
       { merge: true }

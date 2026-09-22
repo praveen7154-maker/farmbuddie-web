@@ -6,18 +6,35 @@ import { mirrorStatus } from "./firestoreMirror.js";
 let client = null;
 
 /**
- * farm/<farmId>/motor/<nodeId>/pumpA|pumpB/status|response, or
- * farm/<farmId>/motor/<nodeId>/ota/status — see the Motor firmware's own
- * README for the authoritative topic shape. Returns null for anything
- * that doesn't match (e.g. a stray/malformed topic), so callers can skip
- * it rather than crash on unexpected segments.
+ * Real topic shape, verified directly against the firmware's own runtime
+ * code (Connectivity::buildTopics() in connectivity.cpp — NOT the Motor
+ * repo's README, which describes a stale/different design):
+ *   farm/<farmId>/<nodeId>/motor/<motorNum>/cmd|status|response
+ *   farm/<farmId>/<nodeId>/ota/cmd|status
+ *   farm/<farmId>/<nodeId>/health
+ * motorNum is "1" (this hub's own directly-wired motor) or "2" (a linked
+ * Motor_2 over the mesh) — motor NUMBERING, not the two-pump-changeover
+ * "pumpA/pumpB" naming an earlier design used.
+ * Returns null for anything that doesn't match, so callers can skip a
+ * stray/malformed topic rather than crash on unexpected segments.
  */
 function parseTopic(topic) {
   const parts = topic.split("/");
-  if (parts.length !== 6 || parts[0] !== "farm" || parts[2] !== "motor") return null;
+  if (parts[0] !== "farm") return null;
 
-  const [, farmId, , nodeId, subDevice, leaf] = parts;
-  return { farmId, nodeId, subDevice, leaf };
+  const [, farmId, nodeId, ...rest] = parts;
+  if (!farmId || !nodeId || rest.length === 0) return null;
+
+  if (rest[0] === "motor" && rest.length === 3) {
+    return { farmId, nodeId, category: "motor", motorNum: rest[1], leaf: rest[2] };
+  }
+  if (rest[0] === "ota" && rest.length === 2) {
+    return { farmId, nodeId, category: "ota", motorNum: null, leaf: rest[1] };
+  }
+  if (rest[0] === "health" && rest.length === 1) {
+    return { farmId, nodeId, category: "health", motorNum: null, leaf: "health" };
+  }
+  return null;
 }
 
 export function connectBridge() {
@@ -43,7 +60,15 @@ export function connectBridge() {
     const parsed = parseTopic(topic);
     if (!parsed) return;
 
-    const { farmId, nodeId, subDevice, leaf } = parsed;
+    const { farmId, nodeId, category, motorNum, leaf } = parsed;
+
+    // The bridge is itself subscribed to farm/+/#, which includes the
+    // cmd topics it publishes to via publishCommand() below — MQTT
+    // delivers a publisher its own message back when it's also a
+    // subscriber to a matching topic. Skip cmd entirely: it's an echo of
+    // our own outgoing publish, not a device-originated event worth a
+    // history row.
+    if (leaf === "cmd") return;
 
     let payload;
     try {
@@ -53,7 +78,7 @@ export function connectBridge() {
       payload = { raw: messageBuf.toString() };
     }
 
-    const eventType = `${subDevice}_${leaf}`; // e.g. "pumpA_status", "ota_status"
+    const eventType = motorNum ? `motor${motorNum}_${leaf}` : `${category}_${leaf}`;
 
     try {
       await insertEvent({ farmId, nodeId, eventType, payload });
@@ -61,10 +86,9 @@ export function connectBridge() {
       console.error("[bridge] postgres insert failed:", err);
     }
 
-    if ((subDevice === "pumpA" || subDevice === "pumpB") && leaf === "status") {
-      const pump = subDevice === "pumpB" ? "B" : "A";
+    if (category === "motor" && leaf === "status") {
       try {
-        await mirrorStatus(farmId, nodeId, pump, payload);
+        await mirrorStatus(farmId, nodeId, motorNum, payload);
       } catch (err) {
         console.error("[bridge] firestore mirror failed:", err);
       }
@@ -81,13 +105,13 @@ export function connectBridge() {
  * message back would need request/response correlation this v1 doesn't
  * do). Throws if the bridge isn't currently connected.
  */
-export function publishCommand(farmId, nodeId, pump, commandPayload) {
+export function publishCommand(farmId, nodeId, motorNum, commandPayload) {
   if (!client || !client.connected) {
     throw new Error("Bridge is not connected to TBMQ");
   }
 
-  const pumpSegment = pump === "B" ? "pumpB" : "pumpA";
-  const topic = `farm/${farmId}/motor/${nodeId}/${pumpSegment}/cmd`;
+  const motor = motorNum === "2" ? "2" : "1";
+  const topic = `farm/${farmId}/${nodeId}/motor/${motor}/cmd`;
 
   return new Promise((resolve, reject) => {
     client.publish(topic, JSON.stringify(commandPayload), { qos: 1 }, (err) => {

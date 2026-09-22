@@ -22,15 +22,18 @@ app.use(cors(corsOptions), limiter, verifyFirebaseToken);
 
 /**
  * POST /command/device
- * body: { farmId, nodeId, pump: "A"|"B", cmd, ...params }
- * Relays a command to the device's cmd topic. Fire-and-forget at the HTTP
+ * body: { farmId, nodeId, motorNum: "1"|"2", cmd, ...params }
+ * Relays a command to the device's cmd topic. motorNum: "1" is the hub's
+ * own directly-wired motor, "2" is a linked Motor_2 over the mesh (motor
+ * NUMBER, not a "pumpA/pumpB" letter — verified against the firmware's
+ * real topic-building code, not its README). Fire-and-forget at the HTTP
  * layer — QoS1 covers delivery, but this doesn't wait for the device's
  * own ack/nack on its response topic (no request/response correlation in
  * this v1 — the caller watches Firestore/telemetry for the result same as
  * it already does for any other status change).
  */
 app.post("/command/device", async (req, res) => {
-  const { farmId, nodeId, pump, cmd, ...params } = req.body || {};
+  const { farmId, nodeId, motorNum, cmd, ...params } = req.body || {};
 
   if (!farmId || !nodeId || !cmd) {
     return res.status(400).json({ error: "farmId, nodeId, and cmd are required" });
@@ -42,7 +45,7 @@ app.post("/command/device", async (req, res) => {
       return res.status(403).json({ error: "Not authorized for this farm" });
     }
 
-    await publishCommand(farmId, nodeId, pump, { cmd, ...params });
+    await publishCommand(farmId, nodeId, motorNum, { cmd, ...params });
     return res.json({ ok: true });
   } catch (err) {
     console.error("command/device error:", err);
