@@ -12,15 +12,28 @@ function normalizePhone(phone) {
 
 /**
  * POST /provision/app
- * body: { rotate?: boolean }
+ * body: { instanceId: string, rotate?: boolean }
  *
- * Issues (or rotates) a single MQTT credential for the farmer app instance,
- * scoped to every farm/device the calling phone number owns (via the same
- * phoneIndex -> identityId mapping the app already uses to log in).
- * Called by the Irrigo app itself, not the admin panel.
+ * Issues (or rotates) an MQTT credential scoped to every farm/device the
+ * calling phone number owns (via the same phoneIndex -> identityId mapping
+ * the app already uses to log in). Called by the Irrigo app itself, not
+ * the admin panel.
+ *
+ * Keyed by instanceId (a random id the app generates once and caches
+ * locally), NOT by identityId alone — the app connects to TBMQ directly
+ * (see FarmConnectionManager/IrrigoMqttClient), and MQTT only allows one
+ * active connection per client ID. A main farmer and any secondary users
+ * (appUser2/appUser3) each running the app on their own phone need their
+ * own distinct login, or each new connection would silently kick the
+ * previous phone's session offline.
  */
 provisionAppRouter.post("/", async (req, res) => {
-  const { rotate } = req.body || {};
+  const { instanceId, rotate } = req.body || {};
+
+  if (!instanceId || typeof instanceId !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(instanceId)) {
+    return res.status(400).json({ error: "instanceId is required (8-64 chars, alphanumeric/_/-)" });
+  }
+
   const phone = normalizePhone(req.decodedToken.phone_number);
 
   if (!phone || phone.length !== 10) {
@@ -70,7 +83,7 @@ provisionAppRouter.post("/", async (req, res) => {
       return res.status(409).json({ error: "None of this identity's farms have a provisioned device yet" });
     }
 
-    const clientId = `app-${identityId}`;
+    const clientId = `app-${identityId}-${instanceId}`;
     const existing = await findCredentialsByName(clientId);
 
     if (existing && !rotate) {
@@ -104,10 +117,13 @@ provisionAppRouter.post("/", async (req, res) => {
       username: clientId,
       credentialsId,
       issuedAt,
-      farmIds
+      farmIds,
+      identityId
     };
 
-    await db.collection("appMqttCredentials").doc(identityId).set(metadata);
+    // Auditability only, keyed by instanceId like monitorCredentials — one
+    // document per phone/install, not per farmer identity.
+    await db.collection("appMqttCredentials").doc(instanceId).set(metadata);
 
     return res.json({ ...metadata, password, clientId });
   } catch (err) {
