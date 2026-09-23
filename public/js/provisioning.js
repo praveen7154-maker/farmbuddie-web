@@ -93,8 +93,8 @@ export async function renderMqttCredentialReveal(container, data) {
     const downloadBtn = container.querySelector("#mqttQrDownloadBtn");
     if (downloadBtn) {
       downloadBtn.style.display = "block";
-      downloadBtn.onclick = () => {
-        const composite = buildDownloadableQrImage(canvas, data);
+      downloadBtn.onclick = async () => {
+        const composite = await buildDownloadableQrImage(clampedBytes, data);
         const link = document.createElement("a");
         link.download = `${data.username || "device"}-setup-qr.png`;
         link.href = composite.toDataURL("image/png");
@@ -130,8 +130,15 @@ function wrapCanvasText(ctx, text, centerX, startY, maxWidth, lineHeight) {
  * self-contained image - the on-screen reveal has the surrounding panel
  * for that context, but a downloaded PNG shared over WhatsApp/email has
  * nothing else around it.
+ *
+ * Re-encodes the QR fresh at QR_SIZE (qrBytes, the same encrypted bytes
+ * already on screen) instead of scaling up the smaller on-screen canvas -
+ * drawImage() upscaling uses bilinear smoothing by default, which blurs a
+ * QR's module edges enough to break scanning even though it still looks
+ * fine to the eye. Rendering directly at the target size keeps every
+ * module a sharp, single-color block.
  */
-function buildDownloadableQrImage(qrCanvas, data) {
+async function buildDownloadableQrImage(qrBytes, data) {
   const W = 480;
   const H = 640;
   const QR_SIZE = 300;
@@ -150,9 +157,12 @@ function buildDownloadableQrImage(qrCanvas, data) {
   ctx.font = `bold 22px ${mono}`;
   ctx.fillText("Scan for Irrigo Login", W / 2, 46);
 
+  const qrCanvas = document.createElement("canvas");
+  await QRCode.toCanvas(qrCanvas, [{ data: qrBytes, mode: "byte" }], { width: QR_SIZE });
+
   const qrX = (W - QR_SIZE) / 2;
   const qrY = 70;
-  ctx.drawImage(qrCanvas, qrX, qrY, QR_SIZE, QR_SIZE);
+  ctx.drawImage(qrCanvas, qrX, qrY);
 
   let y = qrY + QR_SIZE + 42;
   ctx.font = `11px ${mono}`;
