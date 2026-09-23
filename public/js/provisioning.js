@@ -43,7 +43,11 @@ export async function renderMqttCredentialReveal(container, data) {
       <div class="mqtt-creds">
         <div><b>Broker:</b> ${data.brokerUrl}:${data.port}</div>
         <div><b>Client ID / Username:</b> ${data.username}</div>
-        <div><b>Password:</b> ${data.password}</div>
+        <div>
+          <b>Password:</b>
+          <span id="mqttPasswordMask">${"•".repeat(data.password.length)}</span>
+          <button type="button" id="mqttPasswordToggle" class="mqtt-password-toggle" aria-label="Show password">👁</button>
+        </div>
       </div>
       <div class="mqtt-qr-row">
         <div class="mqtt-qr-visual">
@@ -61,6 +65,19 @@ export async function renderMqttCredentialReveal(container, data) {
       </div>
     </div>
   `;
+
+  // Masked by default - the QR code already carries the password for the
+  // field install, so the on-screen text only needs to be revealed when an
+  // admin actually has to read it out or type it somewhere.
+  const passwordMask = container.querySelector("#mqttPasswordMask");
+  const passwordToggle = container.querySelector("#mqttPasswordToggle");
+  let passwordVisible = false;
+  passwordToggle.onclick = () => {
+    passwordVisible = !passwordVisible;
+    passwordMask.textContent = passwordVisible ? data.password : "•".repeat(data.password.length);
+    passwordToggle.textContent = passwordVisible ? "🙈" : "👁";
+    passwordToggle.setAttribute("aria-label", passwordVisible ? "Hide password" : "Show password");
+  };
 
   // Same JSON shape as irrigo-admin's model/FarmSetupPayload.kt (which the
   // farmer app's QR scanner decodes into), encrypted the same way (see

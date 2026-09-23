@@ -459,6 +459,20 @@ body.fb-layout {
   border-bottom: 1px solid rgba(209, 250, 229, 0.15);
 }
 
+.mqtt-password-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 0 0 6px;
+  vertical-align: middle;
+  opacity: 0.85;
+}
+
+.mqtt-password-toggle:hover {
+  opacity: 1;
+}
+
 /* QR on the left, farmer identity on the right - fills the empty space
    a bare QR used to leave next to it, and makes the reveal box tell you
    AT A GLANCE which farmer/device this QR is actually for (previously
