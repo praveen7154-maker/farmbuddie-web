@@ -451,8 +451,9 @@ body.fb-layout {
    nothing beside the code itself said so). */
 .mqtt-reveal-box .mqtt-qr-row {
   display: flex;
-  gap: 20px;
+  gap: 28px;
   align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
 }
 
@@ -470,9 +471,10 @@ body.fb-layout {
 }
 
 .mqtt-reveal-box .mqtt-qr-info {
-  flex: 1;
+  flex: 0 1 260px;
   min-width: 180px;
   word-break: normal;
+  text-align: center;
 }
 
 .mqtt-reveal-box .mqtt-qr-title {
@@ -485,6 +487,7 @@ body.fb-layout {
 .mqtt-reveal-box .mqtt-qr-field {
   display: flex;
   flex-direction: column;
+  align-items: center;
   margin-bottom: 8px;
 }
 

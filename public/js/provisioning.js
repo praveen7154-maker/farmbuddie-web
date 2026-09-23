@@ -53,7 +53,7 @@ export async function renderMqttCredentialReveal(container, data) {
           </button>
         </div>
         <div class="mqtt-qr-info">
-          <div class="mqtt-qr-title">📷 Scan for Irrigo Login</div>
+          <div class="mqtt-qr-title">Scan for Irrigo Login</div>
           <div class="mqtt-qr-field"><span>Farm Buddie ID</span><b>${data.farmBuddieId || "-"}</b></div>
           <div class="mqtt-qr-field"><span>Farmer Name</span><b>${data.farmerName || "-"}</b></div>
           <div class="mqtt-qr-hint">Scan this with the Irrigo app to pair this device to the farmer's account.</div>
@@ -86,19 +86,97 @@ export async function renderMqttCredentialReveal(container, data) {
     // different people/visits — the QR has to travel between them
     // somehow, so give the office admin an image file to send over
     // WhatsApp/etc. rather than assuming they're standing at the device.
+    // The downloaded file bakes in the same identity context shown
+    // on-screen (Farm Buddie ID/farmer name) plus a confidentiality
+    // notice, since once it leaves this panel (WhatsApp, email) there's
+    // no surrounding page to carry that context anymore.
     const downloadBtn = container.querySelector("#mqttQrDownloadBtn");
     if (downloadBtn) {
       downloadBtn.style.display = "block";
       downloadBtn.onclick = () => {
+        const composite = buildDownloadableQrImage(canvas, data);
         const link = document.createElement("a");
         link.download = `${data.username || "device"}-setup-qr.png`;
-        link.href = canvas.toDataURL("image/png");
+        link.href = composite.toDataURL("image/png");
         link.click();
       };
     }
   } catch (qrErr) {
     console.error("QR generation error:", qrErr);
   }
+}
+
+function wrapCanvasText(ctx, text, centerX, startY, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  let y = startY;
+  for (const word of words) {
+    const testLine = line ? `${line} ${word}` : word;
+    if (ctx.measureText(testLine).width > maxWidth && line) {
+      ctx.fillText(line, centerX, y);
+      line = word;
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  if (line) ctx.fillText(line, centerX, y);
+  return y;
+}
+
+/**
+ * Composites the QR with the same identity context shown on-screen
+ * (Farm Buddie ID, farmer name) and a confidentiality notice into one
+ * self-contained image - the on-screen reveal has the surrounding panel
+ * for that context, but a downloaded PNG shared over WhatsApp/email has
+ * nothing else around it.
+ */
+function buildDownloadableQrImage(qrCanvas, data) {
+  const W = 480;
+  const H = 640;
+  const QR_SIZE = 300;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  const mono = "'SFMono-Regular', Consolas, monospace";
+
+  ctx.fillStyle = "#0b1f14";
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center";
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `bold 22px ${mono}`;
+  ctx.fillText("Scan for Irrigo Login", W / 2, 46);
+
+  const qrX = (W - QR_SIZE) / 2;
+  const qrY = 70;
+  ctx.drawImage(qrCanvas, qrX, qrY, QR_SIZE, QR_SIZE);
+
+  let y = qrY + QR_SIZE + 42;
+  ctx.font = `11px ${mono}`;
+  ctx.fillStyle = "#6ee7b7";
+  ctx.fillText("FARM BUDDIE ID", W / 2, y);
+  y += 24;
+  ctx.font = `bold 19px ${mono}`;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(data.farmBuddieId || "-", W / 2, y);
+
+  y += 36;
+  ctx.font = `11px ${mono}`;
+  ctx.fillStyle = "#6ee7b7";
+  ctx.fillText("FARMER NAME", W / 2, y);
+  y += 24;
+  ctx.font = `bold 19px ${mono}`;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(data.farmerName || "-", W / 2, y);
+
+  ctx.fillStyle = "#fca5a5";
+  ctx.font = `bold 14px ${mono}`;
+  wrapCanvasText(ctx, "CONFIDENTIAL INFORMATION - DO NOT SHARE WITH OUTSIDERS", W / 2, H - 40, W - 60, 20);
+
+  return canvas;
 }
 
 /**
