@@ -961,37 +961,12 @@
 
 }
 
-/* ======================================================
-   FILTER HEADER
-====================================================== */
-
-.fb-th-wrapper{
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:space-between;
-
-    gap:8px;
-
-}
-
-.fb-filter-icon{
-
-    cursor:pointer;
-
-    color:#94a3b8;
-
-    transition:.2s;
-
-}
-
-.fb-filter-icon:hover{
-
-    color:#16a34a;
-
-}
+/* Filter header (.fb-th-wrapper/.fb-filter-icon) - uses admin-tables.css's
+   shared rule now. This page's own copy was `display:flex` (block-level),
+   which text-align:center on the parent th has no effect on - the wrapper
+   sat left-aligned regardless, mismatching the centered td values below
+   it. admin-tables.css's version is `inline-flex`, which th's
+   text-align:center does center correctly. */
 
 /* ======================================================
    RESPONSIVE
