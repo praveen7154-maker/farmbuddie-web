@@ -514,6 +514,16 @@
   flex-wrap: wrap;
 }
 
+/* Overrides the global button.fb-btn-primary.small padding (10px 20px) -
+   too chunky sitting next to the compact .mqtt-status-pill right beside
+   it. Scoped to .mqtt-actions only so no other "small" button elsewhere
+   is affected. */
+.mqtt-actions button.fb-btn-primary.small {
+  padding: 5px 12px !important;
+  font-size: 12px;
+  border-radius: 999px;
+}
+
 .mqtt-status-pill {
   font-size: 12.5px;
   font-weight: 600;

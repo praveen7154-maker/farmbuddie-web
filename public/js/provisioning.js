@@ -28,12 +28,57 @@ export async function provisionDeviceCredentials(auth, controllerDocId, { rotate
   return data;
 }
 
+function bytesToBase64(bytes) {
+  let binary = "";
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary);
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8ClampedArray(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Renders a QR code from previously-persisted encrypted bytes (see
+ * renderMqttCredentialReveal's onQrGenerated callback) - lets a farmer's
+ * detail panel show/redownload the setup QR on every visit without ever
+ * needing to click Rotate again. Deliberately only ever handles the
+ * ENCRYPTED bytes, never plaintext - the raw password stays write-once,
+ * shown only right after issue/rotate (see renderMqttCredentialReveal).
+ */
+export async function renderStoredQr(container, base64EncryptedBytes) {
+  container.innerHTML = `
+    <div class="mqtt-reveal-box">
+      <div><b>Device setup QR</b> — scan with the Irrigo app to pair this device:</div>
+      <canvas id="mqttQrCanvasStored" style="margin-top:8px;border-radius:8px;"></canvas>
+      <button id="mqttQrDownloadStoredBtn" class="fb-btn-primary small" style="margin-top:10px;">
+        ⬇ Download QR (to send to the installer)
+      </button>
+    </div>
+  `;
+  const canvas = container.querySelector("#mqttQrCanvasStored");
+  await QRCode.toCanvas(canvas, [{ data: base64ToBytes(base64EncryptedBytes), mode: "byte" }], { width: 220 });
+
+  container.querySelector("#mqttQrDownloadStoredBtn").onclick = () => {
+    const link = document.createElement("a");
+    link.download = "device-setup-qr.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+}
+
 /**
  * Renders the one-time credential reveal (password shown once + QR code)
  * into the given container element. `data` is provisionDeviceCredentials()'s
- * return value.
+ * return value. onQrGenerated (optional), if given, is called with the
+ * QR's base64-encoded ENCRYPTED bytes (never the plaintext password) so
+ * the caller can persist them (e.g. to Firestore) for renderStoredQr()
+ * above to redisplay later without ever re-exposing the plaintext.
  */
-export async function renderMqttCredentialReveal(container, data) {
+export async function renderMqttCredentialReveal(container, data, { onQrGenerated } = {}) {
   container.innerHTML = `
     <div class="mqtt-reveal-box">
       <div class="warn">⚠ Shown once — copy it now, it will not be shown again.</div>
@@ -69,6 +114,10 @@ export async function renderMqttCredentialReveal(container, data) {
     const clampedBytes = new Uint8ClampedArray(encryptedBytes);
     const canvas = container.querySelector("#mqttQrCanvas");
     await QRCode.toCanvas(canvas, [{ data: clampedBytes, mode: "byte" }], { width: 220 });
+
+    if (onQrGenerated) {
+      onQrGenerated(bytesToBase64(encryptedBytes));
+    }
 
     // Onboarding (office) and physical install (field) are usually
     // different people/visits — the QR has to travel between them

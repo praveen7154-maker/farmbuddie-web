@@ -21,7 +21,7 @@ import {
   subscribe
 } from "/js/data-store.js";
 
-import { provisionDeviceCredentials, renderMqttCredentialReveal } from "/js/provisioning.js";
+import { provisionDeviceCredentials, renderMqttCredentialReveal, renderStoredQr } from "/js/provisioning.js";
 
 /* ================= CACHE ================= */
 
@@ -587,6 +587,8 @@ const snap = await getDocs(q);
 
 if (snap.empty) return;
 
+const farmerDocId = snap.docs[0].id;
+window.__currentFarmerDocId = farmerDocId;
 const f = snap.docs[0].data();
 
   const appUsersHtml = (f.appUsers?.length)
@@ -818,6 +820,14 @@ const f = snap.docs[0].data();
   </div>
 
 `;
+
+  // Shows the setup QR immediately on every panel open once one's been
+  // issued - stored encrypted bytes only (see provisioning.js's own doc
+  // comment), never the plaintext password, so this never needs a fresh
+  // Rotate just to look at the QR again.
+  if (f.controller?.mqtt?.qrData) {
+    renderStoredQr(document.getElementById("mqttRevealBox"), f.controller.mqtt.qrData);
+  }
 }
 
 window.closeFarmerPanel = () =>
@@ -907,7 +917,26 @@ window.provisionDeviceMqtt = async function (isRotate) {
 
     const data = await provisionDeviceCredentials(auth, controllerDocId, { rotate: !!isRotate });
 
-    if (revealBox) await renderMqttCredentialReveal(revealBox, data);
+    if (revealBox) {
+      await renderMqttCredentialReveal(revealBox, data, {
+        // Persists only the QR's ENCRYPTED bytes (base64) - never the
+        // plaintext password - so this farmer's panel can show/redownload
+        // the QR on every future open without another Rotate. See
+        // provisioning.js's renderStoredQr()/renderMqttCredentialReveal()
+        // doc comments.
+        onQrGenerated: async (base64EncryptedBytes) => {
+          const farmerDocId = window.__currentFarmerDocId;
+          if (!farmerDocId) return;
+          try {
+            await updateDoc(doc(db, "farmers", farmerDocId), {
+              "controller.mqtt.qrData": base64EncryptedBytes
+            });
+          } catch (err) {
+            console.error("Failed to persist QR data:", err);
+          }
+        }
+      });
+    }
 
   } catch (err) {
     console.error("MQTT provisioning error:", err);
