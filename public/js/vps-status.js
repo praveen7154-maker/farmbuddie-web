@@ -33,12 +33,16 @@ function setCard(prefix, ok, label, detail) {
 }
 
 function renderConnectedClients(connectedClients) {
-  const listEl = document.getElementById("connectedClientList");
+  const tbody = document.getElementById("connectedClientBody");
 
   if (!connectedClients || !connectedClients.ok) {
     setCard("farmDevices", false, "Unknown", connectedClients?.error || "");
     setCard("infraClients", false, "Unknown", "");
-    listEl.innerHTML = "";
+    tbody.innerHTML = "";
+    document.getElementById("fbTotal").textContent = 0;
+    document.getElementById("fbStart").textContent = 0;
+    document.getElementById("fbEnd").textContent = 0;
+    document.getElementById("fbPagination").innerHTML = "";
     return;
   }
 
@@ -48,12 +52,7 @@ function renderConnectedClients(connectedClients) {
   setCard("farmDevices", true, String(connectedClients.farmDevices), "");
   setCard("infraClients", true, String(connectedClients.infrastructure), "bridge, TBMQ's own WebSocket credential, etc.");
 
-  if (!connectedClients.clients.length) {
-    listEl.innerHTML = "";
-    return;
-  }
-
-  const rows = connectedClients.clients
+  tbody.innerHTML = connectedClients.clients
     .slice()
     .sort((a, b) => (a.clientId || "").localeCompare(b.clientId || ""))
     .map((c) => `
@@ -67,14 +66,9 @@ function renderConnectedClients(connectedClients) {
     `)
     .join("");
 
-  listEl.innerHTML = `
-    <table>
-      <thead>
-        <tr><th>Client ID</th><th>Type</th><th>Subscriptions</th><th>IP Address</th><th>Connected Since</th></tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
+  if (typeof initTablePagination === "function") {
+    initTablePagination(".fb-table", 10);
+  }
 }
 
 async function refreshStatus() {

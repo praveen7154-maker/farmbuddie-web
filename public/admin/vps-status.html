@@ -13,6 +13,7 @@
   <!-- GLOBAL -->
   <link rel="stylesheet" href="/css/main.css">
   <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
   <link rel="stylesheet" href="/css/vps-status.css">
 </head>
 
@@ -96,7 +97,29 @@
     <div class="vps-detail" id="infraClientsDetail"></div>
   </div>
 </div>
-<div class="vps-client-list" id="connectedClientList"></div>
+<div class="fb-table-card">
+  <table class="fb-table">
+    <thead>
+      <tr>
+        <th>Client ID</th>
+        <th>Type</th>
+        <th>Subscriptions</th>
+        <th>IP Address</th>
+        <th>Connected Since</th>
+      </tr>
+    </thead>
+    <tbody id="connectedClientBody"></tbody>
+  </table>
+</div>
+
+<div class="fb-table-pagination">
+  <div class="fb-page-info">
+    Showing <span id="fbStart">0</span> to
+    <span id="fbEnd">0</span> of
+    <span id="fbTotal">0</span> entries
+  </div>
+  <div class="fb-pagination-controls" id="fbPagination"></div>
+</div>
 
 <div class="vps-status-note">
   Auto-refreshes every 20 seconds while this page is open. This checks whether each
@@ -106,6 +129,7 @@
 </main>
 
 <script type="module" src="/js/vps-status.js"></script>
+<script src="/js/table-pagination.js"></script>
 
 </body>
 </html>
