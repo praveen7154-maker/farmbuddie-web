@@ -19,6 +19,7 @@
     "express-rate-limit": "^7.4.1",
     "firebase-admin": "^12.7.0",
     "mqtt": "^5.10.3",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "qrcode": "^1.5.4"
   }
 }

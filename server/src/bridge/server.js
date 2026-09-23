@@ -8,6 +8,7 @@ import { publishCommand, isBridgeConnected } from "./mqttBridge.js";
 import { queryEvents, checkPostgresHealth } from "./postgres.js";
 import { getFleetStatus } from "./fleetStatus.js";
 import { issueDeviceCredentialByFarmId } from "../deviceProvisioning.js";
+import { buildDeviceQrPng } from "./qrPayload.js";
 
 export const app = express();
 app.use(express.json());
@@ -109,6 +110,43 @@ app.get("/fleet/device/:farmId/credentials", async (req, res) => {
     }
     console.error("fleet/device/credentials error:", err);
     return res.status(500).json({ error: "Failed to fetch device credentials" });
+  }
+});
+
+/**
+ * GET /fleet/device/:farmId/qr
+ * Admin-only. Re-renders this farm's already-issued MQTT setup QR as a
+ * PNG - the same encrypted payload the web admin panel shows at
+ * credential-issue time (see provisioning.js), regenerated on demand so
+ * the Irrigo Admin app's Farmer QR screen can pull up and share any
+ * already-onboarded farmer's QR without needing the web panel open.
+ * rotate:false - viewing/sharing, never mutates the credential.
+ */
+app.get("/fleet/device/:farmId/qr", async (req, res) => {
+  if (!req.decodedToken.email) {
+    return res.status(403).json({ error: "Admin identity required" });
+  }
+
+  try {
+    const creds = await issueDeviceCredentialByFarmId(req.params.farmId, { rotate: false });
+    const png = await buildDeviceQrPng({
+      farmerName: creds.farmerName,
+      brokerUrl: creds.brokerUrl,
+      port: creds.port,
+      username: creds.username,
+      password: creds.password,
+      farmId: creds.farmId,
+      nodeId: creds.nodeId
+    });
+    res.set("Content-Type", "image/png");
+    return res.send(png);
+  } catch (err) {
+    if (err && err.status) {
+      const { status, message } = err;
+      return res.status(status).json({ error: message });
+    }
+    console.error("fleet/device/qr error:", err);
+    return res.status(500).json({ error: "Failed to generate QR" });
   }
 });
 
