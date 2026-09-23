@@ -1,13 +1,6 @@
-import { auth, db } from "/js/firebase-init.js";
+import { auth } from "/js/firebase-init.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
-
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot
-} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
 import {
   startDataStore,
@@ -17,9 +10,19 @@ import {
 
 
 /* ================= AUTH ================= */
-
+// This page used to keep its own separate onSnapshot listener on the whole
+// farmers collection, duplicating the one data-store.js already runs for
+// controller-database.js - shares that one instead now, same pattern as
+// index.js.
 onAuthStateChanged(auth, (user) => {
-  if (!user) window.location.replace("/login.html");
+  if (!user) {
+    window.location.replace("/login.html");
+    return;
+  }
+
+  startDataStore();
+  subscribe(onStoreUpdate);
+  onStoreUpdate();
 });
 
 document.getElementById("logoutBtn")?.addEventListener("click", () => {
@@ -31,7 +34,6 @@ document.getElementById("logoutBtn")?.addEventListener("click", () => {
 let allFarmers = [];
 let currentSearchValue = "";
 let paginationInitialized = false;
-let lastSnapshotHash = "";   // ✅ prevents unnecessary rerenders
 
 /* ================= SEARCH ================= */
 
@@ -57,43 +59,16 @@ function applyFilter() {
   renderTable(filtered);
 }
 
-/* ================= LOAD FARMERS (REALTIME) ================= */
-
-let unsubscribe = null;
-
-function loadFarmers() {
-
-  const q = query(
-    collection(db, "farmers"),
-    orderBy("farmBuddieId", "asc")
+/* ================= STORE UPDATE ================= */
+// Fires once on load and again on every data-store.js update - store
+// already skips re-notifying when nothing actually changed, so no need to
+// hash/compare snapshots here ourselves.
+function onStoreUpdate() {
+  allFarmers = getFarmers().slice().sort((a, b) =>
+    (a.farmBuddieId || "").localeCompare(b.farmBuddieId || "", undefined, { numeric: true })
   );
-
-  if (unsubscribe) unsubscribe();
-
-  unsubscribe = onSnapshot(q, (snapshot) => {
-
-  const newData = snapshot.docs.map(d => ({
-    _docId: d.id,
-    ...d.data()
-  }));
-
-  /* ===== PREVENT UNNECESSARY RERENDER ===== */
-
-  const newHash = JSON.stringify(newData.map(f => f._docId));
-
-  if (newHash === lastSnapshotHash) return;
-
-  lastSnapshotHash = newHash;
-
-  allFarmers = newData;
-
   applyFilter();
-
-}, (error) => {
-  console.error("Realtime error:", error);
-});
 }
-loadFarmers();
 
 /* ================= RENDER TABLE ================= */
 
@@ -168,7 +143,7 @@ function renderTable(data) {
       </td>
       <td class="action-cell">
         <button class="icon-btn view"
-          onclick="window.location.href='/admin/device-view.html?id=${f._docId}'"
+          onclick="window.location.href='/admin/device-view.html?id=${f.id}'"
           title="View">
           👁️View
         </button>

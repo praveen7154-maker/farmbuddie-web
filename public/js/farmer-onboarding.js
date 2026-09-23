@@ -1125,10 +1125,6 @@ pumpServiceMapping: Array.from({ length: parseInt(motorCount || 0) })
 
     await commitFarmCounter(nextCounter);
 
-    /* CLEAR CONTROLLER CACHE */
-    sessionStorage.removeItem("controllersCache");
-    sessionStorage.removeItem("controllerFarmerMap");
-    sessionStorage.removeItem("farmersCache"); 
     window.location.href = "/admin/farmer-database.html";
 
   } catch (error) {

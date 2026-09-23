@@ -3,33 +3,46 @@ import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
 import {
-  collection,
-  getDocs,
   doc,
   updateDoc,
   deleteDoc,
-  getDoc,
-  setDoc,
-  query,
-  orderBy,
-  where
+  getDoc
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
 
-import { 
-  fullPhoneSync 
+import {
+  fullPhoneSync
 } from "/js/phone-auth.js";
 
+import {
+  startDataStore,
+  getFarmers,
+  getControllers,
+  subscribe
+} from "/js/data-store.js";
+
 /* ================= AUTH GUARD ================= */
+// Used to run its own one-shot getDocs() over the whole farmers collection
+// every page load, with a hand-rolled sessionStorage cache on top (and
+// several manual "update the cache after this write" blocks scattered
+// through the file below, easy to get out of sync). Shares data-store.js's
+// realtime listener instead, same as index.js/analytics.js/
+// distributor-database.js - it's always live, so none of that manual
+// cache-juggling is needed anymore.
 onAuthStateChanged(auth, (user) => {
-  if (!user) window.location.replace("/login.html");
+  if (!user) {
+    window.location.replace("/login.html");
+    return;
+  }
+
+  startDataStore();
+  subscribe(onStoreUpdate);
+  onStoreUpdate();
 });
 
 /* ================= LOGOUT ================= */
 document.getElementById("logoutBtn")?.addEventListener("click", () => {
-  sessionStorage.removeItem("farmersCache");
-
-signOut(auth).then(() => window.location.replace("/login.html"));
+  signOut(auth).then(() => window.location.replace("/login.html"));
 });
 
 /* ================= URL FILTER ================= */
@@ -40,52 +53,14 @@ let allFarmers = [];
 let filteredFarmers = [];
 
 
-/* ================= LOAD FARMERS ================= */
-async function loadFarmers() {
-
-  /* ===== CHECK SESSION CACHE ===== */
-
-  const cached = sessionStorage.getItem("farmersCache");
-
-  if (cached) {
-
-    const parsed = JSON.parse(cached);
-
-    if (parsed && parsed.length) {
-
-      allFarmers = parsed;
-
-      filteredFarmers = applyFilter(allFarmers);
-      renderTable(filteredFarmers);
-
-      return;
-
-    }
-
-  }
-
-  /* ===== FIRESTORE LOAD ===== */
-
-  const q = query(
-    collection(db, "farmers"),
-    orderBy("farmBuddieId", "asc")
+/* ================= STORE UPDATE ================= */
+function onStoreUpdate() {
+  allFarmers = getFarmers().slice().sort((a, b) =>
+    (a.farmBuddieId || "").localeCompare(b.farmBuddieId || "", undefined, { numeric: true })
   );
-
-  const snapshot = await getDocs(q);
-
-  allFarmers = snapshot.docs.map(d => ({
-    _docId: d.id,
-    ...d.data()
-  }));
-
-  /* ===== SAVE CACHE ===== */
-
-  sessionStorage.setItem("farmersCache", JSON.stringify(allFarmers));
   filteredFarmers = applyFilter(allFarmers);
   renderTable(filteredFarmers);
 }
-
-loadFarmers();
 /* ================= APPLY FILTER ================= */
 function applyFilter(data) {
 
@@ -178,28 +153,28 @@ data.forEach((f, index) => {
       <td class="action-cell">
 
         <button class="icon-btn view"
-          onclick="viewFarmer('${f._docId}')"
+          onclick="viewFarmer('${f.id}')"
           title="View">👁️</button>
 
         <button class="icon-btn edit"
-          onclick="editFarmer('${f._docId}')"
+          onclick="editFarmer('${f.id}')"
           title="Edit"
           ${isInactive ? "disabled" : ""}>✏️</button>
 
         <button class="icon-btn toggle"
-          onclick="toggleStatus('${f._docId}', '${f.status}')"
+          onclick="toggleStatus('${f.id}', '${f.status}')"
           title="${isInactive ? "Activate" : "Deactivate"}">
           ${isInactive ? "🟢" : "⛔"}
         </button>
 
        <button class="icon-btn network ${(f.phoneAuth?.enabled ?? false) ? "active" : "blocked"}"
-          onclick="openPhoneAuth('${f._docId}')"
+          onclick="openPhoneAuth('${f.id}')"
           title="Phone Authorization">
           📶
           </button>
 
         <button class="icon-btn delete"
-          onclick="deleteFarmer('${f._docId}')"
+          onclick="deleteFarmer('${f.id}')"
           title="Delete">🗑️</button>
 
       </td>
@@ -244,48 +219,29 @@ window.editFarmer = (id) => {
 window.toggleStatus = async (id, status) => {
 
   const newStatus = status === "inactive" ? "active" : "inactive";
+  const ref = doc(db, "farmers", id);
 
-    const ref = doc(db, "farmers", id);
-    const snap = await getDoc(ref);
-    const farmerData = snap.data();
+  await updateDoc(ref, {
+    status: newStatus,
+    phoneAuth: {
+      enabled: newStatus === "active",
+      updatedAt: new Date()
+    }
+  });
 
-        await updateDoc(ref, {
-        status: newStatus,
-        phoneAuth: {
-          enabled: newStatus === "active",
-          updatedAt: new Date()
-        }
-      });
+  // fullPhoneSync needs the post-update doc (not just the fields we just
+  // sent) - a single targeted read tied to this one write action, not a
+  // page-load re-fetch, so it's not part of the redundant-reads problem
+  // the rest of this file used to have.
+  const updatedSnap = await getDoc(ref);
+  const updatedData = updatedSnap.data();
 
-   // 🔥 Get latest data after update
-      const updatedSnap = await getDoc(ref);
-      const updatedData = updatedSnap.data();
+  if (updatedData) {
+    await fullPhoneSync(db, auth, id, updatedData);
+  }
 
-      if (updatedData) {
-        await fullPhoneSync(
-              db,
-              auth,
-              id,
-              updatedData
-            );
-      }
-
-/* UPDATE CACHE */
-      allFarmers = allFarmers.map(f =>
-        f._docId === id
-          ? {
-              ...f,
-              status: newStatus,
-              phoneAuth: {
-                enabled: newStatus === "active"
-              }
-            }
-          : f
-      );
-sessionStorage.setItem("farmersCache", JSON.stringify(allFarmers));
-
-filteredFarmers = applyFilter(allFarmers);
-renderTable(filteredFarmers);
+  // No manual cache/table update needed - data-store.js's own onSnapshot
+  // picks up this write and calls onStoreUpdate() automatically.
 };
 
 /* ================= DELETE WITH DEVICE INFO ================= */
@@ -317,46 +273,31 @@ Are you sure you want to delete this farmer permanently?
   if (!confirm(message)) return;
 
  /* ===== RESET CONTROLLER STATUS ===== */
+// Looked up from data-store.js's already-live controllers cache instead of
+// firing a fresh query - the store already has every controller in memory.
 
 const uniqueId = farmer.controller?.uniqueId;
 
 if (uniqueId) {
 
-  const q = query(
-    collection(db,"controllers"),
-    where("uniqueId","==",uniqueId)
-  );
+  const matched = getControllers().find(c => c.uniqueId === uniqueId);
 
-  const snap = await getDocs(q);
-
-  if (!snap.empty) {
-
-    const controllerDoc = snap.docs[0];
-
-    await updateDoc(controllerDoc.ref,{
-  status: "available",
-  farmerId: null,
-  farmerDocId: null,
-  assignedAt: null
-});
-
+  if (matched) {
+    await updateDoc(doc(db, "controllers", matched.id), {
+      status: "available",
+      farmerId: null,
+      farmerDocId: null,
+      assignedAt: null
+    });
   }
 
 }
 
   /* ===== DELETE FARMER ===== */
+  // No manual cache/table update needed - data-store.js's own onSnapshot
+  // picks up the deletion and calls onStoreUpdate() automatically.
 
   await deleteDoc(farmerRef);
-  sessionStorage.removeItem("controllersCache");
-  sessionStorage.removeItem("controllerFarmerMap");
-  /* ===== UPDATE CACHE ===== */
-
-  allFarmers = allFarmers.filter(f => f._docId !== id);
-
-  sessionStorage.setItem("farmersCache", JSON.stringify(allFarmers));
-
-  filteredFarmers = applyFilter(allFarmers);
-  renderTable(filteredFarmers);
 
 };
 /* ================= DOWNLOAD ALL FARMERS EXCEL ================= */
@@ -513,13 +454,6 @@ window.downloadAllFarmersExcel = async function () {
 window.setAccess = async function(id, enable){
 
   const ref = doc(db,"farmers",id);
-  const snap = await getDoc(ref);
-
-  let farmerData = null;
-
-  if(snap.exists()){
-    farmerData = snap.data();
-  }
 
   await updateDoc(ref,{
     phoneAuth:{
@@ -566,8 +500,6 @@ if(activateBtn && blockBtn){
     activateBtn.classList.remove("disabled");
   }
 }
-
-  sessionStorage.removeItem("farmersCache");
 };
 
 /* ======================================================
@@ -581,12 +513,12 @@ window.openPhoneAuth = async function(id){
   const oldModal = document.querySelector(".fb-modal-overlay");
   if(oldModal) oldModal.remove();
 
-  const ref = doc(db,"farmers",id);
-  const snap = await getDoc(ref);
+  // Read from the already-live store instead of a fresh getDoc - this
+  // popup can be opened repeatedly while browsing the table, and allFarmers
+  // is already kept in sync with Firestore via data-store.js's listener.
+  const f = allFarmers.find(x => x.id === id);
 
-  if(!snap.exists()) return;
-
-  const f = snap.data();
+  if(!f) return;
 
 
   /* ---------- farmer list ---------- */

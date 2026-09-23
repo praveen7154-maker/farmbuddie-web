@@ -6,10 +6,6 @@ import {
   addDoc,
   collection,
   serverTimestamp,
-  query,
-  where,
-  getDocs,
-  getDoc,
   doc,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
@@ -105,32 +101,26 @@ document.getElementById("logoutBtn")?.addEventListener("click", () => {
 });
 
 /* ================= REPAIR CONTROLLERS ================= */
+// Reads from data-store.js's already-live farmers/controllers arrays
+// instead of firing two fresh full-collection queries - this page already
+// has both subscribed since load (see startDataStore() above), so a
+// second read here would just be re-fetching the same data.
 window.repairControllers = async function () {
 
-  const farmerSnap = await getDocs(collection(db,"farmers"));
-  const farmerIds = new Set();
+  const farmerIds = new Set(
+    getFarmers()
+      .map(f => f.controller?.uniqueId)
+      .filter(Boolean)
+  );
 
-  farmerSnap.forEach(f=>{
-    if(f.data().controller?.uniqueId){
-      farmerIds.add(f.data().controller.uniqueId);
-    }
-  });
-
-  const controllerSnap = await getDocs(collection(db,"controllers"));
-
-  for(const d of controllerSnap.docs){
-
-    const c = d.data();
-
-    if(c.status==="assigned" && !farmerIds.has(c.uniqueId)){
-
-      await updateDoc(doc(db,"controllers",d.id),{
-        status:"available",
-        farmerId:null,
-        farmerDocId:null,
-        assignedAt:null
+  for (const c of getControllers()) {
+    if (c.status === "assigned" && !farmerIds.has(c.uniqueId)) {
+      await updateDoc(doc(db, "controllers", c.id), {
+        status: "available",
+        farmerId: null,
+        farmerDocId: null,
+        assignedAt: null
       });
-
     }
   }
 }
@@ -579,16 +569,11 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
 
   panel.classList.remove("hidden");
 
- const q = query(
-  collection(db, "farmers"),
-  where("farmBuddieId", "==", farmBuddieId)
-);
+  // Looked up from the already-live store instead of a fresh query - this
+  // farmer's data is already in getFarmers() via data-store.js's listener.
+  const f = getFarmers().find(x => x.farmBuddieId === farmBuddieId);
 
-const snap = await getDocs(q);
-
-if (snap.empty) return;
-
-const f = snap.docs[0].data();
+  if (!f) return;
 
   const appUsersHtml = (f.appUsers?.length)
     ? f.appUsers.map(u =>

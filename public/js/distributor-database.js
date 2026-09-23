@@ -3,19 +3,33 @@ import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
 import {
-  collection,
-  getDocs,
   doc,
   updateDoc,
   deleteDoc,
-  getDoc,
-  query,
-  orderBy
+  getDoc
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
+import {
+  startDataStore,
+  getDistributors,
+  subscribe
+} from "/js/data-store.js";
+
 /* ================= AUTH GUARD ================= */
+// Used to run its own one-shot getDocs() over the whole distributors
+// collection every page load - shares data-store.js's realtime listener
+// instead, same as index.js/analytics.js. Writes below (toggleStatus,
+// deleteDistributor) no longer need to manually reload afterward either -
+// the store's own onSnapshot picks up the change and re-renders on its own.
 onAuthStateChanged(auth, (user) => {
-  if (!user) window.location.replace("/login.html");
+  if (!user) {
+    window.location.replace("/login.html");
+    return;
+  }
+
+  startDataStore();
+  subscribe(onStoreUpdate);
+  onStoreUpdate();
 });
 
 /* ================= LOGOUT ================= */
@@ -46,27 +60,15 @@ if (msg) {
 let allDistributors = [];
 let filteredDistributors = [];
 
-/* ================= LOAD DISTRIBUTORS ================= */
-async function loadDistributors() {
-
-  const q = query(
-    collection(db, "distributors"),
-    orderBy("distributorId", "asc")
+/* ================= STORE UPDATE ================= */
+function onStoreUpdate() {
+  allDistributors = getDistributors().slice().sort((a, b) =>
+    (a.distributorId || "").localeCompare(b.distributorId || "", undefined, { numeric: true })
   );
-
-  const snapshot = await getDocs(q);
-
-  allDistributors = snapshot.docs.map(d => ({
-    _docId: d.id,
-    ...d.data()
-  }));
-
   filteredDistributors = [...allDistributors];
 
   renderTable(filteredDistributors);
 }
-
-loadDistributors();
 
 /* ================= RENDER TABLE ================= */
 function renderTable(data) {
@@ -106,22 +108,22 @@ function renderTable(data) {
       <td class="action-cell">
 
         <button class="icon-btn view"
-          onclick="viewDistributor('${d._docId}')"
+          onclick="viewDistributor('${d.id}')"
           title="View">👁️</button>
 
         <button class="icon-btn edit"
-          onclick="editDistributor('${d._docId}')"
+          onclick="editDistributor('${d.id}')"
           title="Edit"
           ${isInactive ? "disabled" : ""}>✏️</button>
 
         <button class="icon-btn toggle"
-          onclick="toggleStatus('${d._docId}','${d.status}')"
+          onclick="toggleStatus('${d.id}','${d.status}')"
           title="${isInactive ? "Activate" : "Deactivate"}">
           ${isInactive ? "🟢" : "⛔"}
         </button>
 
         <button class="icon-btn delete"
-          onclick="deleteDistributor('${d._docId}')"
+          onclick="deleteDistributor('${d.id}')"
           title="Delete">🗑️</button>
 
       </td>
@@ -192,8 +194,6 @@ window.toggleStatus = async (id, status) => {
   await updateDoc(doc(db, "distributors", id), {
     status: newStatus
   });
-
-  loadDistributors();
 };
 
 window.deleteDistributor = async (id) => {
@@ -216,7 +216,6 @@ Are you sure you want to delete this distributor permanently?
   if (!confirm(message)) return;
 
   await deleteDoc(doc(db, "distributors", id));
-  loadDistributors();
 };
 
 /* ================= GO TO ONBOARDING ================= */

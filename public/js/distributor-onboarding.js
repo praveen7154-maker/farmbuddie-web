@@ -244,7 +244,6 @@ document.getElementById("distributorForm")
       `Created At: ${createdTime}`;
 
     sessionStorage.setItem("distSuccess", successMessage);
-    sessionStorage.removeItem("farmersCache");
     window.location.href = "/admin/distributor-database.html";
 
   } catch (error) {

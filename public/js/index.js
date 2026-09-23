@@ -1,19 +1,31 @@
-import { auth, db } from "/js/firebase-init.js";
+import { auth } from "/js/firebase-init.js";
 import {
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
 import {
-  collection,
-  getDocs,
-  orderBy,
-  query
-} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+  startDataStore,
+  getFarmers,
+  getDistributors,
+  subscribe
+} from "/js/data-store.js";
 
 /* ================= AUTH ================= */
+// Dashboard used to run its own one-shot getDocs() over the whole farmers
+// and distributors collections every time this page loaded - shares the
+// same realtime, cached listeners data-store.js already keeps open for
+// analytics.js/controller-database.js instead, so navigating back to the
+// Dashboard doesn't re-read either collection from scratch.
 onAuthStateChanged(auth, (user) => {
-  if (!user) window.location.replace("/login.html");
+  if (!user) {
+    window.location.replace("/login.html");
+    return;
+  }
+
+  startDataStore();
+  subscribe(renderDashboard);
+  renderDashboard();
 });
 
 document.getElementById("logoutBtn")?.addEventListener("click", () => {
@@ -25,24 +37,29 @@ let allFarmers = [];
 let allDistributors = [];
 let panelData = [];
 
-/* ================= LOAD DASHBOARD ================= */
-async function loadDashboard() {
+/* ================= RENDER DASHBOARD ================= */
+// Synchronous now - reads the already-live, already-cached arrays
+// data-store.js's onSnapshot listeners maintain, instead of each call
+// re-fetching the whole collection. Runs once on load and again on every
+// store update (new farmer/distributor added elsewhere, status changed, ...).
+function renderDashboard() {
 
   /* ========= FARMERS ========= */
-  const farmerSnap = await getDocs(
-    query(collection(db, "farmers"), orderBy("farmBuddieId"))
-  );
-
   let total = 0, active = 0, inactive = 0, simExpiry = 0;
 
   const today = new Date();
   const limit = new Date();
   limit.setDate(today.getDate() + 30);
 
-  allFarmers = farmerSnap.docs.map(d => {
-    const f = d.data();
-    f._docId = d.id;
+  allFarmers = [...getFarmers()].sort((a, b) =>
+    (a.farmBuddieId || "").localeCompare(
+      b.farmBuddieId || "",
+      undefined,
+      { numeric: true }
+    )
+  );
 
+  allFarmers.forEach(f => {
     total++;
     if (f.status === "active") active++;
     if (f.status === "inactive") inactive++;
@@ -53,17 +70,7 @@ async function loadDashboard() {
       end.setFullYear(end.getFullYear() + 1);
       if (end >= today && end <= limit) simExpiry++;
     }
-
-    return f;
   });
-
-  allFarmers.sort((a, b) =>
-    (a.farmBuddieId || "").localeCompare(
-      b.farmBuddieId || "",
-      undefined,
-      { numeric: true }
-    )
-  );
 
   document.getElementById("totalFarmers").textContent = total;
   document.getElementById("activeCount").textContent = active;
@@ -71,21 +78,14 @@ async function loadDashboard() {
   document.getElementById("simExpiryCount").textContent = simExpiry;
 
   /* ========= DISTRIBUTORS ========= */
-  const distributorSnap = await getDocs(
-    query(collection(db, "distributors"), orderBy("distributorId"))
-  );
-
   let totalDist = 0, activeDist = 0, inactiveDist = 0;
 
-  allDistributors = distributorSnap.docs.map(d => {
-    const dist = d.data();
-    dist._docId = d.id;
+  allDistributors = getDistributors();
 
+  allDistributors.forEach(dist => {
     totalDist++;
     if (dist.status === "active") activeDist++;
     if (dist.status === "inactive") inactiveDist++;
-
-    return dist;
   });
 
   document.getElementById("totalDistributors").textContent = totalDist;
@@ -337,6 +337,3 @@ document.getElementById("closePanelBtn")?.addEventListener("click", () => {
   document.getElementById("dashboardFarmerPanel")
     .classList.add("hidden");
 });
-
-/* ================= INIT ================= */
-loadDashboard();
