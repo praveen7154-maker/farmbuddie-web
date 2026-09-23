@@ -82,6 +82,22 @@
   </div>
 </div>
 
+<div class="section-title">📡 Connected Right Now</div>
+<div class="fb-stats" id="connectedCards">
+  <div class="fb-stat-card vps-status-card">
+    <p>Farm Devices Connected</p>
+    <h2><span class="vps-dot" id="farmDevicesDot"></span><span id="farmDevicesLabel">Checking…</span></h2>
+    <div class="vps-detail" id="farmDevicesDetail"></div>
+  </div>
+
+  <div class="fb-stat-card vps-status-card">
+    <p>Infrastructure Clients</p>
+    <h2><span class="vps-dot" id="infraClientsDot"></span><span id="infraClientsLabel">Checking…</span></h2>
+    <div class="vps-detail" id="infraClientsDetail"></div>
+  </div>
+</div>
+<div class="vps-client-list" id="connectedClientList"></div>
+
 <div class="vps-status-note">
   Auto-refreshes every 20 seconds while this page is open. This checks whether each
   service is actually reachable right now — not just whether its container is running.

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { config } from "../config.js";
-import { checkTbmqHealth } from "../tbmqClient.js";
+import { checkTbmqHealth, fetchConnectedClients } from "../tbmqClient.js";
 
 export const statusRouter = Router();
 
@@ -48,9 +48,34 @@ async function checkBridgeHealth() {
 statusRouter.get("/", async (req, res) => {
   const [tbmqRest, bridge] = await Promise.all([checkTbmqHealth(), checkBridgeHealth()]);
 
+  // Only worth asking TBMQ for its client list if we already know it's up -
+  // checkTbmqHealth() just proved that (and left a fresh token cached), so
+  // this is a second real call, not a retry of the first.
+  let connectedClients = { ok: false, error: "TBMQ unreachable" };
+  if (tbmqRest.ok) {
+    try {
+      const clients = await fetchConnectedClients();
+      // FBIRG<farmId> is this fleet's own device/app credential naming (see
+      // deviceProvisioning.js) - everything else connected (the bridge's
+      // own "bridge" credential, TBMQ's built-in WebSocket credential) is
+      // platform infrastructure, not a farm.
+      const farmClients = clients.filter((c) => /^FBIRG\d+$/.test(c.clientId));
+      connectedClients = {
+        ok: true,
+        total: clients.length,
+        farmDevices: farmClients.length,
+        infrastructure: clients.length - farmClients.length,
+        clients
+      };
+    } catch (err) {
+      connectedClients = { ok: false, error: err.message };
+    }
+  }
+
   res.json({
     checkedAt: new Date().toISOString(),
     tbmqRest,
+    connectedClients,
     bridgeMqtt: { ok: bridge.ok && bridge.mqttConnected === true, error: bridge.ok ? (bridge.mqttConnected ? undefined : "Bridge is up but not connected to TBMQ") : bridge.error },
     bridgeService: { ok: bridge.ok, latencyMs: bridge.latencyMs, error: bridge.error },
     postgres: bridge.ok ? bridge.postgres : { ok: false, error: "Bridge unreachable - cannot check Postgres" }

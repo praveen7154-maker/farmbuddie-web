@@ -32,6 +32,51 @@ function setCard(prefix, ok, label, detail) {
   detailEl.textContent = detail || "";
 }
 
+function renderConnectedClients(connectedClients) {
+  const listEl = document.getElementById("connectedClientList");
+
+  if (!connectedClients || !connectedClients.ok) {
+    setCard("farmDevices", false, "Unknown", connectedClients?.error || "");
+    setCard("infraClients", false, "Unknown", "");
+    listEl.innerHTML = "";
+    return;
+  }
+
+  // Green here just means "we successfully read this count from TBMQ" -
+  // zero farm devices connected is normal (no hardware deployed yet, or
+  // everyone's phone app closed), not a failure state to flag red.
+  setCard("farmDevices", true, String(connectedClients.farmDevices), "");
+  setCard("infraClients", true, String(connectedClients.infrastructure), "bridge, TBMQ's own WebSocket credential, etc.");
+
+  if (!connectedClients.clients.length) {
+    listEl.innerHTML = "";
+    return;
+  }
+
+  const rows = connectedClients.clients
+    .slice()
+    .sort((a, b) => (a.clientId || "").localeCompare(b.clientId || ""))
+    .map((c) => `
+      <tr>
+        <td>${c.clientId}</td>
+        <td>${/^FBIRG\d+$/.test(c.clientId) ? "Farm Device" : "Infrastructure"}</td>
+        <td>${c.subscriptionsCount ?? "-"}</td>
+        <td>${c.clientIpAdr || "-"}</td>
+        <td>${c.connectedAt ? new Date(c.connectedAt).toLocaleString() : "-"}</td>
+      </tr>
+    `)
+    .join("");
+
+  listEl.innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Client ID</th><th>Type</th><th>Subscriptions</th><th>IP Address</th><th>Connected Since</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
 async function refreshStatus() {
   const lastChecked = document.getElementById("lastChecked");
 
@@ -75,6 +120,8 @@ async function refreshStatus() {
       data.postgres.ok ? "Reachable" : "Unreachable",
       data.postgres.ok ? `${data.postgres.latencyMs}ms` : data.postgres.error
     );
+
+    renderConnectedClients(data.connectedClients);
 
     lastChecked.textContent = `Last checked: ${new Date(data.checkedAt).toLocaleTimeString()}`;
   } catch (err) {

@@ -117,6 +117,32 @@ export async function checkTbmqHealth() {
   }
 }
 
+/**
+ * Currently-connected MQTT sessions, straight from TBMQ's own live
+ * connection table (GET /api/v2/client-session?connectedStatusList=
+ * CONNECTED) - not a Firestore mirror or Postgres history, the broker's
+ * actual answer to "who is connected to me right now". Used by GET
+ * /provision/status (see routes/status.js) for the "VPS & TBMQ" admin
+ * page. pageSize=100 - this fleet is nowhere near needing real
+ * pagination here; revisit if that ever changes.
+ */
+export async function fetchConnectedClients() {
+  const res = await authedFetch("/api/v2/client-session?pageSize=100&page=0&connectedStatusList=CONNECTED");
+
+  if (!res.ok) {
+    throw new Error(`TBMQ client-session list failed: ${res.status} ${await res.text()}`);
+  }
+
+  const data = await res.json();
+  return (data.data || []).map((c) => ({
+    clientId: c.clientId,
+    clientType: c.clientType,
+    connectedAt: c.connectedAt,
+    subscriptionsCount: c.subscriptionsCount,
+    clientIpAdr: c.clientIpAdr
+  }));
+}
+
 export async function deleteCredentials(credentialsId) {
   const res = await authedFetch(`/api/mqtt/client/credentials/${credentialsId}`, {
     method: "DELETE"
