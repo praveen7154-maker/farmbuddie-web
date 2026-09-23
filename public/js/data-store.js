@@ -12,7 +12,6 @@ import {
 let farmers = [];
 let controllers = [];
 let distributors = [];
-let employees = [];
 
 let subscribers = [];
 
@@ -28,7 +27,6 @@ export function startDataStore(){
   startFarmers();
   startControllers();
   startDistributors();
-  startEmployees();
 
 }
 
@@ -92,31 +90,11 @@ function startDistributors(){
 
 }
 
-/* ================= HR ================= */
-
-function startEmployees(){
-
-  const col = collection(db,"employees");
-
-  onSnapshot(col,(snap)=>{
-
-    employees = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
-
-    notify();
-
-  });
-
-}
-
 /* ================= GET DATA ================= */
 
 export function getFarmers(){ return farmers; }
 export function getControllers(){ return controllers; }
 export function getDistributors(){ return distributors; }
-export function getEmployees(){ return employees; }
 
 /* ================= SUBSCRIBE ================= */
 
