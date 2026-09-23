@@ -38,6 +38,11 @@ function parseTopic(topic) {
   return null;
 }
 
+/** Live MQTT connection state of the bridge's own persistent client - used by GET /healthz (see server.js) for the "VPS & TBMQ" admin status page. */
+export function isBridgeConnected() {
+  return client !== null && client.connected === true;
+}
+
 export function connectBridge() {
   client = mqtt.connect(config.bridgeMqttUrl, {
     clientId: config.bridgeMqttUsername(),

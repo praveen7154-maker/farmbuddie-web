@@ -8,6 +8,17 @@ export const pool = new Pool({ connectionString: config.bridgePgConnectionString
 const RETENTION_DAYS = 15;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // hourly — keeps the table close to the 15-day bound without much overhead
 
+/** Real connectivity check, not just "the pool object exists" - used by GET /healthz (see server.js) for the "VPS & TBMQ" admin status page. Never throws. */
+export async function checkPostgresHealth() {
+  const startedAt = Date.now();
+  try {
+    await pool.query("SELECT 1");
+    return { ok: true, latencyMs: Date.now() - startedAt };
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - startedAt, error: err.message };
+  }
+}
+
 export async function ensureSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS device_events (

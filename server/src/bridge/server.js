@@ -4,13 +4,20 @@ import rateLimit from "express-rate-limit";
 import { config } from "../config.js";
 import { verifyFirebaseToken } from "../middleware/verifyFirebaseToken.js";
 import { canAccessFarm } from "./ownership.js";
-import { publishCommand } from "./mqttBridge.js";
-import { queryEvents } from "./postgres.js";
+import { publishCommand, isBridgeConnected } from "./mqttBridge.js";
+import { queryEvents, checkPostgresHealth } from "./postgres.js";
 
 export const app = express();
 app.use(express.json());
 
-app.get("/healthz", (req, res) => res.json({ ok: true }));
+// Reports the bridge's OWN MQTT session + Postgres reachability, not just
+// "this HTTP process is alive" - GET /provision/status (see routes/
+// status.js on the provision-api side) fetches this internally over the
+// docker network to build the admin panel's "VPS & TBMQ" status page.
+app.get("/healthz", async (req, res) => {
+  const postgres = await checkPostgresHealth();
+  res.json({ ok: true, mqttConnected: isBridgeConnected(), postgres });
+});
 
 // Both the admin panel (browser, has an origin to restrict) and the
 // Irrigo app (native, no origin) call these — CORS just narrows what a

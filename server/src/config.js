@@ -25,6 +25,15 @@ export const config = {
   bridgeMqttUsername: () => required("BRIDGE_MQTT_USERNAME"),
   bridgeMqttPassword: () => required("BRIDGE_MQTT_PASSWORD"),
   bridgePort: Number(process.env.BRIDGE_PORT || 4100),
+  // provision-api's own view of the bridge service, over the docker network
+  // (container hostname, not the public host) - used only by GET
+  // /provision/status (routes/status.js) to relay the bridge's own health
+  // (its MQTT session, its Postgres pool) into the admin panel's "VPS &
+  // TBMQ" page. Same "service:port" pattern as tbmqBaseUrl/bridgeMqttUrl -
+  // "bridge" assumes that's the docker-compose service name; set
+  // BRIDGE_INTERNAL_URL explicitly if yours differs (a wrong hostname just
+  // shows as "bridge unreachable" on the status page, nothing breaks).
+  bridgeInternalUrl: process.env.BRIDGE_INTERNAL_URL || "http://bridge:4100",
   bridgePgConnectionString: () => required("BRIDGE_PG_CONNECTION_STRING"),
   bridgeAdminOrigins: (process.env.ADMIN_ORIGIN || "")
     .split(",")

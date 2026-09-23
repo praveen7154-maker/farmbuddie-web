@@ -9,6 +9,7 @@ import { provisionAppRouter } from "./routes/provisionApp.js";
 import { provisionMonitorRouter } from "./routes/provisionMonitor.js";
 import { provisionBootstrapRouter } from "./routes/provisionBootstrap.js";
 import { fcmTokenRouter } from "./routes/fcmToken.js";
+import { statusRouter } from "./routes/status.js";
 
 export const app = express();
 
@@ -70,3 +71,21 @@ const bootstrapLimiter = rateLimit({
   legacyHeaders: false
 });
 app.use("/provision/bootstrap", bootstrapLimiter, provisionBootstrapRouter);
+
+// /provision/status backs the admin panel's "VPS & TBMQ" page, which polls
+// it periodically (see public/js/vps-status.js) - provisionLimiter's 20/15min
+// is meant for one-off credential actions, not a page left open polling
+// every ~20s, so this gets its own, more generous limit instead.
+const statusLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use(
+  "/provision/status",
+  cors({ origin: config.adminOrigins }),
+  statusLimiter,
+  verifyFirebaseToken,
+  statusRouter
+);

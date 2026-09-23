@@ -81,6 +81,42 @@ export async function createBasicCredentials({
   return res.json(); // includes `id` (credentialsId)
 }
 
+/**
+ * Real reachability check for TBMQ's REST/admin API (port 8083) - used by
+ * GET /provision/status (see routes/status.js). Forces a fresh login
+ * rather than reusing cachedToken, since the point is to prove the broker
+ * itself answers right now, not that a token happened to still be valid.
+ * Never throws - a down/unreachable broker is a normal, expected result
+ * here, not an error condition for the caller to catch.
+ */
+export async function checkTbmqHealth() {
+  const startedAt = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${config.tbmqBaseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: config.tbmqAdminEmail(),
+        password: config.tbmqAdminPassword()
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      return { ok: false, latencyMs: Date.now() - startedAt, error: `HTTP ${res.status}` };
+    }
+
+    const data = await res.json();
+    cachedToken = data.token;
+    return { ok: true, latencyMs: Date.now() - startedAt };
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - startedAt, error: err.name === "AbortError" ? "Timed out" : err.message };
+  }
+}
+
 export async function deleteCredentials(credentialsId) {
   const res = await authedFetch(`/api/mqtt/client/credentials/${credentialsId}`, {
     method: "DELETE"
