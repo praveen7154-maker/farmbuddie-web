@@ -727,6 +727,37 @@ const f = snap.docs[0].data();
 </div>
 <div id="mqttRevealBox"></div>
 
+  <!-- PAIRED HARDWARE (live BLE-paired nodes, synced from the Irrigo app
+       via farmers/{id}.pairedUnits - see PairedUnitsRepository.kt) -
+       separate from the static onboarding-time counts right below
+       (Motor & TNEB Configuration), which are just what the farmer was
+       sold, not what's actually been paired over BLE yet. -->
+  <div class="section-title">🔗 Paired Hardware</div>
+  <div class="info-grid">
+    ${
+      (() => {
+        const motorNodes = Object.values(f.pairedUnits?.motorNodes || {});
+        const valves = Object.values(f.pairedUnits?.valves || {});
+        const rows = [
+          ...motorNodes.map(u => `
+            <div class="info-item">
+              <b>${u.nodeLabel}</b> (Motor Node) - ${u.bleDeviceName || "-"}
+            </div>
+          `),
+          ...valves.map(u => `
+            <div class="info-item">
+              <b>${u.unitLabel}</b> (${u.hasPressureSensors ? "Filter Backwash" : "Valve"}) -
+              ${u.channelCount}ch ${u.valveType || ""}, ${u.valveCount} valve(s) - ${u.bleDeviceName || "-"}
+            </div>
+          `),
+        ];
+        return rows.length
+          ? rows.join("")
+          : `<div class="info-item full">No hardware paired yet</div>`;
+      })()
+    }
+  </div>
+
   <!-- MOTOR & TNEB CONFIG -->
 <div class="section-title">⚡ Motor & TNEB Configuration</div>
 <div class="info-grid">
