@@ -7,6 +7,7 @@ import { canAccessFarm } from "./ownership.js";
 import { publishCommand, isBridgeConnected } from "./mqttBridge.js";
 import { queryEvents, checkPostgresHealth } from "./postgres.js";
 import { getFleetStatus } from "./fleetStatus.js";
+import { issueDeviceCredentialByFarmId } from "../deviceProvisioning.js";
 
 export const app = express();
 app.use(express.json());
@@ -81,6 +82,33 @@ app.get("/fleet/status", async (req, res) => {
   } catch (err) {
     console.error("fleet/status error:", err);
     return res.status(500).json({ error: "Failed to fetch fleet status" });
+  }
+});
+
+/**
+ * GET /fleet/device/:farmId/credentials
+ * Admin-only. Hands back this farm's already-issued MQTT credentials
+ * (broker host/port, client ID/username, plaintext password) so the
+ * Irrigo Admin app can open a single, on-demand MQTT connection to the
+ * one device a founder is actually viewing - reuses issueDeviceCredentialByFarmId()
+ * with rotate:false, the exact same "view, don't mutate" call the web
+ * panel's own credential reveal already makes (see deviceProvisioning.js).
+ */
+app.get("/fleet/device/:farmId/credentials", async (req, res) => {
+  if (!req.decodedToken.email) {
+    return res.status(403).json({ error: "Admin identity required" });
+  }
+
+  try {
+    const result = await issueDeviceCredentialByFarmId(req.params.farmId, { rotate: false });
+    return res.json(result);
+  } catch (err) {
+    if (err && err.status) {
+      const { status, message, ...rest } = err;
+      return res.status(status).json({ error: message, ...rest });
+    }
+    console.error("fleet/device/credentials error:", err);
+    return res.status(500).json({ error: "Failed to fetch device credentials" });
   }
 });
 
