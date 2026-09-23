@@ -6,6 +6,7 @@ import { verifyFirebaseToken } from "../middleware/verifyFirebaseToken.js";
 import { canAccessFarm } from "./ownership.js";
 import { publishCommand, isBridgeConnected } from "./mqttBridge.js";
 import { queryEvents, checkPostgresHealth } from "./postgres.js";
+import { getFleetStatus } from "./fleetStatus.js";
 
 export const app = express();
 app.use(express.json());
@@ -57,6 +58,29 @@ app.post("/command/device", async (req, res) => {
   } catch (err) {
     console.error("command/device error:", err);
     return res.status(500).json({ error: "Failed to relay command" });
+  }
+});
+
+/**
+ * GET /fleet/status
+ * Every farm with a controller assigned, plus its live deviceStatus/online
+ * state - admin-only (email-authenticated), unlike the per-farm endpoints
+ * above which a farmer's own phone identity can also reach. Built for the
+ * Irrigo Admin app's Fleet Monitoring screen: one REST call against the
+ * VPS instead of that app holding its own MQTT session or Firestore
+ * listener open just to show who's online right now.
+ */
+app.get("/fleet/status", async (req, res) => {
+  if (!req.decodedToken.email) {
+    return res.status(403).json({ error: "Admin identity required" });
+  }
+
+  try {
+    const farms = await getFleetStatus();
+    return res.json({ farms, checkedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error("fleet/status error:", err);
+    return res.status(500).json({ error: "Failed to fetch fleet status" });
   }
 });
 
