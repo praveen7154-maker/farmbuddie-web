@@ -8,6 +8,9 @@ import {
   subscribe
 } from "/js/data-store.js";
 
+import { isDeviceOnline, renderMotorsInto, renderValvesInto } from "/js/device-status-render.js";
+import { sendDeviceCommand, fetchConfigReadback } from "/js/device-commands.js";
+
 
 /* ================= AUTH ================= */
 // This page used to keep its own separate onSnapshot listener on the whole
@@ -68,6 +71,14 @@ function onStoreUpdate() {
     (a.farmBuddieId || "").localeCompare(b.farmBuddieId || "", undefined, { numeric: true })
   );
   applyFilter();
+
+  // Keep the fleet control panel's live status current too, off the exact
+  // same store update - no separate onSnapshot listener needed for it
+  // (the whole farmer doc, deviceStatus included, is already in here).
+  if (currentFleetFarmerId) {
+    const f = allFarmers.find(x => x.id === currentFleetFarmerId);
+    if (f) renderFleetStatus(f);
+  }
 }
 
 /* ================= RENDER TABLE ================= */
@@ -114,20 +125,7 @@ function renderTable(data) {
     const farmBuddieId = f.farmBuddieId || "-";
     const variant = f.controller?.variant || "-";
     const uniqueId = f.controller?.uniqueId || "-";
-
-    let isOnline = false;
-
-    if (f.deviceStatus?.lastSeen) {
-
-      const lastSeen =
-        f.deviceStatus.lastSeen.toDate?.() ||
-        new Date(f.deviceStatus.lastSeen);
-
-      const diffSeconds =
-        (Date.now() - lastSeen.getTime()) / 1000;
-
-      isOnline = diffSeconds <= 60;
-    }
+    const isOnline = isDeviceOnline(f.deviceStatus);
 
     const tr = document.createElement("tr");
 
@@ -146,6 +144,11 @@ function renderTable(data) {
           onclick="window.location.href='/admin/device-view.html?id=${f.id}'"
           title="View">
           👁️View
+        </button>
+        <button class="icon-btn fleet-control-btn"
+          onclick="openFleetPanel('${f.id}')"
+          title="Control">
+          🎛️Control
         </button>
       </td>
     `;
@@ -171,3 +174,251 @@ function renderTable(data) {
 }, 0);
 
 };
+
+/* =====================================================
+   FLEET CONTROL PANEL
+   Live status (reusing device-view.js's own render helpers - see
+   device-status-render.js) plus command buttons, in-page instead of
+   navigating to device-view.html. v1 scope: Motor 1 only (motorNum "1")
+   - Motor 2 control can be added once there's a real paired-Motor_2 farm
+   to test safety-limit/calibration commands against.
+===================================================== */
+
+const MOTOR_NUM = "1";
+let currentFleetFarmerId = null;
+
+function farmCommandTarget(f) {
+  return {
+    farmId: f.controller?.uniqueId,
+    nodeId: f.deviceStatus?.nodeId || "MOTOR_1",
+    motorNum: MOTOR_NUM
+  };
+}
+
+window.openFleetPanel = function (farmerId) {
+  const f = allFarmers.find(x => x.id === farmerId);
+  if (!f) return;
+
+  currentFleetFarmerId = farmerId;
+  document.getElementById("fleetPanel").classList.remove("hidden");
+  document.getElementById("fleetSafetyNote").textContent = "";
+  document.getElementById("fleetCalNote").textContent = "";
+
+  renderFleetStatus(f);
+};
+
+document.getElementById("fleetPanelClose")?.addEventListener("click", () => {
+  currentFleetFarmerId = null;
+  document.getElementById("fleetPanel").classList.add("hidden");
+});
+
+function renderFleetStatus(f) {
+  const data = f.deviceStatus || {};
+  const isOnline = isDeviceOnline(data);
+
+  document.getElementById("fleetPanelFarmName").textContent = f.name || f.farmBuddieId || "-";
+  document.getElementById("fleetFarmBuddieId").textContent = f.farmBuddieId || "-";
+  document.getElementById("fleetUniqueId").textContent = f.controller?.uniqueId || "-";
+
+  const badge = document.getElementById("fleetOnlineBadge");
+  badge.textContent = isOnline ? "Online" : "Offline";
+  badge.className = "status-pill " + (isOnline ? "status-online" : "status-offline");
+
+  renderMotorsInto(document.getElementById("fleetMotorGrid"), data, isOnline);
+  renderValvesInto(document.getElementById("fleetValveGrid"), data.motor1?.valves, isOnline);
+
+  const health = data.health || {};
+  document.getElementById("fleetFw").textContent = health.fw_version ?? "-";
+  document.getElementById("fleetTransport").textContent = isOnline ? (health.transport ?? "-") : "--";
+  document.getElementById("fleetSignal").textContent = isOnline && health.signal_pct != null ? `${health.signal_pct}%` : "--";
+  document.getElementById("fleetUptime").textContent = isOnline ? (health.uptime_sec != null ? `${Math.floor(health.uptime_sec / 60)}m` : "-") : "--";
+}
+
+/* ---------------- QUICK ACTIONS / MOTOR CONTROL ---------------- */
+
+async function runFleetCommand(cmd, extraParams = {}, { confirmMessage } = {}) {
+  const f = allFarmers.find(x => x.id === currentFleetFarmerId);
+  if (!f) return;
+
+  if (confirmMessage && !confirm(confirmMessage)) return;
+
+  try {
+    await sendDeviceCommand(auth, { ...farmCommandTarget(f), cmd, ...extraParams });
+  } catch (err) {
+    console.error(`Command ${cmd} failed:`, err);
+    alert(`❌ ${err.message}`);
+  }
+}
+
+document.getElementById("fleetGetStatus")?.addEventListener("click", () => runFleetCommand("get_status"));
+document.getElementById("fleetLightOn")?.addEventListener("click", () => runFleetCommand("light_on"));
+document.getElementById("fleetLightOff")?.addEventListener("click", () => runFleetCommand("light_off"));
+document.getElementById("fleetClearFault")?.addEventListener("click", () => runFleetCommand("clear_fault"));
+
+document.getElementById("fleetMotorOn")?.addEventListener("click", () =>
+  runFleetCommand("motor_on", { use_valve: false }, {
+    confirmMessage: "Start this motor remotely now?"
+  })
+);
+
+document.getElementById("fleetMotorOff")?.addEventListener("click", () =>
+  runFleetCommand("motor_off", {}, {
+    confirmMessage: "Stop this motor remotely now?"
+  })
+);
+
+document.getElementById("fleetEmergencyStop")?.addEventListener("click", () =>
+  runFleetCommand("emergency_stop", { fault: 0 }, {
+    confirmMessage: "⚠️ EMERGENCY STOP - this immediately halts the motor. Continue?"
+  })
+);
+
+/* ---------------- SAFETY LIMITS ---------------- */
+
+function setNote(id, text, kind) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "fleet-form-note" + (kind ? ` ${kind}` : "");
+}
+
+document.getElementById("fleetFetchSafety")?.addEventListener("click", async () => {
+  const f = allFarmers.find(x => x.id === currentFleetFarmerId);
+  if (!f) return;
+
+  setNote("fleetSafetyNote", "Fetching current limits from device…");
+
+  try {
+    const payload = await fetchConfigReadback(auth, {
+      ...farmCommandTarget(f),
+      getCmd: "get_config_safety",
+      responseType: "config_safety"
+    });
+
+    const group = document.getElementById("fleetPhaseGroup").value === "1" ? payload.prot_2p : payload.prot_3p;
+
+    document.getElementById("fs_vLow").value = group?.v_low ?? "";
+    document.getElementById("fs_vHigh").value = group?.v_high ?? "";
+    document.getElementById("fs_iDry").value = group?.i_dry ?? "";
+    document.getElementById("fs_iOverload").value = group?.i_overload ?? "";
+    document.getElementById("fs_dryRunRestartMinutes").value = payload.dry_run_restart_minutes ?? "";
+    document.getElementById("fs_phaseLossDetectV").value = payload.phase_loss_detect_v ?? "";
+    document.getElementById("fs_phaseLossDebounceMs").value = payload.phase_loss_debounce_ms ?? "";
+    document.getElementById("fs_phaseImbalanceMax").value = payload.phase_imbalance_max ?? "";
+    document.getElementById("fs_cyclicResumeCooldownSec").value = payload.cyclic_resume_cooldown_sec ?? "";
+    document.getElementById("fs_dolPulseMs").value = payload.dol_pulse_ms ?? "";
+    document.getElementById("fs_confirmTimeoutSec").value = payload.confirm_timeout_sec ?? "";
+
+    setNote("fleetSafetyNote", "Loaded current values from device.", "success");
+  } catch (err) {
+    console.error("Fetch safety config failed:", err);
+    setNote("fleetSafetyNote", err.message, "error");
+  }
+});
+
+document.getElementById("fleetSaveSafety")?.addEventListener("click", async () => {
+  const f = allFarmers.find(x => x.id === currentFleetFarmerId);
+  if (!f) return;
+
+  const phaseMode = Number(document.getElementById("fleetPhaseGroup").value);
+
+  const num = (id) => {
+    const v = document.getElementById(id).value;
+    return v === "" ? undefined : Number(v);
+  };
+
+  if (!confirm(
+    "This changes the device's own protective thresholds (dry-run/overload/voltage cutoffs) for the " +
+    (phaseMode === 1 ? "2-Phase" : "3-Phase") +
+    " group. Wrong values can leave the motor under-protected. Continue?"
+  )) return;
+
+  setNote("fleetSafetyNote", "Saving…");
+
+  try {
+    await sendDeviceCommand(auth, {
+      ...farmCommandTarget(f),
+      cmd: "set_thresholds",
+      phase_mode: phaseMode,
+      v_low: num("fs_vLow"),
+      v_high: num("fs_vHigh"),
+      i_dry: num("fs_iDry"),
+      i_overload: num("fs_iOverload"),
+      dry_run_restart_minutes: num("fs_dryRunRestartMinutes"),
+      phase_loss_detect_v: num("fs_phaseLossDetectV"),
+      phase_loss_debounce_ms: num("fs_phaseLossDebounceMs"),
+      phase_imbalance_max: num("fs_phaseImbalanceMax"),
+      cyclic_resume_cooldown_sec: num("fs_cyclicResumeCooldownSec"),
+      dol_pulse_ms: num("fs_dolPulseMs"),
+      confirm_timeout_sec: num("fs_confirmTimeoutSec")
+    });
+
+    setNote("fleetSafetyNote", "Sent to device.", "success");
+  } catch (err) {
+    console.error("Save safety config failed:", err);
+    setNote("fleetSafetyNote", err.message, "error");
+  }
+});
+
+/* ---------------- VI CALIBRATION ---------------- */
+
+document.getElementById("fleetFetchCal")?.addEventListener("click", async () => {
+  const f = allFarmers.find(x => x.id === currentFleetFarmerId);
+  if (!f) return;
+
+  setNote("fleetCalNote", "Fetching current calibration from device…");
+
+  try {
+    const payload = await fetchConfigReadback(auth, {
+      ...farmCommandTarget(f),
+      getCmd: "get_vi_calibration",
+      responseType: "config_vi"
+    });
+
+    document.getElementById("fc_voltR").value = payload.volt_r ?? "";
+    document.getElementById("fc_voltY").value = payload.volt_y ?? "";
+    document.getElementById("fc_voltB").value = payload.volt_b ?? "";
+    document.getElementById("fc_currR").value = payload.curr_r ?? "";
+    document.getElementById("fc_currY").value = payload.curr_y ?? "";
+    document.getElementById("fc_currB").value = payload.curr_b ?? "";
+
+    setNote("fleetCalNote", "Loaded current values from device.", "success");
+  } catch (err) {
+    console.error("Fetch VI calibration failed:", err);
+    setNote("fleetCalNote", err.message, "error");
+  }
+});
+
+document.getElementById("fleetSaveCal")?.addEventListener("click", async () => {
+  const f = allFarmers.find(x => x.id === currentFleetFarmerId);
+  if (!f) return;
+
+  const num = (id) => {
+    const v = document.getElementById(id).value;
+    return v === "" ? undefined : Number(v);
+  };
+
+  if (!confirm(
+    "This changes the device's own voltage/current sensor calibration. Wrong values will make every " +
+    "voltage/current reading (and the safety thresholds that depend on them) wrong too. Continue?"
+  )) return;
+
+  setNote("fleetCalNote", "Saving…");
+
+  try {
+    await sendDeviceCommand(auth, {
+      ...farmCommandTarget(f),
+      cmd: "set_vi_calibration",
+      volt_r: num("fc_voltR"),
+      volt_y: num("fc_voltY"),
+      volt_b: num("fc_voltB"),
+      curr_r: num("fc_currR"),
+      curr_y: num("fc_currY"),
+      curr_b: num("fc_currB")
+    });
+
+    setNote("fleetCalNote", "Sent to device.", "success");
+  } catch (err) {
+    console.error("Save VI calibration failed:", err);
+    setNote("fleetCalNote", err.message, "error");
+  }
+});
