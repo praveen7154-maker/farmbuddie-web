@@ -560,6 +560,7 @@ document.getElementById("smartUnmapped").textContent = smart.unmapped;
 /* ================= FARMER SIDE PANEL (1:1 WITH ONBOARDING) ================= */
 window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
   window.__currentControllerDocId = controllerDocId || null;
+  window.__currentFarmerMqtt = null;
 
   let panel = document.getElementById("farmerPanel");
   if (!panel) {
@@ -721,9 +722,14 @@ const f = snap.docs[0].data();
   <span class="mqtt-status-pill ${f.controller?.mqtt?.username ? "issued" : "none"}">
     ${f.controller?.mqtt?.username ? "Credentials issued" : "No credentials yet"}
   </span>
-  <button class="fb-btn-primary small" onclick="provisionDeviceMqtt(${!!f.controller?.mqtt?.username})">
-    ${f.controller?.mqtt?.username ? "🔄 Rotate MQTT Credentials" : "🔑 Generate MQTT Credentials"}
-  </button>
+  ${
+    f.controller?.mqtt?.username
+      ? `
+        <button class="fb-btn-primary small" onclick="fetchMqttCredentials()">📥 Fetch MQTT Credentials</button>
+        <button class="mqtt-rotate-link" onclick="provisionDeviceMqtt(true)">🔄 Rotate (invalidates current credentials)</button>
+      `
+      : `<button class="fb-btn-primary small" onclick="provisionDeviceMqtt(false)">🔑 Generate MQTT Credentials</button>`
+  }
 </div>
 <div id="mqttRevealBox"></div>
 
@@ -856,7 +862,7 @@ const f = snap.docs[0].data();
   // never needs a fresh Rotate (which actually changes the password)
   // just to look at or re-share the QR again.
   if (f.controller?.mqtt?.password) {
-    renderMqttCredentialReveal(document.getElementById("mqttRevealBox"), {
+    window.__currentFarmerMqtt = {
       brokerUrl: f.controller.mqtt.brokerUrl,
       port: f.controller.mqtt.port,
       username: f.controller.mqtt.username,
@@ -865,7 +871,8 @@ const f = snap.docs[0].data();
       nodeId: "MOTOR_1",
       farmerName: f.name || "",
       farmBuddieId: f.farmBuddieId || ""
-    });
+    };
+    renderMqttCredentialReveal(document.getElementById("mqttRevealBox"), window.__currentFarmerMqtt);
   }
 }
 
@@ -934,6 +941,25 @@ document.getElementById("tabUnmapped").onclick = () => {
 };
 
 /* ================= MQTT PROVISIONING ================= */
+
+// Read-only - just re-renders the already-loaded, already-stored
+// credential/QR (window.__currentFarmerMqtt, set when the panel opened -
+// see openFarmerPanel()). No network call, no TBMQ mutation, so it's safe
+// to click as often as needed. This is the button admins actually want
+// for "show me the QR again" - Rotate (below) is a separate, deliberately
+// less prominent action for when credentials need to be invalidated.
+window.fetchMqttCredentials = async function () {
+  const revealBox = document.getElementById("mqttRevealBox");
+  const data = window.__currentFarmerMqtt;
+
+  if (!data) {
+    alert("❌ No credentials found for this device yet.");
+    return;
+  }
+
+  if (revealBox) await renderMqttCredentialReveal(revealBox, data);
+};
+
 window.provisionDeviceMqtt = async function (isRotate) {
 
   const controllerDocId = window.__currentControllerDocId;

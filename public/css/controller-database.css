@@ -524,6 +524,23 @@
   border-radius: 999px;
 }
 
+/* Deliberately plain/muted, unlike the primary Fetch button next to it -
+   this invalidates the device's current credentials, so it shouldn't look
+   like the default action to click. */
+.mqtt-rotate-link {
+  background: none;
+  border: none;
+  padding: 5px 6px;
+  font-size: 12px;
+  color: #b91c1c;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.mqtt-rotate-link:hover {
+  color: #7f1d1d;
+}
+
 .mqtt-status-pill {
   font-size: 12.5px;
   font-weight: 600;
