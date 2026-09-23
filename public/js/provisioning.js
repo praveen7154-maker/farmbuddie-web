@@ -28,60 +28,18 @@ export async function provisionDeviceCredentials(auth, controllerDocId, { rotate
   return data;
 }
 
-function bytesToBase64(bytes) {
-  let binary = "";
-  bytes.forEach((b) => { binary += String.fromCharCode(b); });
-  return btoa(binary);
-}
-
-function base64ToBytes(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8ClampedArray(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
 /**
- * Renders a QR code from previously-persisted encrypted bytes (see
- * renderMqttCredentialReveal's onQrGenerated callback) - lets a farmer's
- * detail panel show/redownload the setup QR on every visit without ever
- * needing to click Rotate again. Deliberately only ever handles the
- * ENCRYPTED bytes, never plaintext - the raw password stays write-once,
- * shown only right after issue/rotate (see renderMqttCredentialReveal).
+ * Renders the credential + QR into the given container element. `data` is
+ * provisionDeviceCredentials()'s return value. The credential is durably
+ * stored (controllers/{id}.mqttPasswordPlaintext, farmers/{id}.controller.
+ * mqtt.password - see deviceProvisioning.js) and this same function is
+ * used both right after issue/rotate AND every time the farmer panel is
+ * simply reopened - founders can look at or re-share it anytime, no
+ * Rotate (which actually changes the password) needed just to view it.
  */
-export async function renderStoredQr(container, base64EncryptedBytes) {
+export async function renderMqttCredentialReveal(container, data) {
   container.innerHTML = `
     <div class="mqtt-reveal-box">
-      <div><b>Device setup QR</b> — scan with the Irrigo app to pair this device:</div>
-      <canvas id="mqttQrCanvasStored" style="margin-top:8px;border-radius:8px;"></canvas>
-      <button id="mqttQrDownloadStoredBtn" class="fb-btn-primary small" style="margin-top:10px;">
-        ⬇ Download QR (to send to the installer)
-      </button>
-    </div>
-  `;
-  const canvas = container.querySelector("#mqttQrCanvasStored");
-  await QRCode.toCanvas(canvas, [{ data: base64ToBytes(base64EncryptedBytes), mode: "byte" }], { width: 220 });
-
-  container.querySelector("#mqttQrDownloadStoredBtn").onclick = () => {
-    const link = document.createElement("a");
-    link.download = "device-setup-qr.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  };
-}
-
-/**
- * Renders the one-time credential reveal (password shown once + QR code)
- * into the given container element. `data` is provisionDeviceCredentials()'s
- * return value. onQrGenerated (optional), if given, is called with the
- * QR's base64-encoded ENCRYPTED bytes (never the plaintext password) so
- * the caller can persist them (e.g. to Firestore) for renderStoredQr()
- * above to redisplay later without ever re-exposing the plaintext.
- */
-export async function renderMqttCredentialReveal(container, data, { onQrGenerated } = {}) {
-  container.innerHTML = `
-    <div class="mqtt-reveal-box">
-      <div class="warn">⚠ Shown once — copy it now, it will not be shown again.</div>
       <div><b>Broker:</b> ${data.brokerUrl}:${data.port}</div>
       <div><b>Client ID / Username:</b> ${data.username}</div>
       <div><b>Password:</b> ${data.password}</div>
@@ -115,10 +73,6 @@ export async function renderMqttCredentialReveal(container, data, { onQrGenerate
     const canvas = container.querySelector("#mqttQrCanvas");
     await QRCode.toCanvas(canvas, [{ data: clampedBytes, mode: "byte" }], { width: 220 });
 
-    if (onQrGenerated) {
-      onQrGenerated(bytesToBase64(encryptedBytes));
-    }
-
     // Onboarding (office) and physical install (field) are usually
     // different people/visits — the QR has to travel between them
     // somehow, so give the office admin an image file to send over
@@ -141,8 +95,9 @@ export async function renderMqttCredentialReveal(container, data, { onQrGenerate
 /**
  * Full-screen modal version of the reveal, for pages with no existing
  * side panel to render into (add-farm.html, farmer-onboarding.html).
- * Resolves once the admin dismisses it — callers await this before
- * navigating away, since the password is unrecoverable once this closes.
+ * Resolves once the admin dismisses it — the credential is durably
+ * stored (see deviceProvisioning.js), so it's also viewable again later
+ * from that farmer's panel in controller-database.html, not just here.
  */
 export function showMqttCredentialModal(data) {
   return new Promise((resolve) => {

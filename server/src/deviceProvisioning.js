@@ -6,9 +6,19 @@ import { config } from "./config.js";
 /**
  * Core of POST /provision/device and POST /provision/bootstrap — issues
  * (or rotates) MQTT credentials for a controller already assigned to a
- * farmer, and writes back credential METADATA (never the plaintext
- * password) to controllers/{controllerDocId} and
- * farmers/{farmerDocId}.controller.mqtt.
+ * farmer, and writes back credential metadata — INCLUDING the plaintext
+ * password — to controllers/{controllerDocId}.mqttPasswordPlaintext and
+ * farmers/{farmerDocId}.controller.mqtt.password.
+ *
+ * Deliberately durable, not write-once: this admin panel is founder-only
+ * (no farmer/installer ever sees it), so a stable, always-viewable
+ * credential fits the actual workflow better than forcing a new random
+ * password every time someone just wants to look at or re-share the QR.
+ * The tradeoff is real - anyone who can open this panel (or read the
+ * farmers/controllers collections directly) can now see a live device's
+ * MQTT password - acceptable only because access to both is already
+ * restricted to the founding team, same trust boundary the rest of this
+ * panel already assumes.
  *
  * Real topic tree (see irrigo-admin's mqtt/Topics.kt, and verified
  * directly against the Motor firmware's own connectivity.cpp) is
@@ -50,12 +60,35 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
   const farmer = farmerSnap.data();
   const farmId = controller.uniqueId;
   const clientId = `FBIRG${farmId}`;
+  const topicPrefix = `farm/${farmId}`;
   const existing = await findCredentialsByName(clientId);
 
+  // Already issued and no explicit rotate requested — hand back the
+  // SAME durably-stored credential instead of erroring, so the admin
+  // panel can call this to just VIEW/redisplay the QR anytime with no
+  // TBMQ mutation at all. Falls through to a genuine 404 below (rather
+  // than a confusing stale-password response) on the edge case where a
+  // credential exists on TBMQ but this controller doc predates plaintext
+  // storage being added.
   if (existing && !rotate) {
+    if (controller.mqttPasswordPlaintext) {
+      return {
+        brokerUrl: controller.mqttUrl,
+        port: controller.mqttPort,
+        username: controller.username,
+        password: controller.mqttPasswordPlaintext,
+        credentialsId: controller.mqttCredentialsId,
+        issuedAt: controller.mqttIssuedAt,
+        clientId,
+        topicPrefix,
+        farmId,
+        nodeId: "MOTOR_1",
+        farmerName: farmer.name || ""
+      };
+    }
     throw {
       status: 409,
-      message: "Credentials already exist for this device. Pass rotate: true to reissue.",
+      message: "Credentials exist on TBMQ but predate plaintext storage - pass rotate: true to reissue and store it.",
       credentialsId: existing.id?.id || existing.id
     };
   }
@@ -65,7 +98,6 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
   }
 
   const password = generateMqttPassword();
-  const topicPrefix = `farm/${farmId}`;
 
   const created = await createBasicCredentials({
     name: clientId,
@@ -92,16 +124,17 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
     mqttPort: metadata.port,
     username: metadata.username,
     mqttCredentialsId: credentialsId,
-    mqttIssuedAt: issuedAt
+    mqttIssuedAt: issuedAt,
+    mqttPasswordPlaintext: password
   });
 
   await farmerRef.update({
-    "controller.mqtt": metadata
+    "controller.mqtt": { ...metadata, password }
   });
 
   return {
     ...metadata,
-    password, // returned once — not stored anywhere in plaintext
+    password,
     clientId,
     topicPrefix,
     farmId,
