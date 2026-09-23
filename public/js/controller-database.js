@@ -724,11 +724,8 @@ const f = snap.docs[0].data();
   </span>
   ${
     f.controller?.mqtt?.username
-      ? `
-        <button class="fb-btn-primary small" onclick="fetchMqttCredentials()">📥 Fetch MQTT Credentials</button>
-        <button class="mqtt-rotate-link" onclick="provisionDeviceMqtt(true)">🔄 Rotate (invalidates current credentials)</button>
-      `
-      : `<button class="fb-btn-primary small" onclick="provisionDeviceMqtt(false)">🔑 Generate MQTT Credentials</button>`
+      ? `<button class="fb-btn-primary small" onclick="fetchMqttCredentials()">📥 Fetch MQTT Credentials</button>`
+      : `<button class="fb-btn-primary small" onclick="generateInitialMqttCredentials()">🔑 Generate MQTT Credentials</button>`
   }
 </div>
 <div id="mqttRevealBox"></div>
@@ -960,7 +957,12 @@ window.fetchMqttCredentials = async function () {
   if (revealBox) await renderMqttCredentialReveal(revealBox, data);
 };
 
-window.provisionDeviceMqtt = async function (isRotate) {
+// Only reachable for a controller that has never had credentials issued
+// (e.g. a pre-migration legacy record) - the normal path is onboarding's
+// save button issuing them once (see add-farm.js/farmer-onboarding.js),
+// after which they're final and this button no longer shows at all
+// (fetchMqttCredentials() above takes over instead). Never rotates.
+window.generateInitialMqttCredentials = async function () {
 
   const controllerDocId = window.__currentControllerDocId;
   const revealBox = document.getElementById("mqttRevealBox");
@@ -970,17 +972,10 @@ window.provisionDeviceMqtt = async function (isRotate) {
     return;
   }
 
-  if (isRotate && !confirm(
-    "This will invalidate the device's current MQTT credentials immediately. " +
-    "The device won't reconnect until it's given the new password. Continue?"
-  )) {
-    return;
-  }
-
   try {
     if (revealBox) revealBox.innerHTML = `<div class="mqtt-reveal-box">Issuing credentials…</div>`;
 
-    const data = await provisionDeviceCredentials(auth, controllerDocId, { rotate: !!isRotate });
+    const data = await provisionDeviceCredentials(auth, controllerDocId, { rotate: false });
 
     // The credential is durably stored server-side now (see
     // deviceProvisioning.js) - no separate persistence step needed here,
