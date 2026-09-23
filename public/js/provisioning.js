@@ -40,16 +40,25 @@ export async function provisionDeviceCredentials(auth, controllerDocId, { rotate
 export async function renderMqttCredentialReveal(container, data) {
   container.innerHTML = `
     <div class="mqtt-reveal-box">
-      <div><b>Broker:</b> ${data.brokerUrl}:${data.port}</div>
-      <div><b>Client ID / Username:</b> ${data.username}</div>
-      <div><b>Password:</b> ${data.password}</div>
-      <div style="margin-top:12px;">
-        <b>Device setup QR</b> — scan with the Irrigo app to pair this device:
+      <div class="mqtt-creds">
+        <div><b>Broker:</b> ${data.brokerUrl}:${data.port}</div>
+        <div><b>Client ID / Username:</b> ${data.username}</div>
+        <div><b>Password:</b> ${data.password}</div>
       </div>
-      <canvas id="mqttQrCanvas" style="margin-top:8px;border-radius:8px;"></canvas>
-      <button id="mqttQrDownloadBtn" class="fb-btn-primary small" style="margin-top:10px;display:none;">
-        ⬇ Download QR (to send to the installer)
-      </button>
+      <div class="mqtt-qr-row">
+        <div class="mqtt-qr-visual">
+          <canvas id="mqttQrCanvas"></canvas>
+          <button id="mqttQrDownloadBtn" class="fb-btn-primary small" style="display:none;">
+            ⬇ Download QR
+          </button>
+        </div>
+        <div class="mqtt-qr-info">
+          <div class="mqtt-qr-title">📷 Scan for Irrigo Login</div>
+          <div class="mqtt-qr-field"><span>Farm Buddie ID</span><b>${data.farmBuddieId || "-"}</b></div>
+          <div class="mqtt-qr-field"><span>Farmer Name</span><b>${data.farmerName || "-"}</b></div>
+          <div class="mqtt-qr-hint">Scan this with the Irrigo app to pair this device to the farmer's account.</div>
+        </div>
+      </div>
     </div>
   `;
 

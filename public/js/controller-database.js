@@ -832,7 +832,8 @@ const f = snap.docs[0].data();
       password: f.controller.mqtt.password,
       farmId: f.controller.uniqueId,
       nodeId: "MOTOR_1",
-      farmerName: f.name || ""
+      farmerName: f.name || "",
+      farmBuddieId: f.farmBuddieId || ""
     });
   }
 }

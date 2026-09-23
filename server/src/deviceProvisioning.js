@@ -83,7 +83,8 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
         topicPrefix,
         farmId,
         nodeId: "MOTOR_1",
-        farmerName: farmer.name || ""
+        farmerName: farmer.name || "",
+        farmBuddieId: farmer.farmBuddieId || ""
       };
     }
     throw {
@@ -139,7 +140,8 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
     topicPrefix,
     farmId,
     nodeId: "MOTOR_1", // the master hub's own fixed NODE_ID (see Motor firmware's config.h) — only it holds an MQTT credential
-    farmerName: farmer.name || ""
+    farmerName: farmer.name || "",
+    farmBuddieId: farmer.farmBuddieId || ""
   };
 }
 
