@@ -1,0 +1,52 @@
+/* ======================================================
+   SHARED FORM FIELD STYLES
+   Pulled out of distributor.css and farmer-onboarding.css, which had
+   defined these identically (byte-for-byte) in both places. Loaded by
+   every page that used to duplicate them; each of those files keeps its
+   own page-specific styling (colors, .fb-btn-primary base, layout) -
+   only the parts that were truly copy-pasted moved here.
+====================================================== */
+
+.fb-form-wrapper {
+  max-width: 1200px;
+  margin: 0 auto 80px;
+  padding: 0 24px;
+}
+
+.fb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fb-field input,
+.fb-field select,
+.fb-field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 12px;
+  border-radius: 10px;
+  border: 1px solid #cfe3da;
+  background: #ffffff;
+  transition: border 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fb-field input:focus,
+.fb-field select:focus,
+.fb-field textarea:focus {
+  outline: none;
+  border-color: #2ea36b;
+  box-shadow: 0 0 0 3px rgba(46,163,107,0.18);
+}
+
+.fb-field input[type="file"] {
+  padding: 10px;
+  background: #f8fbfa;
+  border-style: dashed;
+  cursor: pointer;
+}
+
+.fb-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 40px rgba(46,163,107,0.45);
+}

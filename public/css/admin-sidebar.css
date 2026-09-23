@@ -2,11 +2,7 @@
    ADMIN SIDEBAR – PREMIUM MODERN VERSION
 ====================================================== */
 
-.fb-layout {
-  display: flex;
-  min-height: 100vh;
-  background: #f5f7f8;
-}
+/* .fb-layout now lives in main.css (shared - every page loading this file also loads main.css). */
 
 .fb-sidebar {
   width: 280px;

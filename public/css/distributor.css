@@ -3,11 +3,7 @@
 ===================================================== */
 
 /* ---------- WRAPPER ---------- */
-.fb-form-wrapper {
-  max-width: 1200px;
-  margin: 0 auto 80px;
-  padding: 0 24px;
-}
+/* .fb-form-wrapper now lives in fb-form-shared.css (shared with farmer-onboarding.css - identical in both). */
 
 /* ---------- CARD ---------- */
 .fb-card {
@@ -37,45 +33,14 @@
 }
 
 /* ---------- FIELD ---------- */
-.fb-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
+/* .fb-field (base), its input/select/textarea + :focus styling, and the
+   [type="file"] variant now live in fb-form-shared.css (identical in
+   both this file and farmer-onboarding.css). .fb-field label stays here
+   - its color/weight differ per page. */
 .fb-field label {
   font-size: 12px;
   font-weight: 600;
   color: #234b3c;
-}
-
-/* ---------- INPUTS ---------- */
-.fb-field input,
-.fb-field select,
-.fb-field textarea {
-  width: 100%;
-  padding: 12px 14px;
-  font-size: 12px;
-  border-radius: 10px;
-  border: 1px solid #cfe3da;
-  background: #ffffff;
-  transition: border 0.2s ease, box-shadow 0.2s ease;
-}
-
-.fb-field input:focus,
-.fb-field select:focus,
-.fb-field textarea:focus {
-  outline: none;
-  border-color: #2ea36b;
-  box-shadow: 0 0 0 3px rgba(46,163,107,0.18);
-}
-
-/* ---------- FILE INPUT ---------- */
-.fb-field input[type="file"] {
-  padding: 10px;
-  background: #f8fbfa;
-  border-style: dashed;
-  cursor: pointer;
 }
 
 /* ---------- ACTION AREA (FIXED PROPERLY) ---------- */
@@ -101,10 +66,7 @@
   transition: all 0.25s ease;
 }
 
-.fb-btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 20px 40px rgba(46,163,107,0.45);
-}
+/* .fb-btn-primary:hover now lives in fb-form-shared.css (identical in both this file and farmer-onboarding.css). */
 
 .fb-btn-primary:active {
   transform: scale(0.97);
@@ -185,6 +147,4 @@
   margin: auto;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+/* @keyframes spin now lives in main.css (shared). */

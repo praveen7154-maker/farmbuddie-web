@@ -18,6 +18,20 @@ html {
   font-size: 12px;
 }
 
+/* Shared spinner rotation - was defined separately (identically, modulo a
+   redundant explicit "from" in one copy) in admin-device-view.css,
+   controller-database.css, distributor.css and farmer-onboarding.css.
+   @keyframes are global regardless of which file defines them, so on any
+   page loading more than one of those, only the last-loaded copy actually
+   applied - harmless here since all four were equivalent, but four
+   sources of truth for one animation is worth collapsing into one. Each
+   file's own `animation: spin <duration> ...` usage is unaffected - only
+   the keyframe definition itself moved. */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 body {
   font-size: 0.94rem;
 }

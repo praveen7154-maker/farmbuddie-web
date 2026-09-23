@@ -285,9 +285,7 @@
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+/* @keyframes spin now lives in main.css (shared). */
 
 /* ======================================================
    MOBILE
