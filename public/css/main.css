@@ -452,7 +452,7 @@ body.fb-layout {
 .mqtt-reveal-box .mqtt-qr-row {
   display: flex;
   gap: 28px;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   flex-wrap: wrap;
 }
@@ -475,6 +475,7 @@ body.fb-layout {
   min-width: 180px;
   word-break: normal;
   text-align: center;
+  padding-top: 6px;
 }
 
 .mqtt-reveal-box .mqtt-qr-title {
