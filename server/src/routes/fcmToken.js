@@ -14,16 +14,18 @@ function normalizePhone(phone) {
  * Called by the Irrigo app on every FCM token issue/refresh (see
  * IrrigoFcmService.onNewToken() and the startup upload in
  * IrrigoApplication) - lets the bridge (pushNotifications.js) push an
- * alert notification to every phone sharing a farm's identityId, even
- * while the app itself is fully closed.
+ * alert notification to every phone linked to a farm, even while the
+ * app itself is fully closed.
  *
  * instanceId reuses AppPreferences.deviceInstallId - the exact same
  * stable per-install id already used for /provision/app's clientId and for
  * distinguishing two phones sharing one farm's MQTT login (see
- * FarmConnectionManager.mqttClientId()'s own doc comment). identityId is
- * looked up fresh from phoneIndex on every call (not trusted from the
- * client) so a phone can't register a token against a farm it doesn't
- * actually have access to.
+ * FarmConnectionManager.mqttClientId()'s own doc comment). farmIds are
+ * looked up fresh from phoneIndex.farms on every call (not trusted from
+ * the client) so a phone can't register a token against a farm it doesn't
+ * actually have enabled access to - same source pushNotifications.js
+ * later queries against (farmIds array-contains farmId) to find who to
+ * notify for a given farm's alert.
  */
 fcmTokenRouter.post("/", async (req, res) => {
   const { instanceId, token } = req.body || {};
@@ -42,13 +44,20 @@ fcmTokenRouter.post("/", async (req, res) => {
 
   try {
     const phoneSnap = await db.collection("phoneIndex").doc(phone).get();
-    if (!phoneSnap.exists || !phoneSnap.data().identityId) {
-      return res.status(404).json({ error: "No farmer identity linked to this phone number" });
+    if (!phoneSnap.exists || !phoneSnap.data().farms) {
+      return res.status(404).json({ error: "No farms linked to this phone number" });
     }
-    const identityId = phoneSnap.data().identityId;
+
+    const farmIds = Object.entries(phoneSnap.data().farms)
+      .filter(([, entry]) => entry.enabled)
+      .map(([farmId]) => farmId);
+
+    if (farmIds.length === 0) {
+      return res.status(404).json({ error: "No enabled farms linked to this phone number" });
+    }
 
     await db.collection("fcmTokens").doc(instanceId).set(
-      { identityId, token, updatedAt: new Date().toISOString() },
+      { farmIds, token, updatedAt: new Date().toISOString() },
       { merge: true }
     );
 

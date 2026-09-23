@@ -1,5 +1,4 @@
 import { db, messaging } from "../firebaseAdmin.js";
-import { resolveFarmerDocId } from "./firestoreMirror.js";
 
 // Power events worth interrupting a farmer for even with the app closed -
 // mirrors (a deliberately small, non-drifting subset of) the Irrigo app's
@@ -27,20 +26,15 @@ function buildNotification(nodeId, motorNum, payload) {
 }
 
 async function tokensForFarmId(farmId) {
-  const farmerDocId = await resolveFarmerDocId(farmId);
-  if (!farmerDocId) return [];
-
-  const farmerSnap = await db.collection("farmers").doc(farmerDocId).get();
-  const identityId = farmerSnap.data()?.identityId;
-  if (!identityId) return [];
-
   // fcmTokens/{instanceId} - one doc per (phone, app install), same
   // instanceId concept as appMqttCredentials/{instanceId} (see
   // routes/provisionApp.js) and routes/fcmToken.js, which is what writes
-  // these. Every phone sharing this farm's identityId (main farmer +
-  // whatever extra numbers were added via appUsers - see phone-auth.js's
-  // fullPhoneSync()) gets its own token here, so all of them get notified.
-  const snap = await db.collection("fcmTokens").where("identityId", "==", identityId).get();
+  // these, storing every farmId that phone has enabled access to
+  // (phoneIndex/{phone}.farms - see phone-auth.js's fullPhoneSync()).
+  // Every phone linked to this farm (main farmer + whatever extra
+  // numbers were added via appUsers, regardless of which identity owns
+  // which farm) gets its own token here, so all of them get notified.
+  const snap = await db.collection("fcmTokens").where("farmIds", "array-contains", farmId).get();
   return snap.docs.map((d) => ({ instanceId: d.id, token: d.data().token }));
 }
 

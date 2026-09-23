@@ -7,8 +7,13 @@ function normalizePhone(phone) {
 /**
  * True if the signed-in caller may act on the given farmId (controllers.
  * uniqueId): any admin (email-authenticated, matches farmbuddie-cloud's
- * own isAdmin() rule), or a farmer/secondary user whose phone maps
- * (via phoneIndex -> identityId) to a farmers doc with that farmId.
+ * own isAdmin() rule), or a farmer/secondary user whose phone has an
+ * enabled entry for this exact farmId in phoneIndex/{phone}.farms - see
+ * phone-auth.js's fullPhoneSync() for how that map gets populated. A
+ * direct field read, not a query - phoneIndex.farms already lists every
+ * farmId this phone can reach, keyed by farmId, so no farmers lookup is
+ * needed here at all (this used to resolve identityId first, then query
+ * farmers for a matching farmId - phoneIndex now has the answer directly).
  */
 export async function canAccessFarm(decodedToken, farmId) {
   if (decodedToken.email) return true;
@@ -17,16 +22,8 @@ export async function canAccessFarm(decodedToken, farmId) {
   if (!phone || phone.length !== 10) return false;
 
   const phoneSnap = await db.collection("phoneIndex").doc(phone).get();
-  if (!phoneSnap.exists || !phoneSnap.data().identityId) return false;
+  if (!phoneSnap.exists) return false;
 
-  const identityId = phoneSnap.data().identityId;
-
-  const farmsSnap = await db
-    .collection("farmers")
-    .where("identityId", "==", identityId)
-    .where("controller.uniqueId", "==", farmId)
-    .limit(1)
-    .get();
-
-  return !farmsSnap.empty;
+  const farmEntry = phoneSnap.data().farms?.[farmId];
+  return !!farmEntry?.enabled;
 }

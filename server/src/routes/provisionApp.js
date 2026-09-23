@@ -14,14 +14,20 @@ function normalizePhone(phone) {
  * POST /provision/app
  * body: { instanceId: string, rotate?: boolean }
  *
- * Issues (or rotates) an MQTT credential scoped to every farm/device the
- * calling phone number owns (via the same phoneIndex -> identityId mapping
- * the app already uses to log in). Called by the Irrigo app itself, not
+ * Issues (or rotates) an MQTT credential scoped to every farm this phone
+ * number has enabled access to (phoneIndex/{phone}.farms - see
+ * phone-auth.js's fullPhoneSync()). Called by the Irrigo app itself, not
  * the admin panel.
  *
+ * Reads farmIds straight from phoneIndex now instead of resolving an
+ * identityId and querying farmers for it - phoneIndex.farms is keyed by
+ * farmId directly and can legitimately span more than one identity (the
+ * same phone can be an app-user on two unrelated farmers' systems), so
+ * there's no longer a single identityId to resolve.
+ *
  * Keyed by instanceId (a random id the app generates once and caches
- * locally), NOT by identityId alone — the app connects to TBMQ directly
- * (see FarmConnectionManager/IrrigoMqttClient), and MQTT only allows one
+ * locally), NOT by phone alone — the app connects to TBMQ directly (see
+ * FarmConnectionManager/IrrigoMqttClient), and MQTT only allows one
  * active connection per client ID. A main farmer and any secondary users
  * (appUser2/appUser3) each running the app on their own phone need their
  * own distinct login, or each new connection would silently kick the
@@ -43,24 +49,17 @@ provisionAppRouter.post("/", async (req, res) => {
   try {
     const phoneSnap = await db.collection("phoneIndex").doc(phone).get();
 
-    if (!phoneSnap.exists || !phoneSnap.data().identityId) {
-      return res.status(404).json({ error: "No farmer identity linked to this phone number" });
+    if (!phoneSnap.exists || !phoneSnap.data().farms) {
+      return res.status(404).json({ error: "No farms linked to this phone number" });
     }
 
-    const identityId = phoneSnap.data().identityId;
+    const farmIds = Object.entries(phoneSnap.data().farms)
+      .filter(([, entry]) => entry.enabled)
+      .map(([farmId]) => farmId);
 
-    const farmsSnap = await db
-      .collection("farmers")
-      .where("identityId", "==", identityId)
-      .get();
-
-    if (farmsSnap.empty) {
-      return res.status(404).json({ error: "No farms found for this identity" });
+    if (farmIds.length === 0) {
+      return res.status(404).json({ error: "No enabled farms linked to this phone number" });
     }
-
-    const pubAuthRulePatterns = [];
-    const subAuthRulePatterns = [];
-    const farmIds = [];
 
     // Real topic tree (see irrigo-admin's mqtt/Topics.kt) is
     // farm/{farmId}/{nodeId}/motor/.../..., where farmId is controllers.uniqueId
@@ -69,21 +68,10 @@ provisionAppRouter.post("/", async (req, res) => {
     // command topics live under other node segments within the same farmId
     // that aren't fully enumerable here — tightening this to command-only
     // patterns is a reasonable follow-up once that full topic set is confirmed.
-    farmsSnap.forEach((docSnap) => {
-      const farm = docSnap.data();
-      const farmId = farm.controller?.uniqueId;
-      if (!farmId) return;
+    const pubAuthRulePatterns = farmIds.map((farmId) => `farm/${farmId}/.*`);
+    const subAuthRulePatterns = farmIds.map((farmId) => `farm/${farmId}/.*`);
 
-      farmIds.push(farmId);
-      subAuthRulePatterns.push(`farm/${farmId}/.*`);
-      pubAuthRulePatterns.push(`farm/${farmId}/.*`);
-    });
-
-    if (farmIds.length === 0) {
-      return res.status(409).json({ error: "None of this identity's farms have a provisioned device yet" });
-    }
-
-    const clientId = `app-${identityId}-${instanceId}`;
+    const clientId = `app-${phone}-${instanceId}`;
     const existing = await findCredentialsByName(clientId);
 
     if (existing && !rotate) {
@@ -118,11 +106,11 @@ provisionAppRouter.post("/", async (req, res) => {
       credentialsId,
       issuedAt,
       farmIds,
-      identityId
+      phone
     };
 
-    // Auditability only, keyed by instanceId like monitorCredentials — one
-    // document per phone/install, not per farmer identity.
+    // Auditability only, keyed by instanceId like fcmTokens/monitorCredentials
+    // — one document per phone/install, not per farm.
     await db.collection("appMqttCredentials").doc(instanceId).set(metadata);
 
     return res.json({ ...metadata, password, clientId });
