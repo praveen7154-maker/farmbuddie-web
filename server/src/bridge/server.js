@@ -9,6 +9,9 @@ import { queryEvents, checkPostgresHealth } from "./postgres.js";
 import { getFleetStatus } from "./fleetStatus.js";
 import { issueDeviceCredentialByFarmId } from "../deviceProvisioning.js";
 import { buildDeviceQrPng } from "./qrPayload.js";
+import { createOtaModule } from "./ota.js";
+import { pgOtaStore } from "./otaStore.js";
+import { publishJson } from "./mqttBridge.js";
 
 export const app = express();
 app.use(express.json());
@@ -22,6 +25,25 @@ app.get("/healthz", async (req, res) => {
   res.json({ ok: true, mqttConnected: isBridgeConnected(), postgres });
 });
 
+// Web-panel OTA (admin > OTA) - see ota.js. The firmware download route is
+// public (hubs have no login; the signed SHA-256 is what they trust) and so
+// sits before the auth middleware below; everything else is admin-only.
+export const ota = createOtaModule({
+  store: pgOtaStore,
+  publish: publishJson,
+  listFleet: async () => (await getFleetStatus())
+    .filter((f) => f.farmId)
+    .map((f) => ({
+      farmId: f.farmId,
+      nodeId: f.nodeId || "MOTOR_1",
+      farmerName: f.farmerName,
+      online: f.online,
+      fwVersion: f.deviceStatus?.health?.fw_version || null
+    })),
+  publicBaseUrl: config.otaPublicBaseUrl
+});
+app.use("/ota/firmware", ota.publicRouter);
+
 // Both the admin panel (browser, has an origin to restrict) and the
 // Irrigo app (native, no origin) call these — CORS just narrows what a
 // browser will allow; canAccessFarm() is the real gate either way.
@@ -29,6 +51,8 @@ const corsOptions = { origin: (origin, cb) => cb(null, true) };
 const limiter = rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
 
 app.use(cors(corsOptions), limiter, verifyFirebaseToken);
+
+app.use("/ota", ota.adminRouter);
 
 /**
  * POST /command/device

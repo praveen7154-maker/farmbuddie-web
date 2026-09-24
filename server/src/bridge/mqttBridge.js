@@ -40,6 +40,13 @@ function parseTopic(topic) {
   return null;
 }
 
+// Set by index.js - web-panel OTA (ota.js) records every hub's ota/status
+// reply against the release that asked for it.
+let otaStatusHandler = null;
+export function setOtaStatusHandler(fn) {
+  otaStatusHandler = fn;
+}
+
 /** Live MQTT connection state of the bridge's own persistent client - used by GET /healthz (see server.js) for the "VPS & TBMQ" admin status page. */
 export function isBridgeConnected() {
   return client !== null && client.connected === true;
@@ -130,6 +137,10 @@ export function connectBridge() {
       }
     }
 
+    if (category === "ota" && leaf === "status" && otaStatusHandler) {
+      await otaStatusHandler(farmId, payload);
+    }
+
     if (category === "health") {
       try {
         await mirrorHealth(farmId, nodeId, payload);
@@ -149,6 +160,20 @@ export function connectBridge() {
  * message back would need request/response correlation this v1 doesn't
  * do). Throws if the bridge isn't currently connected.
  */
+/**
+ * Publishes a JSON payload to any topic the bridge's broker login allows
+ * (see mqttAuthRules.js bridgeAuthRules) - used by web-panel OTA for
+ * farm/<id>/<node>/ota/cmd and the fleet broadcast topic. QoS1.
+ */
+export function publishJson(topic, payload) {
+  if (!client || !client.connected) {
+    return Promise.reject(new Error("Bridge is not connected to TBMQ"));
+  }
+  return new Promise((resolve, reject) => {
+    client.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
 export function publishCommand(farmId, nodeId, motorNum, commandPayload) {
   if (!client || !client.connected) {
     throw new Error("Bridge is not connected to TBMQ");

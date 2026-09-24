@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Firmware OTA | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  <link rel="stylesheet" href="/css/vps-status.css">
+  <link rel="stylesheet" href="/css/ota.css">
+</head>
+
+<body class="fb-layout">
+
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/vps-status.html">🖥️ VPS & TBMQ</a>
+    <a class="active" href="/admin/ota.html">🚀 Firmware OTA</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>🚀 Firmware OTA</h1>
+  <span class="fb-user">Admin</span>
+</header>
+
+<div id="pageError" class="ota-alert error" hidden></div>
+
+<!-- 1. FIRMWARE -->
+<section class="ota-card">
+  <h2><span class="ota-step">1</span> Firmware</h2>
+  <div class="ota-row">
+    <label class="ota-field">
+      <span>firmware.bin <small>(.pio/build/esp32dev/firmware.bin)</small></span>
+      <input type="file" id="binInput" accept=".bin">
+    </label>
+    <label class="ota-field narrow">
+      <span>Version <small>(= FIRMWARE_VERSION)</small></span>
+      <input type="text" id="versionInput" placeholder="e.g. 02" maxlength="32" autocomplete="off">
+    </label>
+  </div>
+  <ul class="ota-checks" id="binChecks"></ul>
+</section>
+
+<!-- 2. TARGETS -->
+<section class="ota-card">
+  <h2><span class="ota-step">2</span> Which hubs</h2>
+  <div class="ota-row">
+    <label class="ota-radio"><input type="radio" name="mode" value="farms" checked> Selected farms <small>(always test one hub first)</small></label>
+    <label class="ota-radio"><input type="radio" name="mode" value="all"> All farms</label>
+    <input type="search" id="farmSearch" class="ota-search" placeholder="Search farm ID or farmer">
+  </div>
+  <div class="fb-table-card ota-farms">
+    <table class="fb-table">
+      <thead>
+        <tr><th class="ota-check-col"><input type="checkbox" id="selectAll" title="Select all shown"></th>
+          <th>Farm ID</th><th>Farmer</th><th>Online</th><th>Firmware now</th></tr>
+      </thead>
+      <tbody id="farmBody"><tr><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <p class="ota-note" id="targetNote"></p>
+  <label class="ota-field narrow" id="confirmAllWrap" hidden>
+    <span>Type the version again to confirm updating <b>all farms</b></span>
+    <input type="text" id="confirmAllInput" autocomplete="off">
+  </label>
+</section>
+
+<!-- 3. SIGN & RELEASE -->
+<section class="ota-card">
+  <h2><span class="ota-step">3</span> Sign &amp; release</h2>
+  <div class="ota-row">
+    <label class="ota-field">
+      <span>Signing key file <small>(ota_signing_key.pem)</small></span>
+      <input type="file" id="pemInput" accept=".pem">
+    </label>
+    <label class="ota-field">
+      <span>Key passphrase</span>
+      <input type="password" id="passInput" autocomplete="off">
+    </label>
+  </div>
+  <p class="ota-note">The key and passphrase stay in this browser - the firmware is signed here and only the signature is sent to the server.
+    Hubs whose motor or cyclic program is running refuse the update (shown as <b>Busy</b>) - retry them later.</p>
+  <div class="ota-actions">
+    <button id="releaseBtn" class="fb-btn-primary" disabled>Release</button>
+    <span id="releaseStatus" class="ota-status-text"></span>
+  </div>
+</section>
+
+<!-- PROGRESS -->
+<section class="ota-card" id="progressCard" hidden>
+  <h2>Progress <span id="progressTitle" class="ota-muted"></span></h2>
+  <div class="fb-stats ota-summary">
+    <div class="fb-stat-card"><p>Updated</p><h2 id="sumUpdated" class="ok">0</h2></div>
+    <div class="fb-stat-card"><p>In progress</p><h2 id="sumProgress">0</h2></div>
+    <div class="fb-stat-card"><p>Waiting for hub</p><h2 id="sumWaiting">0</h2></div>
+    <div class="fb-stat-card"><p>Busy (motor on)</p><h2 id="sumBusy" class="warn">0</h2></div>
+    <div class="fb-stat-card"><p>Failed</p><h2 id="sumFailed" class="bad">0</h2></div>
+  </div>
+  <div class="fb-table-card">
+    <table class="fb-table">
+      <thead><tr><th>Farm ID</th><th>Node</th><th>Status</th><th>Progress</th><th>Via</th><th>Details</th><th>Tries</th><th>Last update</th></tr></thead>
+      <tbody id="targetBody"></tbody>
+    </table>
+  </div>
+  <p class="ota-note">"Waiting for hub" = no reply yet: the hub is offline, or it is downloading over GSM (its MQTT is off for 3-6 min) - normal.
+    Refreshes every 5 seconds.</p>
+  <div class="ota-actions">
+    <button id="retryBtn" class="fb-btn-primary small">🔁 Resend to hubs not updated</button>
+    <span id="retryStatus" class="ota-status-text"></span>
+  </div>
+</section>
+
+<!-- HISTORY -->
+<section class="ota-card">
+  <h2>History</h2>
+  <div class="fb-table-card">
+    <table class="fb-table">
+      <thead><tr><th>#</th><th>Version</th><th>Sent to</th><th>Result</th><th>By</th><th>When</th></tr></thead>
+      <tbody id="historyBody"><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<script type="module" src="/js/ota.js"></script>
+</body>
+</html>

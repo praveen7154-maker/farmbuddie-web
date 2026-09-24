@@ -1,0 +1,77 @@
+/* Firmware OTA page (admin/ota.html) - builds on main.css / admin-tables.css. */
+.ota-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+.ota-card > h2 {
+  font-size: 17px;
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ota-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #2e7d32;
+  color: #fff;
+  font-size: 13px;
+}
+.ota-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 10px; }
+.ota-field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 280px; font-size: 13px; color: #374151; }
+.ota-field.narrow { flex: 0 1 220px; }
+.ota-field small, .ota-radio small { color: #6b7280; }
+.ota-field input[type="text"], .ota-field input[type="password"], .ota-search {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 14px;
+}
+.ota-search { flex: 1 1 220px; }
+.ota-radio { font-size: 14px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.ota-checks { list-style: none; padding: 0; margin: 6px 0 0; font-size: 13px; }
+.ota-checks li { padding: 3px 0; }
+.ota-checks .ok::before { content: "✔ "; color: #16a34a; }
+.ota-checks .bad::before { content: "✘ "; color: #dc2626; }
+.ota-checks .bad { color: #b91c1c; }
+.ota-checks code { font-size: 12px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+.ota-farms { max-height: 340px; overflow-y: auto; }
+.ota-check-col { width: 36px; }
+.ota-note { font-size: 12.5px; color: #6b7280; margin: 8px 0; }
+.ota-muted { color: #6b7280; font-weight: normal; font-size: 14px; }
+.ota-actions { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.ota-actions .fb-btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.ota-status-text { font-size: 13px; color: #374151; }
+.ota-status-text.error, .ota-alert.error { color: #b91c1c; }
+.ota-alert { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; background: #fef2f2; font-size: 14px; }
+.ota-summary h2.ok { color: #15803d; }
+.ota-summary h2.warn { color: #b45309; }
+.ota-summary h2.bad { color: #b91c1c; }
+.ota-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e5e7eb;
+  color: #374151;
+}
+.ota-pill.updated { background: #dcfce7; color: #166534; }
+.ota-pill.in_progress { background: #dbeafe; color: #1e40af; }
+.ota-pill.busy { background: #fef3c7; color: #92400e; }
+.ota-pill.failed { background: #fee2e2; color: #991b1b; }
+.ota-bar { width: 90px; height: 7px; background: #e5e7eb; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.ota-bar > span { display: block; height: 100%; background: #2e7d32; }
+#historyBody tr { cursor: pointer; }
+/* .ota-field sets display:flex, which would otherwise override [hidden]. */
+.ota-card [hidden], .ota-card[hidden], .ota-alert[hidden] { display: none !important; }
+.ota-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.ota-summary .fb-stat-card { padding: 14px 16px; }
+.ota-summary .fb-stat-card h2 { margin: 4px 0 0; }

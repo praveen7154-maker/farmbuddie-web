@@ -46,11 +46,13 @@ export function otaAdminAuthRules() {
   };
 }
 
-// The VPS bridge (src/bridge): reads every farm, and only ever publishes
-// motor commands (mqttBridge.js publishCommand()).
+// The VPS bridge (src/bridge): reads every farm, publishes motor commands
+// (mqttBridge.js publishCommand()) and OTA commands for the admin panel's
+// OTA page (bridge/ota.js - every release is signed in the admin's browser,
+// the bridge can't create a valid one itself).
 export function bridgeAuthRules() {
   return {
-    pubAuthRulePatterns: ["farm/[^/]+/[^/]+/motor/[12]/cmd"],
+    pubAuthRulePatterns: ["farm/[^/]+/[^/]+/motor/[12]/cmd", "farm/[^/]+/[^/]+/ota/cmd", OTA_BROADCAST_TOPIC],
     subAuthRulePatterns: ["farm/[^/]+/.*"]
   };
 }

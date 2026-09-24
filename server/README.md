@@ -229,7 +229,7 @@ Every TBMQ credential's topic rules come from `src/mqttAuthRules.js`:
 | `FBIRG<farmId>` (Motor hub - also on the farm's setup QR) | its farm's topics **except** `.../ota/cmd` | its farm's topics + `motor/ota/broadcast` |
 | `app-*` (Irrigo app) | its farms' topics **except** `.../ota/*` | its farms' topics |
 | `ota-admin` (`tools/ota_admin.py`) | `farm/<id>/<node>/ota/cmd`, `motor/ota/broadcast` | `farm/<id>/<node>/ota/status` |
-| `bridge` | `farm/<id>/<node>/motor/1|2/cmd` | every farm |
+| `bridge` | `farm/<id>/<node>/motor/1|2/cmd`, OTA commands (admin panel OTA page - releases are signed in the admin's browser) | every farm |
 | `monitor-*` | nothing | every farm |
 | `TBMQ WebSockets MQTT Credentials` (TBMQ built-in, no password) | nothing | nothing |
 
@@ -251,3 +251,30 @@ docker compose exec provision-api node scripts/applyMqttAuthRules.js --apply --d
   still publish OTA commands (e.g. an old shared login) - tighten or delete
   it in the TBMQ dashboard.
 - Re-run it any time; it only touches credentials that differ.
+
+## 8. Firmware OTA from the admin panel
+
+Admin panel -> **Firmware OTA** (`public/admin/ota.html`, server side
+`src/bridge/ota.js`): pick `firmware.bin` + version, tick farms (or all),
+choose the signing key `.pem` + passphrase, **Release**, then watch each hub's
+progress and resend to the ones that were busy/offline/failed.
+
+- The `.pem` and its passphrase are used only in the browser
+  (`public/js/ota-crypto.js`); the VPS gets the signature, never the key.
+- The bridge stores each uploaded `.bin` in its Postgres database
+  (`ota_firmware`) and serves it to hubs at
+  `https://api.farmbuddie.com/bridge/ota/firmware/<sha256>.bin` (no login - the
+  signed SHA-256 is what the hub trusts).
+- It refuses a `.bin` that isn't an ESP32 image, is bigger than the hub's app
+  slot, or doesn't contain the fleet's OTA public key
+  (`src/bridge/otaSigningKey.js` - must match the Motor repo's
+  `include/ota_signing_key.h`).
+
+One-time VPS setup:
+
+1. nginx must accept the upload (~1.2 MB; the default limit is 1 MB). In the
+   `api.farmbuddie.com` site, inside the `location` block that proxies
+   `/bridge/`, add `client_max_body_size 4m;`, then
+   `nginx -t && systemctl reload nginx`.
+2. The bridge's broker login needs OTA publish rights - re-run
+   `docker compose exec provision-api node scripts/applyMqttAuthRules.js --apply --disconnect`.
