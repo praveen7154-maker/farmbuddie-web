@@ -57,8 +57,9 @@ function updateStatusSection(data) {
     const lastSeen = data.lastSeen.toDate();
     const diff = (Date.now() - lastSeen.getTime()) / 1000;
 
-    // Device considered online if updated within 60 seconds
-    isOnline = diff < 60;
+    // Online if updated within 270s - same threshold as isDeviceOnline()
+    // (device-status-render.js); status comes every 120s with no app open.
+    isOnline = diff < 270;
 
     document.getElementById("lastSeenTime").innerText =
       lastSeen.toLocaleTimeString();

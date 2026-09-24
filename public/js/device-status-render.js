@@ -39,11 +39,11 @@ export function formatDurationShort(totalSec) {
   return `${s}s`;
 }
 
-/** True if deviceStatus.lastSeen is within the last 60s - the same "still talking to the broker" threshold used across the admin panel. */
+/** True if deviceStatus.lastSeen is within the last 270s - the same "still talking to the broker" threshold used across the admin panel (and server/src/bridge/fleetStatus.js). A device with no app open only reports every 120s, so this rides out one lost status. */
 export function isDeviceOnline(deviceStatus) {
   const lastSeen = deviceStatus?.lastSeen?.toDate?.() || (deviceStatus?.lastSeen ? new Date(deviceStatus.lastSeen) : null);
   if (!lastSeen) return false;
-  return (Date.now() - lastSeen.getTime()) / 1000 < 60;
+  return (Date.now() - lastSeen.getTime()) / 1000 < 270;
 }
 
 /**

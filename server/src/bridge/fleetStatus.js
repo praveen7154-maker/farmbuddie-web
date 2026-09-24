@@ -1,9 +1,12 @@
 import { db } from "../firebaseAdmin.js";
 
 // Same "still talking to the broker" threshold as the web admin panel's
-// own isDeviceOnline() (public/js/device-status-render.js) - kept in sync
-// manually since one's browser JS and the other's this Node module.
-const ONLINE_THRESHOLD_MS = 60 * 1000;
+// own isDeviceOnline() (public/js/device-status-render.js) and device-view.js
+// - kept in sync manually since those are browser JS and this is Node.
+// A device publishes status every 120s while no app is open (15s while one
+// is - see the Motor firmware's STATUS_INTERVAL_SLEEP_MS) and health every
+// 5 min, so this rides out one lost status on the slow rate.
+const ONLINE_THRESHOLD_MS = 270 * 1000;
 
 function toMillis(lastSeen) {
   if (!lastSeen) return null;

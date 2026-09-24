@@ -1,28 +1,32 @@
 import { db, messaging } from "../firebaseAdmin.js";
 
-// Power events worth interrupting a farmer for even with the app closed -
-// mirrors (a deliberately small, non-drifting subset of) the Irrigo app's
-// own PumpCodes.isPushWorthy()/EVENT_* constants. The app's real filter is
-// much richer (valve-sequence edge cases, DOL start/stop, ...) but fully
-// porting that here would duplicate logic that only the app's Kotlin source
-// should own and would silently drift out of sync with it over time. This
-// picks the two unambiguous, high-value cases instead: a real fault
-// (fault != 0) or a power transition - the same reasoning the firmware's
-// own SMS-critical-alert path already uses.
-const POWER_EVENTS = new Set([10, 11, 12, 13, 24]); // voltage/power restored, power outage, 3rd phase available, phase restored
+// Which device alerts are worth a push - mirrors the Irrigo app's own
+// PumpCodes.isPushWorthy() (and the EVENT_* codes in the Motor firmware's
+// config.h). Kept as a plain list so the server doesn't wake phones for
+// routine cyclic/valve-sequence chatter; the app makes the final call and
+// also collapses repeats (one notification per fault, one per recovery -
+// see its NotificationGate), so a code listed here that the app then
+// suppresses costs nothing but a silent data message. Update both together.
+const PUSH_EVENTS = new Set([
+  11, 12,          // power outage / power restored
+  16, 29,          // motor started / stopped manually at the panel
+  17,              // fault cleared
+  22,              // stop not confirmed (unexpected motor state)
+  24, 64,          // phase restored / voltage restored
+  25, 34, 35,      // dry-run auto-restart, auto-clear limit reached (dry run / overload)
+  30, 47,          // cyclic / valve-cyclic paused by a manual stop - needs a decision
+  48, 49,          // valve opened / closed (standalone action)
+  51, 54, 55, 57,  // valve-gated start failed, no valve responded, two valves open, valve closed mid-run
+  65               // controller restarted while the motor was running
+]);
+const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
 function isPushWorthy(payload) {
-  if (typeof payload.fault === "number" && payload.fault !== 0) return true;
-  if (typeof payload.event === "number" && POWER_EVENTS.has(payload.event)) return true;
-  return false;
-}
-
-function buildNotification(nodeId, motorNum, payload) {
-  const motorLabel = motorNum === "2" ? "Motor 2" : "Motor 1";
-  if (typeof payload.fault === "number" && payload.fault !== 0) {
-    return { title: motorLabel, body: `Fault detected (code ${payload.fault}) on ${nodeId}` };
-  }
-  return { title: motorLabel, body: `Power event (code ${payload.event}) on ${nodeId}` };
+  const { event, fault } = payload;
+  if (typeof event !== "number") return false;
+  if (typeof fault === "number" && fault !== 0 && event === fault) return true; // a fault tripping
+  if (event === LEGACY_VOLTAGE_RESTORED && fault === 0) return true;
+  return PUSH_EVENTS.has(event);
 }
 
 async function tokensForFarmId(farmId) {
@@ -55,11 +59,13 @@ export async function sendAlertPush(farmId, nodeId, motorNum, payload) {
     const tokens = await tokensForFarmId(farmId);
     if (tokens.length === 0) return;
 
-    const notification = buildNotification(nodeId, motorNum, payload);
-
+    // Data-only: the app builds the (localised, detailed) notification
+    // itself and de-duplicates it against the same alert arriving over its
+    // own MQTT connection - see the app's IrrigoFcmService. High priority so
+    // it's delivered promptly to a phone in Doze / an app that's closed.
     const response = await messaging.sendEachForMulticast({
       tokens: tokens.map((t) => t.token),
-      notification,
+      android: { priority: "high" },
       data: {
         farmId,
         nodeId,
