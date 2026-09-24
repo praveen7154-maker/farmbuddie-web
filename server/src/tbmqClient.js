@@ -183,11 +183,23 @@ export async function findCredentialsByName(name) {
   }
 }
 
-/** One page of every MQTT credential (TBMQ strips passwords from these). */
+/**
+ * One page of every MQTT credential - TBMQ's SHORT form (id, name, type,
+ * no credentialsValue). Use getCredentialsById() for the rules/username.
+ */
 export async function listCredentialsPage(page, pageSize = 100) {
   const res = await authedFetch(`/api/mqtt/client/credentials?pageSize=${pageSize}&page=${page}`);
   if (!res.ok) {
     throw new Error(`TBMQ list credentials failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/** One credential in full (credentialsValue included, password stripped by TBMQ). */
+export async function getCredentialsById(credentialsId) {
+  const res = await authedFetch(`/api/mqtt/client/credentials/${credentialsId}`);
+  if (!res.ok) {
+    throw new Error(`TBMQ get credentials ${credentialsId} failed: ${res.status} ${await res.text()}`);
   }
   return res.json();
 }
@@ -200,7 +212,12 @@ export async function listCredentialsPage(page, pageSize = 100) {
  * connect - see disconnectClient().
  */
 export async function updateCredentialAuthRules(credentials, authRules) {
-  const value = JSON.parse(credentials.credentialsValue || "{}");
+  // Must be the FULL credential (getCredentialsById) - saving back the list's
+  // short form would drop clientId/userName, which TBMQ rejects.
+  if (!credentials.credentialsValue) {
+    throw new Error(`updateCredentialAuthRules(${credentials.name}): needs the full credential, not the list's short form`);
+  }
+  const value = JSON.parse(credentials.credentialsValue);
   value.authRules = authRules;
   delete value.password; // ignored on update anyway - TBMQ keeps the current one
   const res = await authedFetch("/api/mqtt/client/credentials", {

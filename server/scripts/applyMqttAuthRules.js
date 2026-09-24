@@ -19,7 +19,7 @@
 //   node scripts/applyMqttAuthRules.js                        # dry run - shows what would change
 //   node scripts/applyMqttAuthRules.js --apply                # update the rules
 //   node scripts/applyMqttAuthRules.js --apply --disconnect   # ...and reconnect changed clients now
-import { listCredentialsPage, updateCredentialAuthRules, disconnectClient } from "../src/tbmqClient.js";
+import { listCredentialsPage, getCredentialsById, updateCredentialAuthRules, disconnectClient } from "../src/tbmqClient.js";
 import {
   OTA_ADMIN_USERNAME,
   OTA_BROADCAST_TOPIC,
@@ -59,8 +59,10 @@ const sameRules = (a, b) =>
 let changed = 0, unchanged = 0, review = 0, skipped = 0;
 for (let page = 0; ; page++) {
   const data = await listCredentialsPage(page);
-  for (const cred of data.data || []) {
-    if (cred.credentialsType !== "MQTT_BASIC") { skipped++; continue; }
+  for (const short of data.data || []) {
+    if (short.credentialsType !== "MQTT_BASIC") { skipped++; continue; }
+    // The list is TBMQ's short form (no rules/username) - fetch each in full.
+    const cred = await getCredentialsById(short.id?.id || short.id);
     const value = JSON.parse(cred.credentialsValue || "{}");
     const current = value.authRules || {};
     const want = desiredRules(cred.name, current);
