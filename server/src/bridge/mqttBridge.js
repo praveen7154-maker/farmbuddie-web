@@ -3,6 +3,8 @@ import { config } from "../config.js";
 import { insertEvent } from "./postgres.js";
 import { mirrorStatus, mirrorHealth } from "./firestoreMirror.js";
 import { sendAlertPush } from "./pushNotifications.js";
+import { broadcastToFarm } from "./liveGateway.js";
+import { setCachedConfigFromResponse } from "./farmConfigCache.js";
 
 let client = null;
 
@@ -86,6 +88,14 @@ export function connectBridge() {
 
     const eventType = motorNum ? `motor${motorNum}_${leaf}` : `${category}_${leaf}`;
 
+    // Fans this message out to every phone with a live WebSocket open on
+    // this farm (see liveGateway.js) - the SAME message this bridge
+    // already received on its one MQTT session, no new MQTT traffic. Never
+    // awaited/guarded like the writes below: broadcastToFarm() is a
+    // synchronous in-process Set iteration, not I/O, so there's nothing
+    // here that can fail the way a Postgres/Firestore call can.
+    broadcastToFarm(farmId, { topic, payload });
+
     try {
       await insertEvent({ farmId, nodeId, eventType, payload });
     } catch (err) {
@@ -105,6 +115,18 @@ export function connectBridge() {
       // on the app side.
       if (payload && typeof payload === "object" && payload.event !== undefined) {
         await sendAlertPush(farmId, nodeId, motorNum, payload);
+      }
+    }
+
+    // Config echoes share the response topic with plain command acks (see
+    // PumpRepository.kt's own `type` discriminator) - opportunistically
+    // refreshes farm_config_cache so the next WebSocket subscribe doesn't
+    // have to wait on a live device round trip (see farmConfigCache.js).
+    if (category === "motor" && leaf === "response") {
+      try {
+        await setCachedConfigFromResponse(farmId, motorNum, payload);
+      } catch (err) {
+        console.error("[bridge] config cache write failed:", err);
       }
     }
 

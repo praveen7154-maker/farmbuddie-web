@@ -1,18 +1,25 @@
 import { config } from "../config.js";
 import { ensureSchema, startRetentionCleanup } from "./postgres.js";
-import { connectBridge } from "./mqttBridge.js";
+import { ensureFarmConfigCacheSchema } from "./farmConfigCache.js";
+import { connectBridge, publishCommand } from "./mqttBridge.js";
 import { startFarmerDocCacheRefresh } from "./firestoreMirror.js";
+import { attachLiveGateway } from "./liveGateway.js";
 import { app } from "./server.js";
 
 async function main() {
   await ensureSchema();
+  await ensureFarmConfigCacheSchema();
   startRetentionCleanup();
   startFarmerDocCacheRefresh();
   connectBridge();
 
-  app.listen(config.bridgePort, "0.0.0.0", () => {
+  // publishCommand is passed in rather than imported by liveGateway.js
+  // itself - see that file's own doc comment on why (avoids a circular
+  // import with mqttBridge.js, which imports broadcastToFarm from here).
+  const httpServer = app.listen(config.bridgePort, "0.0.0.0", () => {
     console.log(`farmbuddie bridge API listening on :${config.bridgePort}`);
   });
+  attachLiveGateway(httpServer, { publishCommand });
 }
 
 main().catch((err) => {
