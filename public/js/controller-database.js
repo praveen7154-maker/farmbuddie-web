@@ -148,8 +148,21 @@ uploadBtn.addEventListener("click", async () => {
         const sheet =
             workbook.Sheets[workbook.SheetNames[0]];
 
+        // raw: false - without this, SheetJS reads any numeric-looking
+        // cell as a JS number instead of the text actually in it. That
+        // silently strips leading zeros off a 4-digit Unique ID ("0001"
+        // becomes 1) and, worse, loses real digits off anything longer
+        // than ~15-16 digits (a 19-digit ICCID can't be represented
+        // exactly as a JS number at all) - exactly the "5.75418E+12"-
+        // style corruption a pasted MOBILE_NUMBER/SIM_NO/SIM_IMSI column
+        // shows when Excel itself already auto-formatted it as a number.
+        // raw:false asks SheetJS for the cell's DISPLAYED text instead,
+        // which is only a full fix if the source column was formatted as
+        // Text in Excel before the data was typed/pasted in - see
+        // normalizeControllerRow()'s own doc comment for the row-level
+        // corruption check that catches the rest.
         const rows =
-            XLSX.utils.sheet_to_json(sheet);
+            XLSX.utils.sheet_to_json(sheet, { raw: false });
 
         previewExcel(rows);
 
@@ -170,6 +183,49 @@ function isValidUniqueId(uniqueId) {
     return /^\d{4}$/.test(String(uniqueId ?? "").trim());
 }
 
+// Every column that must be a plain run of digits, never scientific
+// notation or a decimal point - a source Excel column left in
+// General/Number format instead of Text mangles any of these the exact
+// same way it mangles Unique ID (see the sheet_to_json() call's own doc
+// comment): "8991940912940333745" becomes "8.99194E+17" and the real
+// digits are gone for good, not just hidden.
+const NUMERIC_ID_FIELDS = ["Serial Number", "IMEI Number", "SIM Number", "SIM MSISDN", "SIM IMSI"];
+
+// True if `value` still shows the signature of having passed through a
+// number conversion at some point - scientific notation or a decimal
+// point. raw:false on the sheet_to_json() call (above) already recovers
+// the common case (a Text-formatted cell SheetJS would otherwise coerce
+// to a number); this catches what that can't: a source cell that was
+// ALREADY a lossy float inside the Excel file itself, because the column
+// wasn't set to Text before the data was typed or pasted in. No amount
+// of parsing on this end can get those digits back - the fix has to be
+// upstream, in how the sheet was filled in - so this exists to refuse
+// the row loudly instead of silently saving garbage.
+function looksCorrupted(value) {
+    const s = String(value ?? "").trim();
+    if (!s) return false;
+    return /[eE][+-]?\d/.test(s) || s.includes(".");
+}
+
+// Recovers a zero-padded 4-digit Unique ID from a bare number Excel/
+// SheetJS handed back without its leading zeros ("1" -> "0001") - only
+// when the digits themselves are still intact (1-4 of them and nothing
+// else), never for a value that's wrong in some other way.
+function normalizeUniqueId(value) {
+    const s = String(value ?? "").trim();
+    return /^\d{1,4}$/.test(s) ? s.padStart(4, "0") : s;
+}
+
+// Applied identically by previewExcel() and uploadControllers() so what
+// the admin sees in the preview modal is exactly what would actually get
+// saved - normalizes Unique ID's leading zeros and flags any of
+// NUMERIC_ID_FIELDS that still looks corrupted after that.
+function normalizeControllerRow(row) {
+    const normalized = { ...row, "Unique ID": normalizeUniqueId(row["Unique ID"]) };
+    const corruptedFields = NUMERIC_ID_FIELDS.filter((field) => looksCorrupted(row[field]));
+    return { row: normalized, corruptedFields };
+}
+
 /* ================= Preview Excel ================= */
 function previewExcel(rows) {
 
@@ -178,7 +234,8 @@ function previewExcel(rows) {
 
     rows.forEach((row, index) => {
 
-        const valid = isValidUniqueId(row["Unique ID"]);
+        const { row: normalized, corruptedFields } = normalizeControllerRow(row);
+        const valid = isValidUniqueId(normalized["Unique ID"]) && corruptedFields.length === 0;
 
         tbody.innerHTML += `
             <tr>
@@ -191,7 +248,9 @@ function previewExcel(rows) {
                 <td>
                     ${valid
                         ? `<span class="status-ready">Ready</span>`
-                        : `<span class="status-invalid">Invalid Unique ID (must be 4 digits, e.g. "0001") - got "${row["Unique ID"] ?? ""}"</span>`
+                        : corruptedFields.length > 0
+                            ? `<span class="status-invalid">${corruptedFields.join(", ")} looks corrupted (scientific notation/decimal) - re-enter that column in Excel as Text before re-uploading</span>`
+                            : `<span class="status-invalid">Invalid Unique ID (must be 4 digits, e.g. "0001") - got "${row["Unique ID"] ?? ""}"</span>`
                     }
                 </td>
             </tr>
@@ -226,9 +285,22 @@ async function uploadControllers(){
     let uploaded=0;
     let failed=0;
 
-    for(const row of rows){
+    for(const rawRow of rows){
 
         try{
+
+            // Same normalization previewExcel() already showed the admin -
+            // applied again here (not read back from the preview render)
+            // so what actually gets saved always matches what "Ready"
+            // meant on screen, even if this runs in a later session or
+            // window.previewRows was touched by something else in between.
+            const { row, corruptedFields } = normalizeControllerRow(rawRow);
+
+            if (corruptedFields.length > 0) {
+                console.error(`Skipped row (${corruptedFields.join(", ")} looks corrupted - scientific notation/decimal point): re-enter that column in Excel as Text and re-upload. Unique ID was "${rawRow["Unique ID"] ?? ""}"`);
+                failed++;
+                continue;
+            }
 
            const serial = row["Serial Number"];
             const uniqueId = row["Unique ID"];
@@ -247,7 +319,7 @@ async function uploadControllers(){
 
             const duplicate = controllers.find(c =>
                 c.serialNumber === serial ||
-                c.uniqueId === String(uniqueId).trim() ||
+                c.uniqueId === uniqueId ||
                 c.imeiNumber === imei ||
                 (sim && c.simNumber === sim) ||
                 (msisdn && c.simMsisdn === msisdn) ||
@@ -267,7 +339,7 @@ async function uploadControllers(){
 
                 serialNumber:row["Serial Number"],
 
-                uniqueId:String(uniqueId).trim(),
+                uniqueId:uniqueId,
 
                 imeiNumber:row["IMEI Number"],
 
