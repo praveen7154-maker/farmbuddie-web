@@ -240,7 +240,8 @@ function downloadControllerSample() {
         "Unique ID",
         "IMEI Number",
         "SIM MSISDN",
-        "SIM Number"
+        "SIM Number",
+        "SIM IMSI"
     ]];
 
     // Unique ID MUST be a plain 4-digit decimal string ("0001", not
@@ -259,7 +260,8 @@ function downloadControllerSample() {
             "0001",
             "865487120001234",
             "919876543210",
-            "9876543210"
+            "8991940912940333745",
+            "404940940333745"
         ],
 
         [
@@ -268,7 +270,8 @@ function downloadControllerSample() {
             "0002",
             "865487120001235",
             "919876543211",
-            "9876543211"
+            "8991940912940333770",
+            "404940940333770"
         ],
 
         [
@@ -277,15 +280,52 @@ function downloadControllerSample() {
             "0003",
             "865487120001236",
             "919876543212",
-            "9876543212"
+            "8991940912940333757",
+            "404940940333757"
         ]
 
     ];
+
+    // Blank rows below the 3 examples, pre-formatted the same way as
+    // those - so an admin filling data straight into the template (not
+    // just editing the sample rows) still gets Text-formatted ID/SIM
+    // cells by default. Excel only carries a cell's number format
+    // forward into an already-formatted (even if currently empty) cell,
+    // not into a brand new one typed past the last formatted row - this
+    // is what makes that actually work for rows the admin hasn't typed
+    // into yet.
+    const BLANK_ROWS = 200;
+    for (let i = 0; i < BLANK_ROWS; i++) {
+        rows.push(["", "", "", "", "", "", ""]);
+    }
 
     const worksheet = XLSX.utils.aoa_to_sheet([
         ...headers,
         ...rows
     ]);
+
+    // Every ID/SIM column here is a run of digits Excel's own General
+    // format WILL silently mangle the instant something is typed or
+    // pasted into it - stripping Unique ID's leading zeros, or converting
+    // a 19-digit ICCID/15-digit IMSI to lossy scientific notation (see
+    // controller-database.js's own sheet_to_json()/normalizeControllerRow()
+    // doc comments for the upload-side half of this fix). "@" is Excel's
+    // Text format code, forced cell-by-cell (not just via !cols, which
+    // Excel doesn't reliably honor for cells typed in later) across every
+    // row this sheet ships with, including the blank ones above -
+    // Serial Number is included too even though today's examples are
+    // alphanumeric, since nothing stops a future serial from being
+    // all-digits and hitting the exact same bug.
+    const TEXT_COLUMNS = [1, 2, 3, 4, 5, 6]; // Serial Number, Unique ID, IMEI Number, SIM MSISDN, SIM Number, SIM IMSI
+    const range = XLSX.utils.decode_range(worksheet["!ref"]);
+    for (let r = 1; r <= range.e.r; r++) { // skip the header row
+        for (const c of TEXT_COLUMNS) {
+            const addr = XLSX.utils.encode_cell({ r, c });
+            if (!worksheet[addr]) worksheet[addr] = { t: "s", v: "" };
+            worksheet[addr].t = "s";
+            worksheet[addr].z = "@";
+        }
+    }
 
     worksheet["!cols"] = [
         { wch: 18 }, // Variant
@@ -293,7 +333,8 @@ function downloadControllerSample() {
         { wch: 30 }, // Unique ID
         { wch: 22 }, // IMEI Number
         { wch: 18 }, // SIM MSISDN
-        { wch: 18 }  // SIM Number
+        { wch: 24 }, // SIM Number
+        { wch: 18 }  // SIM IMSI
     ];
 
     const workbook = XLSX.utils.book_new();

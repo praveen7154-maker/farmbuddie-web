@@ -162,7 +162,8 @@ uploadBtn.addEventListener("click", async () => {
         // normalizeControllerRow()'s own doc comment for the row-level
         // corruption check that catches the rest.
         const rows =
-            XLSX.utils.sheet_to_json(sheet, { raw: false });
+            XLSX.utils.sheet_to_json(sheet, { raw: false })
+                .filter((row) => !isBlankRow(row));
 
         previewExcel(rows);
 
@@ -181,6 +182,18 @@ uploadBtn.addEventListener("click", async () => {
 // caught here, before it ever reaches Firestore.
 function isValidUniqueId(uniqueId) {
     return /^\d{4}$/.test(String(uniqueId ?? "").trim());
+}
+
+// True if every one of this row's real columns is empty - the sample
+// template ships 200 blank, pre-formatted rows below its examples (see
+// downloadControllerSample() in controller-database.html) so an admin
+// typing new controllers straight into it still gets Text-formatted ID/
+// SIM cells; sheet_to_json() still returns those rows since the cells
+// exist (just empty), so without this they'd show up in the preview as
+// 200 fake "Invalid Unique ID" rows instead of being silently skipped.
+function isBlankRow(row) {
+    return ["Variant", "Serial Number", "Unique ID", "IMEI Number", "SIM MSISDN", "SIM Number", "SIM IMSI"]
+        .every((field) => !String(row[field] ?? "").trim());
 }
 
 // Every column that must be a plain run of digits, never scientific
