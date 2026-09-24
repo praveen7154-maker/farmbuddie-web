@@ -117,6 +117,7 @@ const networktype = document.getElementById("networkType");
 const simType = document.getElementById("simType");
 const simNumberInput = document.getElementById("simNumber");
 const simMsisdnInput = document.getElementById("simMsisdn");
+const simImsiInput = document.getElementById("simImsi");
 const simImeiInput = document.getElementById("simImei");
 const billingCycle = document.getElementById("billingCycle");
 const activationDate = document.getElementById("activationDate");
@@ -495,6 +496,9 @@ document.getElementById("simNumber").value =
 document.getElementById("simMsisdn").value =
     controller.simMsisdn || "";
 
+document.getElementById("simImsi").value =
+    controller.simImsi || "";
+
 document.getElementById("simImei").value =
     controller.imeiNumber || "";
 
@@ -746,6 +750,12 @@ if (networkType === "SIM") {
         return resetButton(btn);
     }
 
+    if (!controller.simImsi) {
+        alert("Selected controller does not have a SIM IMSI.");
+        hideLoader();
+        return resetButton(btn);
+    }
+
     if (!controller.imeiNumber) {
         alert("Selected controller does not have an IMEI Number.");
         hideLoader();
@@ -989,6 +999,8 @@ if (farmerPhotoInput?.files.length > 0) {
     simNumber: controller.simNumber || "",
 
     msisdn: controller.simMsisdn || "",
+
+    simImsi: controller.simImsi || "",
 
     imeiNumber: controller.imeiNumber || "",
 

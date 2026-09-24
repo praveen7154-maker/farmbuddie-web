@@ -194,10 +194,15 @@ async function loadFarmer() {
     <div class="section-title">📶 SIM Management</div>
 
     <div class="info-grid">
-      <div class="info-item"><b>SIM Number:</b> ${f.sim?.simNumber || "-"}</div>
+      <div class="info-item"><b>SIM Number (ICCID):</b> ${f.sim?.simNumber || "-"}</div>
        <div class="info-item">
     <b>SIM MSISDN:</b>
     ${f.sim?.msisdn || "-"}
+  </div>
+
+  <div class="info-item">
+    <b>SIM IMSI:</b>
+    ${f.sim?.simImsi || "-"}
   </div>
 
   <div class="info-item">

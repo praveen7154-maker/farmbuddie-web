@@ -123,6 +123,7 @@ const appUser3Mobile = document.getElementById("appUser3Mobile");
 const networkTypeElement = document.getElementById("networkType");
 const simNumber = document.getElementById("simNumber");
 const simMsisdn = document.getElementById("simMsisdn");
+const simImsi = document.getElementById("simImsi");
 const simImei = document.getElementById("simImei");
 const simType = document.getElementById("simType");
 const billingCycle = document.getElementById("billingCycle");
@@ -179,6 +180,7 @@ window.handleNetworkType = function () {
 
   const simNumber = document.getElementById("simNumber");
   const simMsisdn = document.getElementById("simMsisdn");
+  const simImsi = document.getElementById("simImsi");
   const simImei = document.getElementById("simImei");
   const simType = document.getElementById("simType");
   const billingCycle = document.getElementById("billingCycle");
@@ -195,6 +197,11 @@ window.handleNetworkType = function () {
     if (simMsisdn) {
       simMsisdn.disabled = true;
       simMsisdn.value = "";
+    }
+
+    if (simImsi) {
+      simImsi.disabled = true;
+      simImsi.value = "";
     }
 
     if (simImei) {
@@ -222,6 +229,7 @@ window.handleNetworkType = function () {
 
     if (simNumber) simNumber.disabled = false;
     if (simMsisdn) simMsisdn.disabled = false;
+    if (simImsi) simImsi.disabled = false;
     if (simImei) simImei.disabled = false;
     if (simType) simType.disabled = false;
     if (billingCycle) billingCycle.disabled = false;
@@ -244,9 +252,14 @@ document.addEventListener("input", function (e) {
     e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
   }
 
-  /* ===== SIM NUMBER (13 DIGITS ONLY) ===== */
+  /* ===== SIM NUMBER / ICCID (19 DIGITS ONLY) ===== */
   if (e.target.id === "simNumber") {
-    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 13);
+    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 19);
+  }
+
+  /* ===== SIM IMSI (15 DIGITS ONLY) ===== */
+  if (e.target.id === "simImsi") {
+    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 15);
   }
 
   /* ===== AADHAAR (12 DIGITS ONLY) ===== */
@@ -411,6 +424,7 @@ if (f.controller?.variant === "IRRIGO_PLUS") {
 
  simNumber.value = f.sim?.simNumber || "";
   simMsisdn.value = f.sim?.msisdn || "";
+  simImsi.value = f.sim?.simImsi || "";
   simImei.value = f.sim?.imeiNumber || "";
   simType.value = f.sim?.simType || "";
   billingCycle.value = f.sim?.billingCycle || "";
@@ -771,7 +785,7 @@ window.updateFarmer = async function () {
     const secondaryMobileRaw = secondaryMobile.value.trim();
     const aadhaarRaw = aadhaarNumber.value.trim();
     const emailValue = emailId ? emailId.value.trim() : "";
-    const cleanedSim = simNumber.value.trim().replace(/\D/g, "").slice(0, 13);
+    const cleanedSim = simNumber.value.trim().replace(/\D/g, "").slice(0, 19);
     const cleanedPrimary = cleanPhone(primaryMobileRaw);
     const cleanedSecondary = cleanPhone(secondaryMobileRaw);
     const cleanedAadhaar = cleanAadhaar(aadhaarRaw);
@@ -817,14 +831,37 @@ window.updateFarmer = async function () {
       return;
     }
 
-     /* ================= UPDATED SIM VALIDATION ================= */
+     /* ================= UPDATED SIM VALIDATION =================
+        SIM Number = ICCID (19 digits), SIM MSISDN = the Airtel M2M
+        mobile number (13 digits), SIM IMSI = the network subscriber
+        identity (15 digits) - three distinct identifiers, not one
+        field wearing three names. Previously validated simNumber
+        (the ICCID) against a 13-digit MSISDN-length check, which
+        rejected every real ICCID and made this form un-saveable for
+        any farmer whose SIM data was actually filled in correctly. */
     const simNumberRaw = document.getElementById("simNumber").value.trim();
-    const cleanedSimNumber = simNumberRaw.replace(/\D/g, "").slice(0, 13);
+    const cleanedSimNumber = simNumberRaw.replace(/\D/g, "").slice(0, 19);
+    const simMsisdnRaw = document.getElementById("simMsisdn").value.trim();
+    const cleanedSimMsisdn = simMsisdnRaw.replace(/\D/g, "").slice(0, 13);
+    const simImsiRaw = document.getElementById("simImsi").value.trim();
+    const cleanedSimImsi = simImsiRaw.replace(/\D/g, "").slice(0, 15);
 
     if (networkType === "SIM") {
 
-        if (!/^\d{13}$/.test(cleanedSimNumber)) {
-          alert("SIM Number must be exactly 13 digits");
+        if (!/^\d{19}$/.test(cleanedSimNumber)) {
+          alert("SIM Number (ICCID) must be exactly 19 digits");
+          hideLoader();
+          return resetUpdateButton(btn);
+        }
+
+        if (!/^\d{13}$/.test(cleanedSimMsisdn)) {
+          alert("SIM MSISDN must be exactly 13 digits");
+          hideLoader();
+          return resetUpdateButton(btn);
+        }
+
+        if (!/^\d{15}$/.test(cleanedSimImsi)) {
+          alert("SIM IMSI must be exactly 15 digits");
           hideLoader();
           return resetUpdateButton(btn);
         }
@@ -1093,6 +1130,7 @@ showLoader("Updating Farmer...");
       sim: {
     simNumber: simNumber.value.trim(),
     msisdn: simMsisdn.value.trim(),
+    simImsi: simImsi.value.trim(),
     imeiNumber: simImei.value.trim(),
     simType: simType.value,
     billingCycle: billingCycle.value,
@@ -1212,6 +1250,7 @@ if (upgradeToggle?.checked) {
 updatedData.sim = {
     simNumber: oldData.sim?.simNumber || "",
     msisdn: oldData.sim?.msisdn || "",
+    simImsi: oldData.sim?.simImsi || "",
     imeiNumber: controllerData.imeiNumber || "",
     simType: oldData.sim?.simType || simType.value,
     billingCycle: oldData.sim?.billingCycle || billingCycle.value,

@@ -293,9 +293,9 @@
     </select>
 </div>
 
-<!-- SIM Number -->
+<!-- SIM Number (ICCID) -->
 <div class="fb-field network-field">
-    <label>SIM Number</label>
+    <label>SIM Number (ICCID)</label>
     <input
         type="text"
         id="simNumber"
@@ -309,6 +309,16 @@
     <input
         type="text"
         id="simMsisdn"
+        readonly
+        placeholder="Auto fetched from selected controller">
+</div>
+
+<!-- SIM IMSI -->
+<div class="fb-field network-field">
+    <label>SIM IMSI</label>
+    <input
+        type="text"
+        id="simImsi"
         readonly
         placeholder="Auto fetched from selected controller">
 </div>

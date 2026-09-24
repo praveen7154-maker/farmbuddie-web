@@ -235,6 +235,7 @@ async function uploadControllers(){
             const imei = row["IMEI Number"];
             const sim = row["SIM Number"];
             const msisdn = row["SIM MSISDN"];
+            const imsi = row["SIM IMSI"];
 
             if (!isValidUniqueId(uniqueId)) {
                 console.error(`Skipped row (invalid Unique ID "${uniqueId}"): must be 4 digits, e.g. "0001"`);
@@ -249,7 +250,8 @@ async function uploadControllers(){
                 c.uniqueId === String(uniqueId).trim() ||
                 c.imeiNumber === imei ||
                 (sim && c.simNumber === sim) ||
-                (msisdn && c.simMsisdn === msisdn)
+                (msisdn && c.simMsisdn === msisdn) ||
+                (imsi && c.simImsi === imsi)
             );
 
             if (duplicate) {
@@ -272,6 +274,8 @@ async function uploadControllers(){
                 simMsisdn:row["SIM MSISDN"],
 
                 simNumber:row["SIM Number"],
+
+                simImsi:row["SIM IMSI"],
 
                 status:"available",
 
@@ -677,8 +681,9 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
   <!-- SIM DETAILS -->
   <div class="section-title">📶 SIM Management</div>
   <div class="info-grid">
-   <div class="info-item"><b>SIM Number:</b> ${f.sim?.simNumber || "-"}</div>
+   <div class="info-item"><b>SIM Number (ICCID):</b> ${f.sim?.simNumber || "-"}</div>
     <div class="info-item"><b>MSISDN:</b> ${f.sim?.msisdn || "-"}</div>
+    <div class="info-item"><b>IMSI:</b> ${f.sim?.simImsi || "-"}</div>
     <div class="info-item"><b>IMEI:</b> ${f.sim?.imeiNumber || "-"}</div>
     <div class="info-item"><b>SIM Type:</b> ${f.sim?.simType || "-"}</div>
     <div class="info-item"><b>Billing Cycle:</b> ${f.sim?.billingCycle || "-"}</div>
