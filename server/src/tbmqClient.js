@@ -54,8 +54,10 @@ export async function createBasicCredentials({
   pubAuthRulePatterns,
   subAuthRulePatterns
 }) {
+  // clientId null = any client id may use this username/password (the
+  // ota-admin tool connects with a fresh id every run).
   const credentialsValue = JSON.stringify({
-    clientId,
+    ...(clientId ? { clientId } : {}),
     userName,
     password,
     authRules: {
@@ -179,4 +181,55 @@ export async function findCredentialsByName(name) {
     if (data.hasNext === false || !data.data || data.data.length < pageSize) return null;
     page += 1;
   }
+}
+
+/** One page of every MQTT credential (TBMQ strips passwords from these). */
+export async function listCredentialsPage(page, pageSize = 100) {
+  const res = await authedFetch(`/api/mqtt/client/credentials?pageSize=${pageSize}&page=${page}`);
+  if (!res.ok) {
+    throw new Error(`TBMQ list credentials failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/**
+ * Replaces an existing MQTT_BASIC credential's authorization rules, keeping
+ * everything else. TBMQ keeps the stored password when a credential is
+ * saved with its id (see its MqttClientCredentialsController), so nothing
+ * that logs in with it has to change. Rules apply from the client's next
+ * connect - see disconnectClient().
+ */
+export async function updateCredentialAuthRules(credentials, authRules) {
+  const value = JSON.parse(credentials.credentialsValue || "{}");
+  value.authRules = authRules;
+  delete value.password; // ignored on update anyway - TBMQ keeps the current one
+  const res = await authedFetch("/api/mqtt/client/credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...credentials, credentialsValue: JSON.stringify(value) })
+  });
+  if (!res.ok) {
+    throw new Error(`TBMQ update credentials ${credentials.name} failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/**
+ * Drops a connected client's session so it reconnects - and so picks up its
+ * credential's current rules, which TBMQ only reads at connect. False if
+ * the client isn't connected right now.
+ */
+export async function disconnectClient(clientId) {
+  const info = await authedFetch(`/api/client-session?clientId=${encodeURIComponent(clientId)}`);
+  if (!info.ok) return false;
+  const session = await info.json();
+  if (!session?.sessionId || session.connectionState !== "CONNECTED") return false;
+  const res = await authedFetch(
+    `/api/client-session/disconnect?clientId=${encodeURIComponent(clientId)}&sessionId=${session.sessionId}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) {
+    throw new Error(`TBMQ disconnect ${clientId} failed: ${res.status} ${await res.text()}`);
+  }
+  return true;
 }

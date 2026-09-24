@@ -50,5 +50,10 @@ export const config = {
   // Refuse bootstrap requests that carry no deviceKey (firmware older than
   // per-device key binding - see deviceBinding.js). Off by default so units
   // still on that firmware can provision; turn on once none remain.
-  bootstrapRequireDeviceKey: process.env.BOOTSTRAP_REQUIRE_DEVICE_KEY === "true"
+  bootstrapRequireDeviceKey: process.env.BOOTSTRAP_REQUIRE_DEVICE_KEY === "true",
+  // Alert pushes as data-only messages, which the Irrigo app turns into one
+  // notification per fault / per recovery (see bridge/pushNotifications.js).
+  // App builds from before that change can't show data-only pushes, so this
+  // stays off (notification-style pushes) until most farmers have updated.
+  pushDataOnly: process.env.PUSH_DATA_ONLY === "true"
 };

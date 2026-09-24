@@ -1,3 +1,4 @@
+import { deviceAuthRules } from "./mqttAuthRules.js";
 import { db } from "./firebaseAdmin.js";
 import { createBasicCredentials, deleteCredentials, findCredentialsByName } from "./tbmqClient.js";
 import { generateMqttPassword } from "./password.js";
@@ -105,8 +106,7 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
     clientId,
     userName: clientId,
     password,
-    pubAuthRulePatterns: [`${topicPrefix}/.*`],
-    subAuthRulePatterns: [`${topicPrefix}/.*`]
+    ...deviceAuthRules(farmId)
   });
 
   const credentialsId = created.id?.id || created.id;

@@ -1,4 +1,5 @@
 import { db, messaging } from "../firebaseAdmin.js";
+import { config } from "../config.js";
 
 // Which device alerts are worth a push - mirrors the Irrigo app's own
 // PumpCodes.isPushWorthy() (and the EVENT_* codes in the Motor firmware's
@@ -27,6 +28,17 @@ function isPushWorthy(payload) {
   if (typeof fault === "number" && fault !== 0 && event === fault) return true; // a fault tripping
   if (event === LEGACY_VOLTAGE_RESTORED && fault === 0) return true;
   return PUSH_EVENTS.has(event);
+}
+
+// Only for notification-style pushes (PUSH_DATA_ONLY off) - what older app
+// builds display as-is, straight from the system tray.
+function buildNotification(nodeId, motorNum, payload) {
+  const motorLabel = motorNum === "2" ? "Motor 2" : "Motor 1";
+  const { event, fault } = payload;
+  if (typeof fault === "number" && fault !== 0 && event === fault) {
+    return { title: motorLabel, body: `Fault detected (code ${fault}) on ${nodeId}` };
+  }
+  return { title: motorLabel, body: `Alert (code ${event}) on ${nodeId}` };
 }
 
 async function tokensForFarmId(farmId) {
@@ -59,13 +71,16 @@ export async function sendAlertPush(farmId, nodeId, motorNum, payload) {
     const tokens = await tokensForFarmId(farmId);
     if (tokens.length === 0) return;
 
-    // Data-only: the app builds the (localised, detailed) notification
-    // itself and de-duplicates it against the same alert arriving over its
-    // own MQTT connection - see the app's IrrigoFcmService. High priority so
-    // it's delivered promptly to a phone in Doze / an app that's closed.
+    // Data-only (PUSH_DATA_ONLY=true): the app builds the (localised,
+    // detailed) notification itself and de-duplicates it against the same
+    // alert arriving over its own MQTT connection - see the app's
+    // IrrigoFcmService. Until then, a notification block the system shows
+    // by itself, as older app builds expect. High priority so it's delivered
+    // promptly to a phone in Doze / an app that's closed.
     const response = await messaging.sendEachForMulticast({
       tokens: tokens.map((t) => t.token),
       android: { priority: "high" },
+      ...(config.pushDataOnly ? {} : { notification: buildNotification(nodeId, motorNum, payload) }),
       data: {
         farmId,
         nodeId,

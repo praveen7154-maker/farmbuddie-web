@@ -128,8 +128,11 @@ copy+restart hook already in place at `/etc/letsencrypt/renewal-hooks/deploy/`).
 
 ```bash
 cd /root/farmbuddie-web && git pull
-cd /root && docker compose up -d --build provision-api
+cd /root && docker compose up -d --build provision-api bridge
 ```
+
+`provision-api` and `bridge` are built from the same image - rebuild both,
+or the bridge keeps running old code.
 
 ## 6. The bridge service (device ↔ TBMQ ↔ VPS ↔ app/web)
 
@@ -216,3 +219,34 @@ shape instead (`deviceStatus.pumpA`/`pumpB`, raw payload as published) —
 `device-view.js` needs a matching update before it'll show anything
 real, not done as part of this change to keep it scoped to the bridge
 itself.
+
+## 7. MQTT access rules (OTA is admin-only)
+
+Every TBMQ credential's topic rules come from `src/mqttAuthRules.js`:
+
+| login | may publish | may subscribe |
+|---|---|---|
+| `FBIRG<farmId>` (Motor hub) | its farm's topics | its farm's topics + `motor/ota/broadcast` |
+| `app-*` (Irrigo app) | its farms' topics **except** `.../ota/*` | its farms' topics |
+| `ota-admin` (`tools/ota_admin.py`) | `farm/<id>/<node>/ota/cmd`, `motor/ota/broadcast` | `farm/<id>/<node>/ota/status` |
+| `bridge` | `farm/<id>/<node>/motor/1|2/cmd` | every farm |
+| `monitor-*` | nothing | every farm |
+
+New credentials get these automatically. Once, after deploying this, create
+the OTA login and bring existing credentials in line:
+
+```bash
+cd /root && docker compose exec provision-api node scripts/createOtaAdminCredential.js
+docker compose exec provision-api node scripts/applyMqttAuthRules.js                        # dry run
+docker compose exec provision-api node scripts/applyMqttAuthRules.js --apply --disconnect   # apply
+```
+
+- The OTA password is printed once - store it next to the OTA signing key.
+  `--rotate` issues a new one.
+- `applyMqttAuthRules.js` never changes a password. TBMQ only reads rules at
+  connect, so `--disconnect` makes each changed client reconnect now (apps
+  and hubs reconnect by themselves; a GSM hub takes ~15-40s).
+- Anything it lists as `REVIEW` is a login this system didn't issue that can
+  still publish OTA commands (e.g. an old shared login) - tighten or delete
+  it in the TBMQ dashboard.
+- Re-run it any time; it only touches credentials that differ.

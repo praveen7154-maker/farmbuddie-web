@@ -1,3 +1,4 @@
+import { appAuthRules } from "../mqttAuthRules.js";
 import { Router } from "express";
 import { db } from "../firebaseAdmin.js";
 import { createBasicCredentials, deleteCredentials, findCredentialsByName } from "../tbmqClient.js";
@@ -63,13 +64,10 @@ provisionAppRouter.post("/", async (req, res) => {
 
     // Real topic tree (see irrigo-admin's mqtt/Topics.kt) is
     // farm/{farmId}/{nodeId}/motor/.../..., where farmId is controllers.uniqueId
-    // (NOT farmBuddieId's "FARM-2026-xxxx" format). Pub is scoped to the same
-    // whole-farm subtree as sub rather than just .../cmd, since valve/filter
-    // command topics live under other node segments within the same farmId
-    // that aren't fully enumerable here — tightening this to command-only
-    // patterns is a reasonable follow-up once that full topic set is confirmed.
-    const pubAuthRulePatterns = farmIds.map((farmId) => `farm/${farmId}/.*`);
-    const subAuthRulePatterns = farmIds.map((farmId) => `farm/${farmId}/.*`);
+    // (NOT farmBuddieId's "FARM-2026-xxxx" format). The whole farm subtree for
+    // both, except that the app can't publish to a device's ota/* topics -
+    // OTA is admin-only (see mqttAuthRules.js).
+    const { pubAuthRulePatterns, subAuthRulePatterns } = appAuthRules(farmIds);
 
     const clientId = `app-${phone}-${instanceId}`;
     const existing = await findCredentialsByName(clientId);
