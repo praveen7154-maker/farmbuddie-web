@@ -278,15 +278,3 @@ One-time VPS setup:
    `nginx -t && systemctl reload nginx`.
 2. The bridge's broker login needs OTA publish rights - re-run
    `docker compose exec provision-api node scripts/applyMqttAuthRules.js --apply --disconnect`.
-
-Testing without a hub: `scripts/simulateOtaHub.js` is a pretend hub. It
-answers a release the way a hub does (checks the signature, downloads the
-`.bin` from the public URL, checks size and SHA-256, reports progress) without
-flashing anything, so the page's whole flow can be tried end to end. Use a
-farm that has no real hub:
-
-    docker compose exec provision-api node scripts/simulateOtaHub.js --farm 0001
-    docker compose exec provision-api node scripts/simulateOtaHub.js --farm 0001 --busy   # answers "motor on"
-
-It logs in with a temporary MQTT login limited to that farm's `ota/cmd` and
-`ota/status` and deletes it on exit.
