@@ -1020,7 +1020,9 @@ const valveConfig = {
     await updateDoc(doc(db, "controllers", controllerDoc.id), {
       status: "assigned",
       assignedAt: serverTimestamp(),
-      farmerDocId: selectedFarmerDocId,
+      // The NEW farm's own doc - not the farmer's first farm
+      // (selectedFarmerDocId). MQTT credentials are written to this doc.
+      farmerDocId: newFarmRef.id,
       farmerId: farmBuddieId,
       networkType: networkType,
       updatedAt: serverTimestamp()

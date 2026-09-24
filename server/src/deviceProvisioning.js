@@ -51,15 +51,8 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
     throw { status: 409, message: "Controller is missing farmerDocId or uniqueId" };
   }
 
-  const farmerRef = db.collection("farmers").doc(controller.farmerDocId);
-  const farmerSnap = await farmerRef.get();
-
-  if (!farmerSnap.exists) {
-    throw { status: 404, message: "Assigned farmer not found" };
-  }
-
-  const farmer = farmerSnap.data();
   const farmId = controller.uniqueId;
+  const { farmerRef, farmer } = await resolveFarmDoc(controllerRef, controller);
   const clientId = `FBIRG${farmId}`;
   const topicPrefix = `farm/${farmId}`;
   const existing = await findCredentialsByName(clientId);
@@ -73,6 +66,22 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
   // storage being added.
   if (existing && !rotate) {
     if (controller.mqttPasswordPlaintext) {
+      // Re-sync the farm doc's copy if it's missing or belongs to another
+      // controller (the old Add Farm bug wrote a second farm's login into
+      // the first farm's doc).
+      const shown = farmer.controller?.mqtt || {};
+      if (shown.username !== controller.username || shown.password !== controller.mqttPasswordPlaintext) {
+        await farmerRef.update({
+          "controller.mqtt": {
+            brokerUrl: controller.mqttUrl,
+            port: controller.mqttPort,
+            username: controller.username,
+            credentialsId: controller.mqttCredentialsId,
+            issuedAt: controller.mqttIssuedAt,
+            password: controller.mqttPasswordPlaintext
+          }
+        });
+      }
       return {
         brokerUrl: controller.mqttUrl,
         port: controller.mqttPort,
@@ -143,6 +152,38 @@ export async function issueDeviceCredential(controllerDocId, { rotate = false } 
     farmerName: farmer.name || "",
     farmBuddieId: farmer.farmBuddieId || ""
   };
+}
+
+/**
+ * The farm doc this controller belongs to: the farmers doc whose
+ * controller.uniqueId is this controller's uniqueId - the same lookup the
+ * bridge uses (firestoreMirror.js). controllers.farmerDocId is only a hint:
+ * Add Farm used to set it to the farmer's FIRST farm, so a second farm's
+ * credentials landed in the first farm's doc. A wrong hint is corrected
+ * here.
+ */
+async function resolveFarmDoc(controllerRef, controller) {
+  const hintRef = db.collection("farmers").doc(controller.farmerDocId);
+  const hintSnap = await hintRef.get();
+  if (hintSnap.exists && hintSnap.data().controller?.uniqueId === controller.uniqueId) {
+    return { farmerRef: hintRef, farmer: hintSnap.data() };
+  }
+
+  const snap = await db
+    .collection("farmers")
+    .where("controller.uniqueId", "==", controller.uniqueId)
+    .get();
+
+  if (snap.size > 1) {
+    throw { status: 409, message: `More than one farm has controller ${controller.uniqueId} - fix the farm records first` };
+  }
+  if (snap.empty) {
+    throw { status: 404, message: `No farm record has controller ${controller.uniqueId}` };
+  }
+
+  const found = snap.docs[0];
+  await controllerRef.update({ farmerDocId: found.id });
+  return { farmerRef: found.ref, farmer: found.data() };
 }
 
 /**

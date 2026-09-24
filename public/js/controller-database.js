@@ -798,7 +798,10 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
     ${f.controller?.mqtt?.username ? "Credentials issued" : "No credentials yet"}
   </span>
   ${
-    f.controller?.mqtt?.username
+    // A farm's login is always FBIRG<its uniqueId>. Anything else was written
+    // here by mistake (old Add Farm bug) - ask the server, which returns and
+    // stores the right one.
+    f.controller?.mqtt?.username && f.controller.mqtt.username === `FBIRG${f.controller?.uniqueId}`
       ? `<button class="fb-btn-primary small" onclick="fetchMqttCredentials()">📥 Fetch MQTT Credentials</button>`
       : `<button class="fb-btn-primary small" onclick="generateInitialMqttCredentials()">🔑 Generate MQTT Credentials</button>`
   }
