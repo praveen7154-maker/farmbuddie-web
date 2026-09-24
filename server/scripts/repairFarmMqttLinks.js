@@ -8,7 +8,9 @@
 // and, with --apply:
 //   - points controllers/<id>.farmerDocId at that doc,
 //   - copies the controller's own stored login into that doc's
-//     controller.mqtt when it's missing or belongs to another controller.
+//     controller.mqtt when it's missing or belongs to another controller,
+//   - fills an empty sim.simImsi from the controller (Add Farm didn't save
+//     the IMSI before).
 // Nothing on the broker (TBMQ) changes - no login is created or rotated.
 //
 // Usage (inside the provision-api container):
@@ -48,8 +50,9 @@ for (const c of ctrlSnap.docs) {
   // No login of its own, but the farm doc shows another controller's.
   const foreignLogin = !hasLogin && !!shown.username && shown.username !== `FBIRG${unit}`;
   const label = `controller ${unit} (${farm.data().farmBuddieId || farm.id})`;
+  const imsiMissing = farm.data().network?.type === "SIM" && !farm.data().sim?.simImsi && !!ctrl.simImsi;
 
-  if (!linkWrong && !loginWrong && !foreignLogin) {
+  if (!linkWrong && !loginWrong && !foreignLogin && !imsiMissing) {
     ok++;
     if (!hasLogin) console.log(`NOTE    ${label}: no MQTT login issued yet - use Generate MQTT Credentials on the MCU / Controller page`);
     continue;
@@ -60,10 +63,12 @@ for (const c of ctrlSnap.docs) {
   if (linkWrong) console.log(`    link  farmerDocId ${ctrl.farmerDocId} -> ${farm.id}`);
   if (loginWrong) console.log(`    login shown "${shown.username || "-"}" -> "${ctrl.username}"`);
   if (foreignLogin) console.log(`    login shown "${shown.username}" is another controller's -> cleared`);
+  if (imsiMissing) console.log(`    SIM IMSI  - -> ${ctrl.simImsi}`);
   if (!hasLogin) console.log("    (no MQTT login issued yet - use Generate MQTT Credentials after this)");
 
   if (!apply) continue;
   if (linkWrong) await c.ref.update({ farmerDocId: farm.id });
+  if (imsiMissing) await farm.ref.update({ "sim.simImsi": ctrl.simImsi });
   if (foreignLogin) {
     await farm.ref.update({
       "controller.mqtt": { brokerUrl: "", port: shown.port || 8883, username: "", password: "" }

@@ -27,6 +27,7 @@ import {
   fullPhoneSync,
   validatePhones
 } from "/js/phone-auth.js";
+import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisioning.js";
 
 /* ================= IMAGE COMPRESSION ================= */
 async function compressImage(file) {
@@ -1282,7 +1283,8 @@ updatedData.sim = {
 
         username: controllerData.username || "",
 
-        password: controllerData.password || ""
+        // the controller doc stores it as mqttPasswordPlaintext
+        password: controllerData.mqttPasswordPlaintext || ""
 
     }
 
@@ -1346,6 +1348,21 @@ alert(`✅ Farmer updated successfully
 Farm Buddie ID: ${currentFarmBuddieId}
 Variant: ${mcuVariant.value}
 Updated at: ${formattedTime}`);
+
+// The new controller needs its own MQTT login (same as Add Farm /
+// onboarding) - returns the existing one if it already has it. The farm is
+// saved either way; a failure here can be retried from the MCU / Controller
+// page's Generate MQTT Credentials button.
+try {
+  const mqttData = await provisionDeviceCredentials(auth, controllerDoc.id);
+  await showMqttCredentialModal(mqttData);
+} catch (mqttErr) {
+  console.error("MQTT auto-provisioning error:", mqttErr);
+  alert(
+    "⚠ Farm saved, but MQTT credential generation failed: " + mqttErr.message +
+    "\n\nYou can retry from the MCU / Controller page."
+  );
+}
 
 window.location.href = "/admin/farmer-database.html";
 return;

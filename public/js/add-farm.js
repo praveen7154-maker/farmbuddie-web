@@ -69,13 +69,14 @@ window.handleNetworkType = function () {
 
   const simNumber = document.getElementById("simNumber");
   const simMsisdn = document.getElementById("simMsisdn");
+  const simImsi = document.getElementById("simImsi");
   const simImei = document.getElementById("simImei");
   const simType = document.getElementById("simType");
   const billingCycle = document.getElementById("billingCycle");
 
   if (type === "WIFI_FARMER") {
 
-    [simNumber, simMsisdn, simImei, simType, billingCycle].forEach(field => {
+    [simNumber, simMsisdn, simImsi, simImei, simType, billingCycle].forEach(field => {
       if (!field) return;
       field.disabled = true;
       field.value = "";
@@ -87,7 +88,7 @@ window.handleNetworkType = function () {
 
   if (type === "SIM") {
 
-    [simNumber, simMsisdn, simImei, simType, billingCycle].forEach(field => {
+    [simNumber, simMsisdn, simImsi, simImei, simType, billingCycle].forEach(field => {
       if (!field) return;
       field.disabled = false;
     });
@@ -575,6 +576,9 @@ document.getElementById("simNumber").value =
 document.getElementById("simMsisdn").value =
     controller.simMsisdn || "";
 
+document.getElementById("simImsi").value =
+    controller.simImsi || "";
+
 document.getElementById("simImei").value =
     controller.imeiNumber || "";
 
@@ -840,6 +844,12 @@ window.saveFarmer = async function () {
         return resetButton(btn);
     }
 
+    if (!controller.simImsi) {
+        alert("Selected controller does not have a SIM IMSI.");
+        hideLoader();
+        return resetButton(btn);
+    }
+
     if (!controller.imeiNumber) {
         alert("Selected controller does not have an IMEI Number.");
         hideLoader();
@@ -952,6 +962,8 @@ const valveConfig = {
     simNumber: controller.simNumber || "",
 
     msisdn: controller.simMsisdn || "",
+
+    simImsi: controller.simImsi || "",
 
     imeiNumber: controller.imeiNumber || "",
 
