@@ -40,12 +40,15 @@ export const config = {
     .map((s) => s.trim())
     .filter(Boolean),
 
-  // One shared secret compiled into every device's firmware (like
-  // GPRS_APN — "normal for this device class", per the firmware's own
-  // README) — proves "this is a legitimate Farm Buddie device" to
-  // /provision/bootstrap, NOT a master key to anything: the endpoint
-  // still only ever issues credentials for a farmId that's already been
-  // assigned to a farmer server-side. A leaked secret lets someone probe
-  // farmIds, not take over an arbitrary farm.
-  deviceProvisioningSecret: () => required("DEVICE_PROVISIONING_SECRET")
+  // One shared secret compiled into every device's firmware — proves "this
+  // is a Farm Buddie device" to /provision/bootstrap and /provision/bind.
+  // NOT enough on its own: it's in every unit's flash, so it's treated as
+  // extractable. A bound farm additionally requires its own device key
+  // (see deviceBinding.js).
+  deviceProvisioningSecret: () => required("DEVICE_PROVISIONING_SECRET"),
+
+  // Refuse bootstrap requests that carry no deviceKey (firmware older than
+  // per-device key binding - see deviceBinding.js). Off by default so units
+  // still on that firmware can provision; turn on once none remain.
+  bootstrapRequireDeviceKey: process.env.BOOTSTRAP_REQUIRE_DEVICE_KEY === "true"
 };

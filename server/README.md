@@ -14,6 +14,31 @@ Both require `Authorization: Bearer <Firebase ID token>`. Neither endpoint, nor
 Firestore, ever stores the plaintext MQTT password — it's returned once in the
 JSON response and must be captured by the caller at issue time.
 
+Two more endpoints are called by the Motor hub itself (no Firebase token -
+a device has no account):
+- `POST /provision/bootstrap` — first-boot credential fetch.
+- `POST /provision/bind` — one-time key enrolment for hubs bootstrapped before
+  device keys existed.
+
+### Device-key binding (bootstrap / bind)
+
+The fleet-wide `DEVICE_PROVISIONING_SECRET` is in every hub's flash, so it's
+treated as extractable. Each hub also generates its own random key on first
+boot; the first bootstrap for a farm binds the farm to that key
+(`controllers/{id}.deviceKeyHash` - only a SHA-256 is stored), and from then on
+bootstrap refuses any other key (`403 device_mismatch`) or none
+(`403 device_key_required`). Hubs that were already provisioned bind their key
+via `/provision/bind` by proving they hold the farm's current MQTT password -
+firmware does this automatically at boot until it succeeds. See
+`src/deviceBinding.js`.
+
+- **Hub replaced, or its flash wiped?** Its new key won't match. Clear the
+  binding, then let the new hub bootstrap:
+  `node scripts/resetDeviceBinding.js <farmId>` (dry run) then `... --apply`.
+- **Legacy firmware** (no device key) can still bootstrap a farm that isn't
+  bound yet. Once no unit in stock or in the field runs such firmware, set
+  `BOOTSTRAP_REQUIRE_DEVICE_KEY=true` in `.env` to refuse keyless requests.
+
 ## 1. Firebase service account
 
 Firebase Console → Project settings → Service accounts → Generate new private key.

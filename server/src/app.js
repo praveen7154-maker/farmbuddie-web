@@ -8,6 +8,7 @@ import { provisionDeviceRouter } from "./routes/provisionDevice.js";
 import { provisionAppRouter } from "./routes/provisionApp.js";
 import { provisionMonitorRouter } from "./routes/provisionMonitor.js";
 import { provisionBootstrapRouter } from "./routes/provisionBootstrap.js";
+import { provisionBindRouter } from "./routes/provisionBind.js";
 import { fcmTokenRouter } from "./routes/fcmToken.js";
 import { statusRouter } from "./routes/status.js";
 
@@ -71,6 +72,17 @@ const bootstrapLimiter = rateLimit({
   legacyHeaders: false
 });
 app.use("/provision/bootstrap", bootstrapLimiter, provisionBootstrapRouter);
+
+// /provision/bind - a device enrolling its per-device key (see that
+// route's own comment). Same caller/trust model as /provision/bootstrap,
+// so the same tight limit, as its own bucket.
+const bindLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use("/provision/bind", bindLimiter, provisionBindRouter);
 
 // /provision/status backs the admin panel's "VPS & TBMQ" page, which polls
 // it periodically (see public/js/vps-status.js) - provisionLimiter's 20/15min
