@@ -226,7 +226,7 @@ Every TBMQ credential's topic rules come from `src/mqttAuthRules.js`:
 
 | login | may publish | may subscribe |
 |---|---|---|
-| `FBIRG<farmId>` (Motor hub) | its farm's topics | its farm's topics + `motor/ota/broadcast` |
+| `FBIRG<farmId>` (Motor hub - also on the farm's setup QR) | its farm's topics **except** `.../ota/cmd` | its farm's topics + `motor/ota/broadcast` |
 | `app-*` (Irrigo app) | its farms' topics **except** `.../ota/*` | its farms' topics |
 | `ota-admin` (`tools/ota_admin.py`) | `farm/<id>/<node>/ota/cmd`, `motor/ota/broadcast` | `farm/<id>/<node>/ota/status` |
 | `bridge` | `farm/<id>/<node>/motor/1|2/cmd` | every farm |

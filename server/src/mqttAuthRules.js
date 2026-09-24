@@ -18,9 +18,12 @@ export const OTA_ADMIN_USERNAME = "ota-admin";
 
 // A Motor hub (credential FBIRG<farmId>): its own farm's subtree, plus the
 // fleet-wide OTA broadcast topic, which it subscribes to but can't publish.
+// It can't publish an OTA command either (.../ota/cmd) - the farm's setup QR
+// hands this same login to the farmer's phone (the app's direct-MQTT
+// fallback), so without that exclusion a phone could send OTA commands.
 export function deviceAuthRules(farmId) {
   return {
-    pubAuthRulePatterns: [`farm/${farmId}/.*`],
+    pubAuthRulePatterns: [`farm/${farmId}/(?![^/]+/ota/cmd$).*`],
     subAuthRulePatterns: [`farm/${farmId}/.*`, OTA_BROADCAST_TOPIC]
   };
 }
