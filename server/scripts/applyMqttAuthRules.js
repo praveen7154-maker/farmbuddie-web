@@ -6,6 +6,8 @@
 //   app-*        (Irrigo app)   - may no longer publish to .../ota/*
 //   ota-admin                   - OTA only (create it with createOtaAdminCredential.js)
 //   bridge       (VPS bridge)   - publishes motor commands only
+//   TBMQ WebSockets MQTT Credentials - TBMQ's built-in passwordless login,
+//                                 locked to nothing (see mqttAuthRules.js)
 // monitor-* logins (read-only) are left alone. Anything else that could
 // still publish an OTA topic is listed as REVIEW for you to check by hand.
 //
@@ -27,6 +29,8 @@ import {
   appAuthRules,
   otaAdminAuthRules,
   bridgeAuthRules,
+  lockedAuthRules,
+  TBMQ_WS_SYSTEM_CREDENTIAL_NAME,
   farmIdsFromRules
 } from "../src/mqttAuthRules.js";
 
@@ -43,6 +47,7 @@ const OTA_SAMPLE_TOPICS = ["farm/0001/MOTOR_1/ota/cmd", OTA_BROADCAST_TOPIC];
 function desiredRules(name, current) {
   let m;
   if (name === OTA_ADMIN_USERNAME) return otaAdminAuthRules();
+  if (name === TBMQ_WS_SYSTEM_CREDENTIAL_NAME) return lockedAuthRules();
   if (name === bridgeUsername) return bridgeAuthRules();
   if ((m = /^FBIRG(\d+)$/.exec(name))) return deviceAuthRules(m[1]);
   if (name.startsWith("app-")) {

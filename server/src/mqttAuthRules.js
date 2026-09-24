@@ -55,6 +55,17 @@ export function bridgeAuthRules() {
   };
 }
 
+// TBMQ's own built-in login for its dashboard's WebSocket test client
+// (username "tbmq_websockets_username", NO password, publish/subscribe
+// ".*" as installed). Basic credentials work on every listener, so as
+// installed anyone reaching the broker could use it to read every farm and
+// command any device. Locked to nothing - only the dashboard's WebSocket
+// client page stops working (give it its own credential if needed).
+export const TBMQ_WS_SYSTEM_CREDENTIAL_NAME = "TBMQ WebSockets MQTT Credentials";
+export function lockedAuthRules() {
+  return { pubAuthRulePatterns: [], subAuthRulePatterns: [] };
+}
+
 // Farm ids a credential's existing rules are scoped to ("farm/0005/..."),
 // for rebuilding them with the functions above.
 export function farmIdsFromRules(authRules) {

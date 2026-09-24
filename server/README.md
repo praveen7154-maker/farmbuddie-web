@@ -231,6 +231,7 @@ Every TBMQ credential's topic rules come from `src/mqttAuthRules.js`:
 | `ota-admin` (`tools/ota_admin.py`) | `farm/<id>/<node>/ota/cmd`, `motor/ota/broadcast` | `farm/<id>/<node>/ota/status` |
 | `bridge` | `farm/<id>/<node>/motor/1|2/cmd` | every farm |
 | `monitor-*` | nothing | every farm |
+| `TBMQ WebSockets MQTT Credentials` (TBMQ built-in, no password) | nothing | nothing |
 
 New credentials get these automatically. Once, after deploying this, create
 the OTA login and bring existing credentials in line:
