@@ -527,7 +527,7 @@ function handleVariantMotorValve(isEditMode = false) {
   /* ===== IRRIGO ===== */
   if (variant === "IRRIGO") {
 
-    ["1 Pump", "2 Pump"].forEach((label, i) => {
+    ["1 Pump", "2 Pump", "3 Pump"].forEach((label, i) => {
       const opt = document.createElement("option");
       opt.value = i + 1;
       opt.textContent = label;
