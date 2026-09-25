@@ -94,6 +94,12 @@ export async function fullPhoneSync(db, auth, farmerId, farmerData){
     return;
   }
 
+  // Follows the admin panel's Phone Authorization Activate/Block choice
+  // (farmers/<id>.phoneAuth.enabled) - this used to always write true, so
+  // Block never reached phoneIndex and a blocked number could still log in.
+  // Not chosen yet (no phoneAuth) = enabled, as before.
+  const enabled = farmerData.phoneAuth?.enabled !== false;
+
   for (const { phone, role, name } of entries) {
 
     const phoneRef = doc(db, "phoneIndex", phone);
@@ -105,7 +111,7 @@ export async function fullPhoneSync(db, auth, farmerId, farmerData){
           role,
           name,
           farmerDocId: farmerId,
-          enabled: true,
+          enabled,
           updatedAt: new Date(),
           updatedBy: auth.currentUser.uid
         }
