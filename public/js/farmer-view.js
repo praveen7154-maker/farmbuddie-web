@@ -1,4 +1,5 @@
 import { auth, db } from "/js/firebase-init.js";
+import { valveConfigViewHtml } from "/js/valve-config.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -264,34 +265,8 @@ async function loadFarmer() {
       }
     </div>
 
-    <!-- VALVE CONFIG -->
-<div class="section-title">⚙️ Valve Configuration</div>
-<div class="info-grid">
-
-  <!-- Always show 24V -->
-  <div class="info-item">
-    <b>24V AC Valves:</b> ${f.valveConfig?.valve24Count ?? 0}
-  </div>
-
-  ${
-    f.controller?.variant === "IRRIGO_PLUS"
-      ? `
-        <div class="info-item">
-          <b>9V DC Valves:</b> ${f.valveConfig?.valve9Count ?? 0}
-        </div>
-
-        <div class="info-item">
-          <b>Filter Backwash:</b> ${f.valveConfig?.filterBackwashCount ?? 0}
-        </div>
-
-        <div class="info-item">
-          <b>Water Level Monitoring:</b> ${f.valveConfig?.waterLevelMonitoring ?? 0}
-        </div>
-      `
-      : ""
-  }
-
-</div>
+    <!-- VALVE CONFIG + ADDITIONAL FEATURES (see valve-config.js) -->
+    ${valveConfigViewHtml(f.valveConfig)}
 
     <!-- TIMESTAMPS -->
     <div class="section-title">⏱ Record Info</div>

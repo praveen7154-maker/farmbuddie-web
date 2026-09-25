@@ -1,4 +1,8 @@
 import { auth, db } from "/js/firebase-init.js";
+import { renderValveConfigSection, readValveConfig, fillValveConfig } from "/js/valve-config.js";
+
+// Valve Configuration + Additional Features fields (IRRIGO and IRRIGO_PLUS alike)
+renderValveConfigSection();
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -323,9 +327,6 @@ function handleVariantMotorValve() {
   const motorSection = document.getElementById("motorConfigSection");
   const valveSection = document.getElementById("valveConfigSection");
   const motorSelect = document.getElementById("motorCount");
-  const valve9Field = document.getElementById("valve9Field");
-  const irrigoPlusExtras = document.getElementById("irrigoPlusExtras");
-  if (irrigoPlusExtras) irrigoPlusExtras.style.display = "none";
 
   if (!motorSection || !valveSection) return;
 
@@ -350,7 +351,6 @@ function handleVariantMotorValve() {
       motorSelect.appendChild(opt);
     });
 
-    valve9Field.style.display = "none";
   }
 
   /* ===== IRRIGO PLUS ===== */
@@ -363,8 +363,6 @@ function handleVariantMotorValve() {
       motorSelect.appendChild(opt);
     });
 
-    valve9Field.style.display = "block";
-    if (irrigoPlusExtras) irrigoPlusExtras.style.display = "block";
   }
 
  motorSelect.value = "1";
@@ -788,17 +786,11 @@ window.saveFarmer = async function () {
 
       //End Pump-Service Validation
 
-        const valve24 = document.getElementById("valve24Count")?.value.trim();
-        const valve9 = document.getElementById("valve9Count")?.value.trim();
-
-        if (valve24 === "") {
-          alert("Please enter number of 24V AC valves");
+        const { missing: missingValveField } = readValveConfig();
+        if (missingValveField) {
+          alert(`Please enter ${missingValveField} (0 if none)`);
+          hideLoader();
           return resetButton(btn);
-        }
-
-        if (variant === "IRRIGO_PLUS" && valve9 === "") {
-          alert("Please enter number of 9V DC valves");
-           return resetButton(btn);
         }
 
       }
@@ -908,12 +900,7 @@ const pumpServiceMapping = Array.from({ length: motorCount }).map((_, i) => ({
 
 /* ================= BUILD VALVE CONFIG ================= */
 
-const valveConfig = {
-  valve24Count: parseInt(document.getElementById("valve24Count")?.value || 0),
-  valve9Count: parseInt(document.getElementById("valve9Count")?.value || 0),
-  filterBackwashCount: parseInt(document.getElementById("filterBackwashCount")?.value || 0),
-  waterLevelMonitoring: parseInt(document.getElementById("waterLevelMonitoring")?.value || 0)
-};
+const valveConfig = readValveConfig().config;
     /* ================= BUILD APP USERS ================= */
 
     const appUsers = [];

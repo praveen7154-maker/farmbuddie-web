@@ -1,4 +1,5 @@
 import { auth, db } from "/js/firebase-init.js";
+import { valveConfigExportColumns } from "/js/valve-config.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -390,10 +391,7 @@ window.downloadAllFarmersExcel = async function () {
 
         /* ===== VALVE CONFIG ===== */
 
-        "24V Valves": f.valveConfig?.valve24Count || "",
-        "9V Valves": f.valveConfig?.valve9Count || "",
-        "Filter Backwash": f.valveConfig?.filterBackwashCount || "",
-        "Water Level Monitoring": f.valveConfig?.waterLevelMonitoring || "",
+        ...valveConfigExportColumns(f.valveConfig),
 
         /* ===== TNEB SERVICE ===== */
 

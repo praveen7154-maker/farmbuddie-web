@@ -1,4 +1,8 @@
 import { auth, db } from "/js/firebase-init.js";
+import { renderValveConfigSection, readValveConfig, fillValveConfig } from "/js/valve-config.js";
+
+// Valve Configuration + Additional Features fields (IRRIGO and IRRIGO_PLUS alike)
+renderValveConfigSection();
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -252,9 +256,6 @@ function handleVariantMotorValve() {
   const motorSection = document.getElementById("motorConfigSection");
   const valveSection = document.getElementById("valveConfigSection");
   const motorSelect = document.getElementById("motorCount");
-  const valve9Field = document.getElementById("valve9Field");
-  const irrigoPlusExtras = document.getElementById("irrigoPlusExtras");
-  if (irrigoPlusExtras) irrigoPlusExtras.style.display = "none";
 
   if (!motorSection || !valveSection) return;
 
@@ -279,7 +280,6 @@ function handleVariantMotorValve() {
       motorSelect.appendChild(opt);
     });
 
-    valve9Field.style.display = "none";
   }
 
   /* ===== IRRIGO PLUS ===== */
@@ -292,8 +292,6 @@ function handleVariantMotorValve() {
       motorSelect.appendChild(opt);
     });
 
-    valve9Field.style.display = "block";
-    if (irrigoPlusExtras) irrigoPlusExtras.style.display = "block";
   }
 
  motorSelect.value = "1";
@@ -632,17 +630,9 @@ window.saveFarmer = async function () {
               }
  // End of pump-service validation
 
-        const valve24 = document.getElementById("valve24Count")?.value.trim();
-        const valve9 = document.getElementById("valve9Count")?.value.trim();
-
-        if (valve24 === "") {
-          alert("Please enter number of 24V AC valves");
-          hideLoader();
-          return resetButton(btn);
-        }
-
-        if (variant === "IRRIGO_PLUS" && valve9 === "") {
-          alert("Please enter number of 9V DC valves");
+        const { missing: missingValveField } = readValveConfig();
+        if (missingValveField) {
+          alert(`Please enter ${missingValveField} (0 if none)`);
           hideLoader();
           return resetButton(btn);
         }
@@ -940,8 +930,6 @@ if (farmerPhotoInput?.files.length > 0) {
 
 // Motor and valve counts (with safe fallback)
     const motorCount = document.getElementById("motorCount")?.value || 0;
-    const valve24 = document.getElementById("valve24Count")?.value || 0;
-    const valve9 = document.getElementById("valve9Count")?.value || 0;
     
   const farmerData = {
       farmBuddieId,
@@ -1050,18 +1038,7 @@ if (farmerPhotoInput?.files.length > 0) {
   },
 
   /* ===== VALVE CONFIG ===== */
-  valveConfig: {
-  valve24Count: parseInt(valve24 || 0),
-  valve9Count: variant === "IRRIGO_PLUS"
-    ? parseInt(valve9 || 0)
-    : 0,
-  filterBackwashCount: variant === "IRRIGO_PLUS"
-    ? parseInt(document.getElementById("filterBackwashCount")?.value || 0)
-    : 0,
-  waterLevelMonitoring: variant === "IRRIGO_PLUS"
-    ? parseInt(document.getElementById("waterLevelMonitoring")?.value || 0)
-    : 0
-},
+  valveConfig: readValveConfig().config,
   /* ===== TNEB SERVICE CONFIG ===== */
 tnebServices: {
   serviceCount: parseInt(document.getElementById("serviceCount")?.value || 0),
@@ -1168,13 +1145,6 @@ document.addEventListener("input", function (e) {
   }
 
    /* ===== VALVE STRICT NUMERIC (ADD HERE) ===== */
- if (e.target.id === "valve24Count" || e.target.id === "valve9Count") {
-  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 3);
-  }
-
-  if (e.target.id === "filterBackwashCount") {
-  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 3);
-  }
 
   });
 
