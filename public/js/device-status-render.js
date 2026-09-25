@@ -125,15 +125,21 @@ export function renderMotorsInto(grid, data, isOnline) {
  * present at all when valve mesh mode is on for this farm - null/absent
  * means "no valve mesh configured", not "everything closed".
  */
-export function renderValvesInto(grid, valves, isOnline) {
+export function renderValvesInto(grid, valves, isOnline, valvesOnline) {
   grid.innerHTML = "";
 
-  if (!valves || valves.length === 0) {
-    grid.innerHTML = `<div class="valve-box">No valve mesh configured</div>`;
+  // The hub sends a fixed-length valves array whenever its mesh is on
+  // (pairing Motor 2 turns it on too) - only valves that have actually
+  // reported (valves_online) are real, paired valves.
+  const paired = (valves || []).map((open, idx) => ({ open, idx }))
+    .filter(({ open, idx }) => !Array.isArray(valvesOnline) || valvesOnline[idx] || open);
+
+  if (paired.length === 0) {
+    grid.innerHTML = `<div class="valve-box">No valves paired</div>`;
     return;
   }
 
-  valves.forEach((open, idx) => {
+  paired.forEach(({ open, idx }) => {
 
     const div = document.createElement("div");
     div.className = "valve-box";

@@ -38,7 +38,7 @@ onSnapshot(farmerRef, (snap) => {
   const isOnline = updateStatusSection(data);
 
   renderMotorsInto(document.getElementById("motorGrid"), data, isOnline);
-  renderValvesInto(document.getElementById("valveGrid"), data.motor1?.valves, isOnline);
+  renderValvesInto(document.getElementById("valveGrid"), data.motor1?.valves, isOnline, data.motor1?.valves_online);
   updateDeviceControl(farmerData);
 });
 
