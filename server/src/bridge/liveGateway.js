@@ -147,6 +147,7 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
 
         try {
           await queueCommand(farmId, () => publishCommand(farmId, nodeId, motorNum, { cmd, ...params }));
+          console.log(`[live] farm ${farmId}: ${cmd} -> ${nodeId}/motor/${motorNum === "2" ? "2" : "1"}`);
         } catch (err) {
           console.error(`[bridge] live command failed for farm ${farmId}:`, err.message);
         }

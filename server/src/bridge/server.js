@@ -16,6 +16,14 @@ import { normalizeFarmElectrical } from "./farmElectrical.js";
 import { db } from "../firebaseAdmin.js";
 
 export const app = express();
+// nginx (on the host) is the only caller - the port is published on
+// 127.0.0.1 only - and Docker's port forwarding makes nginx appear as the
+// Docker network gateway (a private address), not loopback. Trust
+// X-Forwarded-For from those so the rate limit below counts each real
+// client on its own. Without this every admin/app request shared one
+// 60/min bucket (nginx's address), and express-rate-limit logged
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set("trust proxy", ["loopback", "uniquelocal"]);
 app.use(express.json());
 
 // Reports the bridge's OWN MQTT session + Postgres reachability, not just
