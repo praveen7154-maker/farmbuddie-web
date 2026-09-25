@@ -18,7 +18,8 @@ const PUSH_EVENTS = new Set([
   30, 47,          // cyclic / valve-cyclic paused by a manual stop - needs a decision
   48, 49,          // valve opened / closed (standalone action)
   51, 54, 55, 57,  // valve-gated start failed, no valve responded, two valves open, valve closed mid-run
-  65               // controller restarted while the motor was running
+  65,              // controller restarted while the motor was running
+  66, 67           // TNEB load limit: motor stopped / start refused (sanctioned HP)
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 

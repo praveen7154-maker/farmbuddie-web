@@ -5,6 +5,8 @@ import { mirrorStatus, mirrorHealth } from "./firestoreMirror.js";
 import { sendAlertPush } from "./pushNotifications.js";
 import { broadcastToFarm } from "./liveGateway.js";
 import { setCachedConfigFromResponse } from "./farmConfigCache.js";
+import { createTnebSync, loadFarmElectrical } from "./farmElectrical.js";
+import { db } from "../firebaseAdmin.js";
 
 let client = null;
 
@@ -43,6 +45,13 @@ function parseTopic(topic) {
 // Set by index.js - web-panel OTA (ota.js) records every hub's ota/status
 // reply against the release that asked for it.
 let otaStatusHandler = null;
+// Pushes the farm's Motor / TNEB configuration to hubs whose health shows a
+// different one - see farmElectrical.js createTnebSync().
+const tnebSync = createTnebSync({
+  loadConfig: (farmId) => loadFarmElectrical(db, farmId),
+  publish: (topic, payload) => publishJson(topic, payload)
+});
+
 export function setOtaStatusHandler(fn) {
   otaStatusHandler = fn;
 }
@@ -146,6 +155,12 @@ export function connectBridge() {
         await mirrorHealth(farmId, nodeId, payload);
       } catch (err) {
         console.error("[bridge] firestore health mirror failed:", err);
+      }
+      // Keep the hub's TNEB load-limit configuration in step with the admin panel.
+      try {
+        await tnebSync(farmId, nodeId, payload);
+      } catch (err) {
+        console.error("[bridge] tneb config sync failed:", err);
       }
     }
   });
