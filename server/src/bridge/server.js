@@ -12,6 +12,8 @@ import { buildDeviceQrPng } from "./qrPayload.js";
 import { createOtaModule } from "./ota.js";
 import { pgOtaStore } from "./otaStore.js";
 import { publishJson } from "./mqttBridge.js";
+import { normalizeFarmElectrical } from "./farmElectrical.js";
+import { db } from "../firebaseAdmin.js";
 
 export const app = express();
 app.use(express.json());
@@ -171,6 +173,29 @@ app.get("/fleet/device/:farmId/qr", async (req, res) => {
     }
     console.error("fleet/device/qr error:", err);
     return res.status(500).json({ error: "Failed to generate QR" });
+  }
+});
+
+/**
+ * GET /farm/:farmId/electrical
+ * The farm's Motor / TNEB configuration (pumps with HP and service, services
+ * with sanctioned HP) for the Irrigo app's TNEB load limit - see
+ * farmElectrical.js. Same access rule as telemetry: admins, or a phone with
+ * an enabled phoneIndex entry for this farm.
+ */
+app.get("/farm/:farmId/electrical", async (req, res) => {
+  const { farmId } = req.params;
+  if (!/^\d{1,6}$/.test(farmId)) return res.status(400).json({ error: "Invalid farmId" });
+  try {
+    if (!(await canAccessFarm(req.decodedToken, farmId))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    const snap = await db.collection("farmers").where("controller.uniqueId", "==", farmId).limit(1).get();
+    if (snap.empty) return res.status(404).json({ error: "No farm record for this farmId" });
+    return res.json(normalizeFarmElectrical(farmId, snap.docs[0].data()));
+  } catch (err) {
+    console.error("farm electrical error:", err);
+    return res.status(500).json({ error: "Failed to load the farm's electrical setup" });
   }
 });
 
