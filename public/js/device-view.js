@@ -1,4 +1,5 @@
-import { db } from "/js/firebase-init.js";
+import { auth, db } from "/js/firebase-init.js";
+import { initDeviceControl, updateDeviceControl } from "/js/device-control.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { formatDurationShort, renderMotorsInto, renderValvesInto } from "/js/device-status-render.js";
 
@@ -15,6 +16,8 @@ if (!farmerId) {
 }
 
 const farmerRef = doc(db, "farmers", farmerId);
+
+initDeviceControl(auth);
 
 /* =====================================================
    REALTIME LISTENER
@@ -36,6 +39,7 @@ onSnapshot(farmerRef, (snap) => {
 
   renderMotorsInto(document.getElementById("motorGrid"), data, isOnline);
   renderValvesInto(document.getElementById("valveGrid"), data.motor1?.valves, isOnline);
+  updateDeviceControl(farmerData);
 });
 
 /* =====================================================

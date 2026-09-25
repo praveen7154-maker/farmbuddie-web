@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="/css/main.css">
   <link rel="stylesheet" href="/css/admin-sidebar.css">
   <link rel="stylesheet" href="/css/admin-device-view.css">
+  <link rel="stylesheet" href="/css/fleet-control.css">
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -88,6 +89,84 @@
 <!-- VALVES -->
 <h4 class="section-title">Valves</h4>
 <section id="valveGrid" class="valve-grid"></section>
+
+<!-- CONTROL (Motor 1 / hub) - see device-control.js -->
+<h4 class="section-title">🎛️ Control</h4>
+<section class="card-industrial">
+  <div class="fleet-btn-row">
+    <button class="fb-btn-primary small" id="ctlGetStatus">🔄 Get Status</button>
+    <button class="fb-btn-primary small" id="ctlLightOn">💡 Light On</button>
+    <button class="fb-btn-primary small" id="ctlLightOff">🔌 Light Off</button>
+    <button class="fb-btn-primary small" id="ctlClearFault">✅ Clear Fault</button>
+  </div>
+  <div class="fleet-btn-row">
+    <button class="fb-btn-primary small" id="ctlMotorOn">▶️ Motor On</button>
+    <button class="fb-btn-primary small" id="ctlMotorOff">⏸️ Motor Off</button>
+    <button class="fleet-btn-danger" id="ctlEmergencyStop">🚨 Emergency Stop</button>
+  </div>
+  <div class="fleet-form-note" id="controlNote"></div>
+</section>
+
+<!-- VI CALIBRATION -->
+<details class="card-industrial fleet-section" open>
+  <summary class="section-title">🎚️ VI Calibration (Motor 1)</summary>
+  <p class="cal-help">
+    1. Press <b>Fetch Device Constants</b>. 2. Measure the phase with a multimeter (voltage) or clamp meter
+    (current - motor running) and enter it. 3. <b>Calculate</b> - new constant = constant × meter ÷ device reading.
+    4. <b>Push</b> sends only that phase. After a push, press <b>Refresh Reading</b> and compare again.
+  </p>
+  <div class="fleet-btn-row">
+    <button class="fb-btn-primary small" id="calFetch">⬇️ Fetch Device Constants</button>
+    <button class="fb-btn-primary small" id="calRefreshReading">🔄 Refresh Reading</button>
+    <span class="cal-reading-at">Device reading at: <b id="calReadingAt">--</b></span>
+  </div>
+  <div class="fleet-form-note" id="calNote"></div>
+  <div class="cal-table-wrap">
+    <table class="cal-table">
+      <thead>
+        <tr>
+          <th>Phase</th>
+          <th>Device Constant</th>
+          <th>Device Reading</th>
+          <th>Multimeter Reading</th>
+          <th></th>
+          <th>New Constant</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="calTableBody"></tbody>
+    </table>
+  </div>
+</details>
+
+<!-- SAFETY LIMITS -->
+<details class="card-industrial fleet-section">
+  <summary class="section-title">🛡️ Safety Limits (Motor 1)</summary>
+  <div class="fleet-btn-row">
+    <label>Phase Group:
+      <select id="safetyPhaseGroup">
+        <option value="0">3-Phase</option>
+        <option value="1">2-Phase</option>
+      </select>
+    </label>
+    <button class="fb-btn-primary small" id="safetyFetch">⬇️ Fetch Current</button>
+    <button class="fb-btn-primary small" id="safetySave">💾 Save Limits</button>
+  </div>
+  <div class="fleet-form-grid">
+    <label>Voltage Low (V) <input type="number" step="any" id="fs_vLow"></label>
+    <label>Voltage High (V) <input type="number" step="any" id="fs_vHigh"></label>
+    <label>Dry-run Current (A) <input type="number" step="any" id="fs_iDry"></label>
+    <label>Overload Current (A) <input type="number" step="any" id="fs_iOverload"></label>
+    <label>Dry-run Restart (min) <input type="number" step="1" id="fs_dryRunRestartMinutes"></label>
+    <label>Phase Loss Detect (V) <input type="number" step="any" id="fs_phaseLossDetectV"></label>
+    <label>Phase Loss Debounce (ms) <input type="number" step="1" id="fs_phaseLossDebounceMs"></label>
+    <label>Phase Imbalance Max (V) <input type="number" step="any" id="fs_phaseImbalanceMax"></label>
+    <label>Cyclic Resume Cooldown (s) <input type="number" step="1" id="fs_cyclicResumeCooldownSec"></label>
+    <label>DOL Pulse (ms) <input type="number" step="1" id="fs_dolPulseMs"></label>
+    <label>Confirm Timeout (s) <input type="number" step="1" id="fs_confirmTimeoutSec"></label>
+  </div>
+  <div class="fleet-form-note" id="safetyNote"></div>
+</details>
 
 </main>
 

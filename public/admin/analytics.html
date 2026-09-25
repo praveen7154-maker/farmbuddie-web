@@ -15,7 +15,6 @@
   <link rel="stylesheet" href="/css/admin-sidebar.css">
   <link rel="stylesheet" href="/css/admin-tables.css">
   <link rel="stylesheet" href="/css/admin-device-view.css">
-  <link rel="stylesheet" href="/css/fleet-control.css">
 </head>
 
 <body class="fb-layout">
@@ -96,99 +95,6 @@
     <span id="fbTotal">0</span> entries
   </div>
   <div class="fb-pagination-controls" id="fbPagination"></div>
-</div>
-
-<!-- FLEET CONTROL PANEL (per-device live status + commands) -->
-<div class="fb-side-panel hidden" id="fleetPanel">
-  <div class="fb-side-header">
-    <h3>🎛️ Device Control - <span id="fleetPanelFarmName">-</span></h3>
-    <button id="fleetPanelClose">✖</button>
-  </div>
-
-  <div class="fb-side-body">
-
-    <div class="fleet-id-row">
-      <span>Farm Buddie ID: <b id="fleetFarmBuddieId">-</b></span>
-      <span>Unique ID: <b id="fleetUniqueId">-</b></span>
-      <span class="status-pill" id="fleetOnlineBadge">-</span>
-    </div>
-
-    <div class="section-title">📟 Live Status</div>
-    <div class="motor-grid" id="fleetMotorGrid"></div>
-    <div class="valve-grid" id="fleetValveGrid"></div>
-
-    <div class="fleet-health-row" id="fleetHealthRow">
-      FW: <span id="fleetFw">-</span> ·
-      Transport: <span id="fleetTransport">-</span> ·
-      Signal: <span id="fleetSignal">-</span> ·
-      Uptime: <span id="fleetUptime">-</span>
-    </div>
-
-    <div class="section-title">⚡ Quick Actions</div>
-    <div class="fleet-btn-row">
-      <button class="fb-btn-primary small" id="fleetGetStatus">🔄 Get Status</button>
-      <button class="fb-btn-primary small" id="fleetLightOn">💡 Light On</button>
-      <button class="fb-btn-primary small" id="fleetLightOff">🔌 Light Off</button>
-      <button class="fb-btn-primary small" id="fleetClearFault">✅ Clear Fault</button>
-    </div>
-
-    <div class="section-title">🛑 Motor Control</div>
-    <div class="fleet-btn-row">
-      <button class="fb-btn-primary small" id="fleetMotorOn">▶️ Motor On</button>
-      <button class="fb-btn-primary small" id="fleetMotorOff">⏸️ Motor Off</button>
-      <button class="fleet-btn-danger" id="fleetEmergencyStop">🚨 Emergency Stop</button>
-    </div>
-
-    <details class="fleet-section">
-      <summary class="section-title">🛡️ Safety Limits</summary>
-
-      <div class="fleet-btn-row">
-        <label>Phase Group:
-          <select id="fleetPhaseGroup">
-            <option value="0">3-Phase</option>
-            <option value="1">2-Phase</option>
-          </select>
-        </label>
-        <button class="fb-btn-primary small" id="fleetFetchSafety">⬇️ Fetch Current</button>
-        <button class="fb-btn-primary small" id="fleetSaveSafety">💾 Save Limits</button>
-      </div>
-
-      <div class="fleet-form-grid">
-        <label>Voltage Low (V) <input type="number" step="any" id="fs_vLow"></label>
-        <label>Voltage High (V) <input type="number" step="any" id="fs_vHigh"></label>
-        <label>Dry-run Current (A) <input type="number" step="any" id="fs_iDry"></label>
-        <label>Overload Current (A) <input type="number" step="any" id="fs_iOverload"></label>
-        <label>Dry-run Restart (min) <input type="number" step="1" id="fs_dryRunRestartMinutes"></label>
-        <label>Phase Loss Detect (V) <input type="number" step="any" id="fs_phaseLossDetectV"></label>
-        <label>Phase Loss Debounce (ms) <input type="number" step="1" id="fs_phaseLossDebounceMs"></label>
-        <label>Phase Imbalance Max (V) <input type="number" step="any" id="fs_phaseImbalanceMax"></label>
-        <label>Cyclic Resume Cooldown (s) <input type="number" step="1" id="fs_cyclicResumeCooldownSec"></label>
-        <label>DOL Pulse (ms) <input type="number" step="1" id="fs_dolPulseMs"></label>
-        <label>Confirm Timeout (s) <input type="number" step="1" id="fs_confirmTimeoutSec"></label>
-      </div>
-      <div class="fleet-form-note" id="fleetSafetyNote"></div>
-    </details>
-
-    <details class="fleet-section">
-      <summary class="section-title">🎚️ VI Calibration</summary>
-
-      <div class="fleet-btn-row">
-        <button class="fb-btn-primary small" id="fleetFetchCal">⬇️ Fetch Current</button>
-        <button class="fb-btn-primary small" id="fleetSaveCal">💾 Save Calibration</button>
-      </div>
-
-      <div class="fleet-form-grid">
-        <label>Volt R <input type="number" step="any" id="fc_voltR"></label>
-        <label>Volt Y <input type="number" step="any" id="fc_voltY"></label>
-        <label>Volt B <input type="number" step="any" id="fc_voltB"></label>
-        <label>Curr R <input type="number" step="any" id="fc_currR"></label>
-        <label>Curr Y <input type="number" step="any" id="fc_currY"></label>
-        <label>Curr B <input type="number" step="any" id="fc_currB"></label>
-      </div>
-      <div class="fleet-form-note" id="fleetCalNote"></div>
-    </details>
-
-  </div>
 </div>
 
 </main>

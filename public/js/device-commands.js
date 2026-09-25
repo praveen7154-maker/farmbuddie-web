@@ -52,8 +52,13 @@ export async function fetchDeviceEvents(auth, farmId, sinceMs = 10000) {
  * sendConfigSafety()/sendConfigVi(), which set doc["type"] to
  * "config_safety"/"config_vi" for exactly this reason.
  */
-export async function fetchConfigReadback(auth, { farmId, nodeId, motorNum, getCmd, responseType, maxWaitMs = 6000, pollIntervalMs = 1000 }) {
-  await sendDeviceCommand(auth, { farmId, nodeId, motorNum, cmd: getCmd });
+// maxWaitMs: a GSM hub's round trip (command out, reply back, bridge
+// insert) regularly takes longer than a few seconds.
+// params: extra fields for getCmd (e.g. set_vi_calibration's new values).
+// accept: optional check on the reply, so an older reply still inside the
+// polling window isn't mistaken for the answer to this command.
+export async function fetchConfigReadback(auth, { farmId, nodeId, motorNum, getCmd, params = {}, responseType, accept = () => true, maxWaitMs = 20000, pollIntervalMs = 1500 }) {
+  await sendDeviceCommand(auth, { farmId, nodeId, motorNum, cmd: getCmd, ...params });
 
   const deadline = Date.now() + maxWaitMs;
   const eventType = `motor${motorNum}_response`;
@@ -63,7 +68,7 @@ export async function fetchConfigReadback(auth, { farmId, nodeId, motorNum, getC
 
     const events = await fetchDeviceEvents(auth, farmId, maxWaitMs + 5000);
     const match = events
-      .filter(e => e.event_type === eventType && e.payload?.type === responseType)
+      .filter(e => e.event_type === eventType && e.payload?.type === responseType && accept(e.payload))
       .sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))[0];
 
     if (match) return match.payload;
