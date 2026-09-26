@@ -34,6 +34,34 @@ function normalizePhone(phone) {
  * own distinct login, or each new connection would silently kick the
  * previous phone's session offline.
  */
+// The app's instanceId is "<installId>-f<farmId>" (FarmConnectionManager's
+// appCredentialInstanceId()) - one install can hold a slot per farm.
+const installOf = (instanceId) => String(instanceId).replace(/-f\d+$/, "");
+
+/**
+ * One app login per phone: removes this phone's credentials left behind by
+ * EARLIER installs of the app (a reinstall or "Clear storage" makes a new
+ * installId, and the old login stayed in TBMQ + appMqttCredentials for good).
+ * The current install's own slots (one per farm) are kept. Best-effort - a
+ * failure here never fails the request.
+ */
+async function removeOtherInstallsCredentials(phone, instanceId) {
+  const install = installOf(instanceId);
+  const snap = await db.collection("appMqttCredentials").where("phone", "==", phone).get();
+  for (const doc of snap.docs) {
+    if (installOf(doc.id) === install) continue;
+    const { credentialsId, username } = doc.data();
+    try {
+      if (credentialsId) await deleteCredentials(credentialsId);
+    } catch (err) {
+      // Already gone in TBMQ is fine - still drop the Firestore record.
+      console.warn(`provision/app: could not delete TBMQ login ${username}:`, err.message);
+    }
+    await doc.ref.delete();
+    console.log(`provision/app: removed ${username} (older app install of ${phone})`);
+  }
+}
+
 provisionAppRouter.post("/", async (req, res) => {
   const { instanceId, rotate } = req.body || {};
 
@@ -71,6 +99,9 @@ provisionAppRouter.post("/", async (req, res) => {
 
     const clientId = `app-${phone}-${instanceId}`;
     const existing = await findCredentialsByName(clientId);
+
+    await removeOtherInstallsCredentials(phone, instanceId).catch((err) =>
+      console.error("provision/app: old-install cleanup failed:", err.message));
 
     if (existing && !rotate) {
       return res.status(409).json({
