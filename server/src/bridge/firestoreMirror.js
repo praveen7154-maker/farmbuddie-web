@@ -90,3 +90,19 @@ export async function mirrorHealth(farmId, nodeId, payload) {
       { merge: true }
     );
 }
+
+/**
+ * The last health report mirrorHealth() stored for this farm, shaped like the
+ * live MQTT message ({topic, payload}) - sent to a phone the moment its live
+ * connection opens (liveGateway.js), so the app's Maintenance screen has the
+ * hub's diagnostics straight away instead of "unknown" until the next health
+ * report (every 5 minutes). Null if the farm has none yet.
+ */
+export async function loadLastHealthMessage(farmId) {
+  const farmerDocId = await resolveFarmerDocId(farmId);
+  if (!farmerDocId) return null;
+  const snap = await db.collection("farmers").doc(farmerDocId).get();
+  const deviceStatus = snap.exists ? snap.data().deviceStatus : null;
+  if (!deviceStatus?.health || !deviceStatus.nodeId) return null;
+  return { topic: `farm/${farmId}/${deviceStatus.nodeId}/health`, payload: deviceStatus.health };
+}

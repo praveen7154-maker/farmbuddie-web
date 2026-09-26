@@ -2,6 +2,7 @@ import { WebSocketServer } from "ws";
 import { auth } from "../firebaseAdmin.js";
 import { canAccessFarm } from "./ownership.js";
 import { getCachedConfigsForFarm } from "./farmConfigCache.js";
+import { loadLastHealthMessage } from "./firestoreMirror.js";
 
 // How long the app must wait between two commands landing on the SAME
 // farm's device - was per-phone client-side spacing (PumpRepository.kt's
@@ -130,6 +131,15 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
           }
         })
         .catch((err) => console.error(`[bridge] live config-cache send failed for farm ${farmId}:`, err.message));
+
+      // Last known health (uptime, signal, firmware, memory...) - the hub
+      // only reports it every 5 minutes, so without this the app showed
+      // "unknown" for up to that long after opening.
+      loadLastHealthMessage(farmId)
+        .then((msg) => {
+          if (msg && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+        })
+        .catch((err) => console.error(`[bridge] live last-health send failed for farm ${farmId}:`, err.message));
 
       ws.on("close", () => unsubscribe(farmId, ws));
       ws.on("error", () => unsubscribe(farmId, ws));
