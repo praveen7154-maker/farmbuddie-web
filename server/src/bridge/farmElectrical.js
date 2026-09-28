@@ -34,8 +34,12 @@ export function normalizeFarmElectrical(farmId, doc) {
   const services = (Array.isArray(doc?.tnebServices?.services) ? doc.tnebServices.services : [])
     .map((s, i) => ({ serviceNumber: intNumber(s?.serviceNumber) || i + 1, sanctionedHp: hpNumber(s?.sanctionedHp) }));
 
+  const mainDigits = String(doc?.primaryMobile ?? "").replace(/\D/g, "").slice(-10);
   return {
     farmId,
+    // The farm's main farmer number - the only SMS alert number (see
+    // farmSms.js); shown read-only on every app user's Profile screen.
+    mainPhone: mainDigits.length === 10 ? `+91${mainDigits}` : null,
     pumps: pumps.filter((p) => p.hp !== null && p.service !== null),
     services: services.filter((s) => s.sanctionedHp !== null)
   };

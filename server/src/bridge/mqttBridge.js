@@ -6,6 +6,7 @@ import { sendAlertPush } from "./pushNotifications.js";
 import { broadcastToFarm } from "./liveGateway.js";
 import { setCachedConfigFromResponse } from "./farmConfigCache.js";
 import { createTnebSync, loadFarmElectrical } from "./farmElectrical.js";
+import { createSmsSync, loadMainFarmerNumber } from "./farmSms.js";
 import { db } from "../firebaseAdmin.js";
 
 let client = null;
@@ -49,6 +50,11 @@ let otaStatusHandler = null;
 // different one - see farmElectrical.js createTnebSync().
 const tnebSync = createTnebSync({
   loadConfig: (farmId) => loadFarmElectrical(db, farmId),
+  publish: (topic, payload) => publishJson(topic, payload)
+});
+// Keeps each hub's SMS alert number on the farm's main farmer number - see farmSms.js.
+const smsSync = createSmsSync({
+  loadNumber: (farmId) => loadMainFarmerNumber(db, farmId),
   publish: (topic, payload) => publishJson(topic, payload)
 });
 
@@ -161,6 +167,11 @@ export function connectBridge() {
         await tnebSync(farmId, nodeId, payload);
       } catch (err) {
         console.error("[bridge] tneb config sync failed:", err);
+      }
+      try {
+        await smsSync(farmId, nodeId, payload);
+      } catch (err) {
+        console.error("[bridge] sms number sync failed:", err);
       }
     }
   });
