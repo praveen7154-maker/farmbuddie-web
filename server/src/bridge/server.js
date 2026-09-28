@@ -13,6 +13,7 @@ import { createOtaModule } from "./ota.js";
 import { pgOtaStore } from "./otaStore.js";
 import { publishJson } from "./mqttBridge.js";
 import { normalizeFarmElectrical } from "./farmElectrical.js";
+import { validateSequences, loadValveSequences, saveValveSequences } from "./valveSequences.js";
 import { db } from "../firebaseAdmin.js";
 
 export const app = express();
@@ -204,6 +205,44 @@ app.get("/farm/:farmId/electrical", async (req, res) => {
   } catch (err) {
     console.error("farm electrical error:", err);
     return res.status(500).json({ error: "Failed to load the farm's electrical setup" });
+  }
+});
+
+/**
+ * GET /farm/:farmId/valve-sequences
+ * PUT /farm/:farmId/valve-sequences   body: { sequences: [{ name, steps: [{ valve, duration_sec }], stop_mode, stop_value }] }
+ * The farm's saved Motor + Valve Mode sequences, shared by every phone on
+ * the farm - see valveSequences.js. PUT replaces the whole list (the app
+ * always sends all of them). Same access rule as /electrical.
+ */
+app.get("/farm/:farmId/valve-sequences", async (req, res) => {
+  const { farmId } = req.params;
+  if (!/^\d{1,6}$/.test(farmId)) return res.status(400).json({ error: "Invalid farmId" });
+  try {
+    if (!(await canAccessFarm(req.decodedToken, farmId))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    return res.json(await loadValveSequences(db, farmId));
+  } catch (err) {
+    console.error("valve sequences load error:", err);
+    return res.status(500).json({ error: "Failed to load valve sequences" });
+  }
+});
+
+app.put("/farm/:farmId/valve-sequences", async (req, res) => {
+  const { farmId } = req.params;
+  if (!/^\d{1,6}$/.test(farmId)) return res.status(400).json({ error: "Invalid farmId" });
+  try {
+    if (!(await canAccessFarm(req.decodedToken, farmId))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    const sequences = validateSequences(req.body?.sequences);
+    const who = req.decodedToken?.phone_number || req.decodedToken?.uid || null;
+    return res.json(await saveValveSequences(db, farmId, sequences, who));
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.message });
+    console.error("valve sequences save error:", err);
+    return res.status(500).json({ error: "Failed to save valve sequences" });
   }
 });
 
