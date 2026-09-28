@@ -34,6 +34,12 @@ export async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS device_events_farm_recorded_idx
     ON device_events (farm_id, recorded_at DESC)
   `);
+  // For the hourly retention DELETE, which filters on recorded_at alone -
+  // without it that query scans the whole table as the fleet grows.
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS device_events_recorded_idx
+    ON device_events (recorded_at)
+  `);
 }
 
 export async function insertEvent({ farmId, nodeId, eventType, payload }) {
@@ -43,16 +49,19 @@ export async function insertEvent({ farmId, nodeId, eventType, payload }) {
   );
 }
 
+// Newest 5000 in the window, returned oldest-first. Taking the first 5000
+// in ascending order cut off the most recent events whenever a window held
+// more than that (a busy day of 15s status reports does).
 export async function queryEvents(farmId, since) {
   const { rows } = await pool.query(
     `SELECT id, node_id, event_type, payload, recorded_at
      FROM device_events
      WHERE farm_id = $1 AND recorded_at >= $2
-     ORDER BY recorded_at ASC
+     ORDER BY recorded_at DESC
      LIMIT 5000`,
     [farmId, since]
   );
-  return rows;
+  return rows.reverse();
 }
 
 async function cleanupOldEvents() {

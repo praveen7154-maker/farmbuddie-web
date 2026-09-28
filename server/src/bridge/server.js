@@ -248,7 +248,8 @@ app.put("/farm/:farmId/valve-sequences", async (req, res) => {
 
 /**
  * GET /telemetry/:farmId?since=<ISO timestamp>
- * Returns up to 5000 raw device_events rows (status/response/ota) for
+ * Returns the newest 5000 (at most) device_events rows since `since`, oldest
+ * first (status/response/ota), for
  * charts/reports. `since` defaults to 24h ago; the 15-day retention job
  * is what actually bounds how far back this can ever reach.
  */
