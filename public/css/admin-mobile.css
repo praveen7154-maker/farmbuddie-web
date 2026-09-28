@@ -1,0 +1,253 @@
+/* ======================================================
+   ADMIN - PHONE / SMALL TABLET LAYOUT
+   Loaded last on every admin page (with /js/admin-mobile.js, which adds
+   the menu button). Below 900px the sidebar becomes a slide-in drawer and
+   the page content gets the full width; desktop is untouched.
+====================================================== */
+
+.fb-menu-toggle,
+.fb-nav-backdrop {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  html, body.fb-layout {
+    overflow-x: hidden;
+  }
+
+  .fb-layout {
+    display: block;
+    min-height: 100vh;
+  }
+
+  /* ---------- Sidebar as a drawer ---------- */
+  .fb-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(280px, 82vw);
+    z-index: 1001;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    box-shadow: none;   /* a shadow on the hidden drawer showed as a grey strip on the left edge */
+  }
+
+  .fb-sidebar::after {
+    display: none;
+  }
+
+  body.fb-nav-open .fb-sidebar {
+    transform: translateX(0);
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.18);
+  }
+
+  body.fb-nav-open {
+    overflow: hidden;   /* no page scroll behind the open menu */
+  }
+
+  .fb-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15, 23, 20, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  body.fb-nav-open .fb-nav-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .fb-brand {
+    margin-bottom: 14px;
+  }
+
+  .fb-brand img {
+    width: 170px;
+  }
+
+  .fb-menu {
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .fb-menu a {
+    padding: 12px 14px;
+    font-size: 15px;
+  }
+
+  .fb-menu a:hover {
+    transform: none;
+  }
+
+  .fb-menu a.logout {
+    margin-top: 12px;
+  }
+
+  /* ---------- Main content full width ---------- */
+  .fb-main {
+    width: 100%;
+    min-width: 0;
+    padding: 0 14px 24px;
+    overflow: visible;
+  }
+
+  .fb-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 -14px 16px;
+    padding: 10px 14px;
+    background: #f5f7f8;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  }
+
+  .fb-topbar h1 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 1.15rem;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .fb-user {
+    display: none;   /* "Admin" chip - no room, and the menu says who's signed in */
+  }
+
+  .fb-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    border: none;
+    border-radius: 12px;
+    background: #ffffff;
+    color: #245d52;
+    font-size: 22px;
+    line-height: 1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+  }
+
+  /* ---------- Generic content fitting ---------- */
+  .fb-main img,
+  .fb-main video,
+  .fb-main canvas,
+  .fb-main iframe {
+    max-width: 100%;
+  }
+
+  .fb-main input,
+  .fb-main select,
+  .fb-main textarea {
+    max-width: 100%;
+    font-size: 16px;   /* below 16px iOS zooms the page on focus */
+  }
+
+  /* Wide tables scroll sideways inside their own box instead of pushing
+     the whole page wider than the phone. */
+  .fb-main table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .fb-main th,
+  .fb-main td {
+    white-space: nowrap;
+  }
+
+  /* Top action rows (download button + search, etc.) stack full width. */
+  .top-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .top-actions > * {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  /* ---------- Page-specific fits ---------- */
+
+  /* Dashboard: the stat cards were one per row at full height - two
+     compact cards per row reads at a glance. */
+  .fb-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+
+  .fb-stat-card {
+    padding: 14px !important;
+  }
+
+  .fb-stat-card h2,
+  .fb-stat-card .value {
+    font-size: 1.6rem;
+  }
+
+  /* Device view: the status row (7 columns) and valve grid (9 columns)
+     ran off the right edge. */
+  .status-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .status-box {
+    min-width: 0 !important;
+    padding: 8px 6px;
+  }
+
+  .valve-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  /* Device view Safety Limits form: two fixed 225px columns. */
+  .fleet-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Forms and record views: an outer wrapper (20-24px) plus the card's own
+     28-30px padding left the fields in a narrow strip. */
+  .admin-container,
+  .fb-form-wrapper {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
+  .admin-card,
+  .fb-card {
+    padding: 18px 16px !important;
+    border-radius: 16px;
+  }
+
+  .fb-card + .fb-card,
+  .admin-card + .admin-card {
+    margin-top: 14px;
+  }
+
+  /* Button rows wrap instead of running off the edge. */
+  .fb-main .btn-row,
+  .fb-main .actions,
+  .fb-main .button-row {
+    flex-wrap: wrap;
+  }
+}
