@@ -40,6 +40,7 @@ provisionBootstrapRouter.post("/", async (req, res) => {
   const { farmId, provisioningSecret, deviceKey } = req.body || {};
 
   if (!provisioningSecretMatches(provisioningSecret)) {
+    console.warn(`provision/bootstrap: farmId ${farmId} - invalid provisioning secret (ip ${req.ip})`);
     return res.status(403).json({ error: "Invalid provisioning secret" });
   }
 
@@ -57,6 +58,9 @@ provisionBootstrapRouter.post("/", async (req, res) => {
     // Checked here too (issueDeviceCredential() also checks it) so an
     // unassigned controller can't get bound to whoever asks first.
     if (data.status !== "assigned") {
+      // Logged: a hub powered on before onboarding lands here, and without
+      // this line it was invisible why it hadn't connected yet.
+      console.warn(`provision/bootstrap: farmId ${farmId} - not assigned to a farmer yet (status ${data.status}, ip ${req.ip})`);
       return res.status(409).json({ error: `Controller must be assigned to a farmer first (current status: ${data.status})` });
     }
 
@@ -73,6 +77,7 @@ provisionBootstrapRouter.post("/", async (req, res) => {
       console.warn(`provision/bootstrap: farmId ${farmId} - keyless request for a bound farm refused (ip ${req.ip})`);
       return res.status(403).json({ error: "device_key_required" });
     } else if (config.bootstrapRequireDeviceKey) {
+      console.warn(`provision/bootstrap: farmId ${farmId} - keyless request refused (BOOTSTRAP_REQUIRE_DEVICE_KEY, ip ${req.ip})`);
       return res.status(403).json({ error: "device_key_required" });
     } else {
       console.warn(`provision/bootstrap: farmId ${farmId} - keyless (legacy firmware) request allowed, farm stays unbound`);
@@ -83,6 +88,7 @@ provisionBootstrapRouter.post("/", async (req, res) => {
   } catch (err) {
     if (err && err.status) {
       const { status, message, ...rest } = err;
+      console.warn(`provision/bootstrap: farmId ${farmId} - refused ${status}: ${message} (ip ${req.ip})`);
       return res.status(status).json({ error: message, ...rest });
     }
     console.error("provision/bootstrap error:", err);
