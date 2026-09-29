@@ -39,11 +39,11 @@ export function formatDurationShort(totalSec) {
   return `${s}s`;
 }
 
-/** True if deviceStatus.lastSeen is within the last 270s - the same "still talking to the broker" threshold used across the admin panel (and server/src/bridge/fleetStatus.js). A device with no app open only reports every 120s, so this rides out one lost status. */
+/** True if deviceStatus.lastSeen is within the last 660s (11 min) - the same "still talking to the broker" threshold used across the admin panel (and server/src/bridge/fleetStatus.js). An idle hub with no app open sends status every 10 min and health every 5 min, so this rides out one lost health report. */
 export function isDeviceOnline(deviceStatus) {
   const lastSeen = deviceStatus?.lastSeen?.toDate?.() || (deviceStatus?.lastSeen ? new Date(deviceStatus.lastSeen) : null);
   if (!lastSeen) return false;
-  return (Date.now() - lastSeen.getTime()) / 1000 < 270;
+  return (Date.now() - lastSeen.getTime()) / 1000 < 660;
 }
 
 /**

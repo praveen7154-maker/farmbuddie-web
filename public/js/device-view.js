@@ -61,9 +61,9 @@ function updateStatusSection(data) {
     const lastSeen = data.lastSeen.toDate();
     const diff = (Date.now() - lastSeen.getTime()) / 1000;
 
-    // Online if updated within 270s - same threshold as isDeviceOnline()
-    // (device-status-render.js); status comes every 120s with no app open.
-    isOnline = diff < 270;
+    // Online if updated within 660s - same threshold as isDeviceOnline()
+    // (device-status-render.js); an idle hub reports health every 5 min.
+    isOnline = diff < 660;
 
     document.getElementById("lastSeenTime").innerText =
       lastSeen.toLocaleTimeString();
