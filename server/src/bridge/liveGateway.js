@@ -152,7 +152,7 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
         .catch((err) => console.error(`[bridge] live last-health send failed for farm ${farmId}:`, err.message));
 
       // Latest valve grid straight away (see rememberValves()) - an idle hub
-      // only resends it every 25 min.
+      // only resends it every 30 min.
       const valves = lastValves.get(farmId);
       if (valves && ws.readyState === ws.OPEN) ws.send(JSON.stringify(valves));
 
