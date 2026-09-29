@@ -14,6 +14,7 @@ import { pgOtaStore } from "./otaStore.js";
 import { publishJson } from "./mqttBridge.js";
 import { normalizeFarmElectrical } from "./farmElectrical.js";
 import { validateSequences, loadValveSequences, saveValveSequences } from "./valveSequences.js";
+import { validPump, validatePresets, loadCyclicPresets, saveCyclicPresets } from "./cyclicPresets.js";
 import { db } from "../firebaseAdmin.js";
 
 export const app = express();
@@ -243,6 +244,44 @@ app.put("/farm/:farmId/valve-sequences", async (req, res) => {
     if (err && err.status) return res.status(err.status).json({ error: err.message });
     console.error("valve sequences save error:", err);
     return res.status(500).json({ error: "Failed to save valve sequences" });
+  }
+});
+
+/**
+ * GET /farm/:farmId/cyclic-presets/:pump
+ * PUT /farm/:farmId/cyclic-presets/:pump   body: { presets: [{ name, on_sec, off_sec, stop_mode, stop_value, use_valve }] }
+ * The farm's saved Motor Only cyclic programs for one motor (pump "A" or
+ * "B"), shared by every phone on the farm - see cyclicPresets.js. PUT
+ * replaces the whole list. Same access rule as /valve-sequences.
+ */
+app.get("/farm/:farmId/cyclic-presets/:pump", async (req, res) => {
+  const { farmId, pump } = req.params;
+  if (!/^\d{1,6}$/.test(farmId) || !validPump(pump)) return res.status(400).json({ error: "Invalid farmId or pump" });
+  try {
+    if (!(await canAccessFarm(req.decodedToken, farmId))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    return res.json(await loadCyclicPresets(db, farmId, pump));
+  } catch (err) {
+    console.error("cyclic presets load error:", err);
+    return res.status(500).json({ error: "Failed to load cyclic presets" });
+  }
+});
+
+app.put("/farm/:farmId/cyclic-presets/:pump", async (req, res) => {
+  const { farmId, pump } = req.params;
+  if (!/^\d{1,6}$/.test(farmId) || !validPump(pump)) return res.status(400).json({ error: "Invalid farmId or pump" });
+  try {
+    if (!(await canAccessFarm(req.decodedToken, farmId))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    const presets = validatePresets(req.body?.presets);
+    const who = req.decodedToken?.phone_number || req.decodedToken?.uid || null;
+    return res.json(await saveCyclicPresets(db, farmId, pump, presets, who));
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.message });
+    console.error("cyclic presets save error:", err);
+    return res.status(500).json({ error: "Failed to save cyclic presets" });
   }
 });
 
