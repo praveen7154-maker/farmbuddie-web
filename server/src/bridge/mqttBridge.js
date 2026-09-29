@@ -10,6 +10,17 @@ import { createSmsSync, loadMainFarmerNumber } from "./farmSms.js";
 import { db } from "../firebaseAdmin.js";
 
 let client = null;
+// When the bridge last (re)subscribed - see isRetainedReplay().
+let subscribedAtMs = 0;
+const RETAINED_REPLAY_WINDOW_MS = 15 * 1000;
+
+// A retained message the broker hands over because the bridge just
+// (re)subscribed - not a new event. The retain flag alone can't say so:
+// some brokers keep it set on live forwards of a retained publish too,
+// which would skip every valves message. Only right after subscribing.
+function isRetainedReplay(packet) {
+  return packet?.retain === true && Date.now() - subscribedAtMs < RETAINED_REPLAY_WINDOW_MS;
+}
 
 /**
  * Real topic shape, verified directly against the firmware's own runtime
@@ -82,9 +93,11 @@ export function connectBridge() {
 
   client.on("connect", () => {
     console.log("[bridge] connected to TBMQ");
+    subscribedAtMs = Date.now();   // retained replays can land before the SUBACK callback
     client.subscribe("farm/+/#", { qos: 1 }, (err) => {
       if (err) console.error("[bridge] subscribe failed:", err);
       else console.log("[bridge] subscribed to farm/+/#");
+      subscribedAtMs = Date.now();
     });
   });
 
@@ -101,7 +114,7 @@ export function connectBridge() {
     // whenever this bridge (re)subscribes. That replay only refreshes the
     // copy handed to phones on connect - it isn't a new event to store.
     if (category === "valves") {
-      await handleValvesMessage(farmId, nodeId, topic, messageBuf, packet?.retain === true);
+      await handleValvesMessage(farmId, nodeId, topic, messageBuf, isRetainedReplay(packet));
       return;
     }
 
