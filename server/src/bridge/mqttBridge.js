@@ -138,10 +138,15 @@ export function connectBridge() {
     }
 
     if (category === "motor" && leaf === "status") {
-      try {
-        await mirrorStatus(farmId, nodeId, motorNum, payload);
-      } catch (err) {
-        console.error("[bridge] firestore mirror failed:", err);
+      // An alert shares the status topic but is not a status - mirroring it
+      // would replace deviceStatus.motor1 with the alert's few fields.
+      const isAlert = payload && typeof payload === "object" && payload.event !== undefined;
+      if (!isAlert) {
+        try {
+          await mirrorStatus(farmId, nodeId, motorNum, payload);
+        } catch (err) {
+          console.error("[bridge] firestore mirror failed:", err);
+        }
       }
 
       // Alerts share the status topic with plain telemetry (see

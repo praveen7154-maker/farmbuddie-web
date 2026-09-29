@@ -46,19 +46,15 @@ export async function mirrorStatus(farmId, nodeId, motorNum, payload) {
 
   const motorKey = motorNum === "2" ? "motor2" : "motor1";
 
-  await db
-    .collection("farmers")
-    .doc(farmerDocId)
-    .set(
-      {
-        deviceStatus: {
-          nodeId,
-          lastSeen: new Date(),
-          [motorKey]: payload
-        }
-      },
-      { merge: true }
-    );
+  // update() with field paths REPLACES deviceStatus.motor1/motor2 as a
+  // whole. set(..., { merge: true }) deep-merged it instead, so a field the
+  // hub stopped sending (the per-valve lists moved to the valves topic)
+  // stayed in Firestore forever with its last value.
+  await db.collection("farmers").doc(farmerDocId).update({
+    "deviceStatus.nodeId": nodeId,
+    "deviceStatus.lastSeen": new Date(),
+    [`deviceStatus.${motorKey}`]: payload
+  });
 }
 
 /**
@@ -77,19 +73,12 @@ export async function mirrorHealth(farmId, nodeId, payload) {
     return;
   }
 
-  await db
-    .collection("farmers")
-    .doc(farmerDocId)
-    .set(
-      {
-        deviceStatus: {
-          nodeId,
-          lastSeen: new Date(),
-          health: payload
-        }
-      },
-      { merge: true }
-    );
+  // Whole-field replace - see mirrorStatus().
+  await db.collection("farmers").doc(farmerDocId).update({
+    "deviceStatus.nodeId": nodeId,
+    "deviceStatus.lastSeen": new Date(),
+    "deviceStatus.health": payload
+  });
 }
 
 /**
@@ -100,19 +89,12 @@ export async function mirrorHealth(farmId, nodeId, payload) {
 export async function mirrorValves(farmId, nodeId, payload) {
   const farmerDocId = await resolveFarmerDocId(farmId);
   if (!farmerDocId) return;
-  await db
-    .collection("farmers")
-    .doc(farmerDocId)
-    .set(
-      {
-        deviceStatus: {
-          nodeId,
-          lastSeen: new Date(),
-          valves: payload === null ? FieldValue.delete() : payload
-        }
-      },
-      { merge: true }
-    );
+  // Whole-field replace - see mirrorStatus().
+  await db.collection("farmers").doc(farmerDocId).update({
+    "deviceStatus.nodeId": nodeId,
+    "deviceStatus.lastSeen": new Date(),
+    "deviceStatus.valves": payload === null ? FieldValue.delete() : payload
+  });
 }
 
 /**
