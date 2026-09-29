@@ -16,6 +16,16 @@ const COMMAND_SPACING_MS = 1000;
 // farmId -> Set<WebSocket> - every phone currently watching this farm live.
 const subscribers = new Map();
 
+// farmId -> { topic, payload } - the hub's latest valves snapshot (valves
+// topic). Kept in memory: the topic is retained, so the broker hands every
+// farm's latest back to mqttBridge.js whenever it (re)subscribes.
+const lastValves = new Map();
+
+export function rememberValves(farmId, message) {
+  if (message) lastValves.set(farmId, message);
+  else lastValves.delete(farmId);
+}
+
 // farmId -> a promise chain tail, so this farm's outgoing commands are
 // serialized with COMMAND_SPACING_MS between them regardless of which
 // WebSocket (which phone) they came from.
@@ -140,6 +150,11 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
           if (msg && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
         })
         .catch((err) => console.error(`[bridge] live last-health send failed for farm ${farmId}:`, err.message));
+
+      // Latest valve grid straight away (see rememberValves()) - an idle hub
+      // only resends it every 25 min.
+      const valves = lastValves.get(farmId);
+      if (valves && ws.readyState === ws.OPEN) ws.send(JSON.stringify(valves));
 
       ws.on("close", () => unsubscribe(farmId, ws));
       ws.on("error", () => unsubscribe(farmId, ws));

@@ -1,4 +1,5 @@
 import { db } from "../firebaseAdmin.js";
+import { FieldValue } from "firebase-admin/firestore";
 
 // farmId (controllers.uniqueId, e.g. "0003") -> farmers/{docId} — resolved
 // once per farmId and cached, since every incoming MQTT message would
@@ -85,6 +86,29 @@ export async function mirrorHealth(farmId, nodeId, payload) {
           nodeId,
           lastSeen: new Date(),
           health: payload
+        }
+      },
+      { merge: true }
+    );
+}
+
+/**
+ * The hub's valve mesh snapshot (valves topic - see the Motor firmware's
+ * sendValves()) under deviceStatus.valves; null removes it (valve mode
+ * turned off). Also bumps lastSeen, like the other two.
+ */
+export async function mirrorValves(farmId, nodeId, payload) {
+  const farmerDocId = await resolveFarmerDocId(farmId);
+  if (!farmerDocId) return;
+  await db
+    .collection("farmers")
+    .doc(farmerDocId)
+    .set(
+      {
+        deviceStatus: {
+          nodeId,
+          lastSeen: new Date(),
+          valves: payload === null ? FieldValue.delete() : payload
         }
       },
       { merge: true }

@@ -1,9 +1,9 @@
 import mqtt from "mqtt";
 import { config } from "../config.js";
 import { insertEvent } from "./postgres.js";
-import { mirrorStatus, mirrorHealth } from "./firestoreMirror.js";
+import { mirrorStatus, mirrorHealth, mirrorValves } from "./firestoreMirror.js";
 import { sendAlertPush } from "./pushNotifications.js";
-import { broadcastToFarm } from "./liveGateway.js";
+import { broadcastToFarm, rememberValves } from "./liveGateway.js";
 import { setCachedConfigFromResponse } from "./farmConfigCache.js";
 import { createTnebSync, loadFarmElectrical } from "./farmElectrical.js";
 import { createSmsSync, loadMainFarmerNumber } from "./farmSms.js";
@@ -39,6 +39,11 @@ function parseTopic(topic) {
   }
   if (rest[0] === "health" && rest.length === 1) {
     return { farmId, nodeId, category: "health", motorNum: null, leaf: "health" };
+  }
+  // farm/<farmId>/<nodeId>/valves/status - the hub's retained valve mesh
+  // snapshot (see the Motor firmware's sendValves()).
+  if (rest[0] === "valves" && rest.length === 2) {
+    return { farmId, nodeId, category: "valves", motorNum: null, leaf: rest[1] };
   }
   return null;
 }
@@ -86,11 +91,19 @@ export function connectBridge() {
   client.on("reconnect", () => console.log("[bridge] reconnecting..."));
   client.on("error", (err) => console.error("[bridge] MQTT error:", err.message));
 
-  client.on("message", async (topic, messageBuf) => {
+  client.on("message", async (topic, messageBuf, packet) => {
     const parsed = parseTopic(topic);
     if (!parsed) return;
 
     const { farmId, nodeId, category, motorNum, leaf } = parsed;
+
+    // Valves topic: retained, so the broker replays every farm's last one
+    // whenever this bridge (re)subscribes. That replay only refreshes the
+    // copy handed to phones on connect - it isn't a new event to store.
+    if (category === "valves") {
+      await handleValvesMessage(farmId, nodeId, topic, messageBuf, packet?.retain === true);
+      return;
+    }
 
     // The bridge is itself subscribed to farm/+/#, which includes the
     // cmd topics it publishes to via publishCommand() below — MQTT
@@ -177,6 +190,59 @@ export function connectBridge() {
   });
 
   return client;
+}
+
+// Firestore mirror of the valves snapshot: a change (open/online/start
+// valves/nodes/backwash phase) is written at once, the periodic resend at
+// most once a minute - the hub sends it every 10s while an app is open.
+const VALVES_MIRROR_MIN_MS = 60 * 1000;
+const lastValvesMirror = new Map(); // farmId -> { key, at }
+
+function valvesChangeKey(p) {
+  return JSON.stringify([p.open, p.online, p.start, p.last, p.units, p.backwash?.running, p.backwash?.phase]);
+}
+
+async function handleValvesMessage(farmId, nodeId, topic, messageBuf, isRetainedReplay) {
+  // Zero-length retained publish = the hub turned valve mode off.
+  if (messageBuf.length === 0) {
+    rememberValves(farmId, null);
+    lastValvesMirror.delete(farmId);
+    if (!isRetainedReplay) {
+      broadcastToFarm(farmId, { topic, payload: null });
+      try {
+        await mirrorValves(farmId, nodeId, null);
+      } catch (err) {
+        console.error("[bridge] firestore valves mirror failed:", err);
+      }
+    }
+    return;
+  }
+  let payload;
+  try {
+    payload = JSON.parse(messageBuf.toString());
+  } catch {
+    console.warn(`[bridge] non-JSON payload on ${topic}, dropped`);
+    return;
+  }
+  rememberValves(farmId, { topic, payload });
+  if (isRetainedReplay) return;
+
+  broadcastToFarm(farmId, { topic, payload });
+  try {
+    await insertEvent({ farmId, nodeId, eventType: "valves_status", payload });
+  } catch (err) {
+    console.error("[bridge] postgres insert failed:", err);
+  }
+  const key = valvesChangeKey(payload);
+  const prev = lastValvesMirror.get(farmId);
+  if (!prev || prev.key !== key || Date.now() - prev.at >= VALVES_MIRROR_MIN_MS) {
+    lastValvesMirror.set(farmId, { key, at: Date.now() });
+    try {
+      await mirrorValves(farmId, nodeId, payload);
+    } catch (err) {
+      console.error("[bridge] firestore valves mirror failed:", err);
+    }
+  }
 }
 
 /**
