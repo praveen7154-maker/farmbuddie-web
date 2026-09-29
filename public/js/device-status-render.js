@@ -125,6 +125,29 @@ export function renderMotorsInto(grid, data, isOnline) {
  * present at all when valve mesh mode is on for this farm - null/absent
  * means "no valve mesh configured", not "everything closed".
  */
+/**
+ * Open/online lists (index 0 = valve 1) from the hub's valves-topic
+ * snapshot (deviceStatus.valves - hex bit masks, bit v-1 = valve v, up to
+ * 64 valves), or null when there is none (older firmware or valve mode off).
+ */
+export function valveListsFromSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot.open !== "string") return null;
+  const max = Number.isInteger(snapshot.max) ? Math.min(snapshot.max, 64) : 64;
+  const mask = (hex) => {
+    try { return BigInt("0x" + (hex || "0")); } catch { return 0n; }
+  };
+  const open = mask(snapshot.open);
+  const online = mask(snapshot.online);
+  const valves = [];
+  const valvesOnline = [];
+  for (let v = 1; v <= max; v++) {
+    const bit = 1n << BigInt(v - 1);
+    valves.push((open & bit) !== 0n);
+    valvesOnline.push((online & bit) !== 0n);
+  }
+  return { valves, valvesOnline };
+}
+
 export function renderValvesInto(grid, valves, isOnline, valvesOnline) {
   grid.innerHTML = "";
 

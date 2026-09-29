@@ -1,7 +1,7 @@
 import { auth, db } from "/js/firebase-init.js";
 import { initDeviceControl, updateDeviceControl } from "/js/device-control.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
-import { formatDurationShort, renderMotorsInto, renderValvesInto } from "/js/device-status-render.js";
+import { formatDurationShort, renderMotorsInto, renderValvesInto, valveListsFromSnapshot } from "/js/device-status-render.js";
 
 /* =====================================================
    GET FARMER ID
@@ -38,7 +38,15 @@ onSnapshot(farmerRef, (snap) => {
   const isOnline = updateStatusSection(data);
 
   renderMotorsInto(document.getElementById("motorGrid"), data, isOnline);
-  renderValvesInto(document.getElementById("valveGrid"), data.motor1?.valves, isOnline, data.motor1?.valves_online);
+  // The valves-topic snapshot covers all 64 valves; the motor status's own
+  // lists stop at 28 (kept for older app versions).
+  const valveLists = valveListsFromSnapshot(data.valves);
+  renderValvesInto(
+    document.getElementById("valveGrid"),
+    valveLists ? valveLists.valves : data.motor1?.valves,
+    isOnline,
+    valveLists ? valveLists.valvesOnline : data.motor1?.valves_online
+  );
   updateDeviceControl(farmerData);
 });
 
