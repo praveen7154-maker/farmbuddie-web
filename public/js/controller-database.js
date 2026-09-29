@@ -1,5 +1,6 @@
 import { auth, db } from "/js/firebase-init.js";
 import { valveConfigViewHtml } from "/js/valve-config.js";
+import { isDeviceOnline } from "/js/device-status-render.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -285,6 +286,75 @@ document
 .onclick = uploadControllers;
 
 /* ================= Upload Controller ================= */
+
+
+/* ================= PAIRED HARDWARE ================= */
+
+const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function onlinePill(online) {
+  return online
+    ? `<span class="mqtt-status-pill issued">Online</span>`
+    : `<span class="mqtt-status-pill none">Offline</span>`;
+}
+
+/**
+ * The master (the hub itself - it has no BLE pairing, so it isn't in
+ * pairedUnits) first, then every node paired from the Irrigo app
+ * (farmers/{id}.pairedUnits). Online states come from the hub's own live
+ * reports (deviceStatus): its lastSeen for the master, Motor 2's relayed
+ * status, and the valves-topic snapshot's node list for valve nodes.
+ */
+function pairedHardwareHtml(f) {
+  const ds = f.deviceStatus || {};
+  const health = ds.health || {};
+  const rows = [];
+
+  if (f.controller?.uniqueId) {
+    const seen = !!ds.lastSeen;
+    const parts = [`ID ${escHtml(f.controller.uniqueId)}`];
+    if (health.fw_version) parts.push(`FW ${escHtml(health.fw_version)}`);
+    if (health.transport) parts.push(escHtml(String(health.transport).toUpperCase()));
+    if (Number.isFinite(health.signal_pct)) parts.push(`signal ${health.signal_pct}%`);
+    rows.push(`
+      <div class="info-item full">
+        <b>Master</b> (Motor hub${ds.nodeId ? ` ${escHtml(ds.nodeId)}` : ""}) - ${parts.join(" · ")}
+        ${seen ? onlinePill(isDeviceOnline(ds)) : `<span class="mqtt-status-pill none">Not connected yet</span>`}
+      </div>
+    `);
+  }
+
+  const motorNodes = Object.values(f.pairedUnits?.motorNodes || {});
+  for (const u of motorNodes) {
+    const extra = u.bleDeviceName ? ` · ${escHtml(u.bleDeviceName)}` : "";
+    rows.push(`
+      <div class="info-item">
+        <b>${escHtml(u.nodeLabel)}</b> (Motor Node)${extra}
+        ${ds.motor2 ? onlinePill(isDeviceOnline(ds)) : ""}
+      </div>
+    `);
+  }
+
+  const liveUnits = Array.isArray(ds.valves?.units) ? ds.valves.units : [];
+  const valves = Object.values(f.pairedUnits?.valves || {})
+    .sort((a, b) => (a.valveOffset ?? 0) - (b.valveOffset ?? 0));
+  for (const u of valves) {
+    const first = (u.valveOffset ?? 0) + 1;
+    const last = (u.valveOffset ?? 0) + (u.valveCount ?? 0);
+    const range = u.valveCount ? ` · V${first}${last > first ? `–V${last}` : ""}` : "";
+    const hw = `${u.channelCount || "?"}-ch ${escHtml(u.valveType || "")}`.trim();
+    const extra = u.bleDeviceName ? ` · ${escHtml(u.bleDeviceName)}` : "";
+    const live = liveUnits.find((x) => x.u === u.unitLabel);
+    rows.push(`
+      <div class="info-item">
+        <b>${escHtml(u.unitLabel)}</b> (${u.hasPressureSensors ? "Filter Backwash" : "Valve"}) - ${hw}, ${u.valveCount} valve(s)${range}${extra}
+        ${live ? onlinePill(live.on && isDeviceOnline(ds)) : ""}
+      </div>
+    `);
+  }
+
+  return rows.length ? rows.join("") : `<div class="info-item full">No hardware paired yet</div>`;
+}
 
 async function uploadControllers(){
 
@@ -816,28 +886,7 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
        sold, not what's actually been paired over BLE yet. -->
   <div class="section-title">🔗 Paired Hardware</div>
   <div class="info-grid">
-    ${
-      (() => {
-        const motorNodes = Object.values(f.pairedUnits?.motorNodes || {});
-        const valves = Object.values(f.pairedUnits?.valves || {});
-        const rows = [
-          ...motorNodes.map(u => `
-            <div class="info-item">
-              <b>${u.nodeLabel}</b> (Motor Node) - ${u.bleDeviceName || "-"}
-            </div>
-          `),
-          ...valves.map(u => `
-            <div class="info-item">
-              <b>${u.unitLabel}</b> (${u.hasPressureSensors ? "Filter Backwash" : "Valve"}) -
-              ${u.channelCount}ch ${u.valveType || ""}, ${u.valveCount} valve(s) - ${u.bleDeviceName || "-"}
-            </div>
-          `),
-        ];
-        return rows.length
-          ? rows.join("")
-          : `<div class="info-item full">No hardware paired yet</div>`;
-      })()
-    }
+    ${pairedHardwareHtml(f)}
   </div>
 
   <!-- MOTOR & TNEB CONFIG -->
