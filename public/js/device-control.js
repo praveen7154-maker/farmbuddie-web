@@ -214,6 +214,12 @@ async function saveSafety() {
     const v = $(id).value;
     return v === "" ? undefined : Number(v);
   };
+  // Same range as the Irrigo and admin apps' Voltage Low Limit.
+  const vLow = num("fs_vLow");
+  if (vLow !== undefined && (!Number.isFinite(vLow) || vLow < 120 || vLow > 210)) {
+    setNote("safetyNote", "Voltage Low must be between 120 V and 210 V.", "error");
+    return;
+  }
   if (!confirm(
     "This changes the device's own protective thresholds (dry-run/overload/voltage cutoffs) for the " +
     (phaseMode === 1 ? "2-Phase" : "3-Phase") +
