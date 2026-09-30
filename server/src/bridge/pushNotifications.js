@@ -32,14 +32,54 @@ function isPushWorthy(payload) {
 }
 
 // Only for notification-style pushes (PUSH_DATA_ONLY off) - what older app
-// builds display as-is, straight from the system tray.
+// builds display as-is, straight from the system tray (the app itself never
+// gets to word it). Plain sentences, same meaning as the app's own
+// PumpCodes texts - "Alert (code 11)" told a farmer nothing.
+const FAULT_TEXT = {
+  1: "Dry run - the motor was stopped (no water / low current)",
+  2: "Overload - the motor was stopped (current too high)",
+  3: "Low voltage - the motor was stopped",
+  4: "High voltage - the motor was stopped",
+  5: "Phase loss - a phase is missing, the motor was stopped",
+  6: "Phase imbalance - the motor was stopped",
+  10: "Power outage - no supply on any phase"
+};
+const EVENT_TEXT = {
+  11: "Power outage - no supply on any phase",
+  12: "Power restored",
+  16: "Motor was started manually at the panel",
+  17: "Fault cleared - the motor is back to normal",
+  22: "Motor OFF was commanded but current is still flowing - please check the panel",
+  24: "The missing phase is back - the motor can run normally again",
+  25: "Dry-run fault auto-cleared and a restart was attempted",
+  29: "Motor was stopped manually at the panel",
+  30: "Cyclic run paused - stopped at the panel. Open the app to resume or stop it",
+  34: "Dry run has auto-cleared 3 times - it now needs a manual clear",
+  35: "Overload has auto-cleared 3 times - it now needs a manual clear",
+  47: "Cyclic irrigation paused - stopped at the panel. Open the app to resume or stop it",
+  48: "Valve opened",
+  49: "Valve closed",
+  51: "Motor not started - the valve did not open in time",
+  54: "Cyclic irrigation stopped - no valve responded",
+  55: "Two valves were open at once - the motor was stopped for safety",
+  57: "A valve was closed while running - the motor was stopped for safety",
+  64: "Voltage restored",
+  65: "Controller restarted while the motor was running - it is being monitored again",
+  66: "Motor stopped - both motors together exceed the sanctioned HP",
+  67: "Motor not started - the sanctioned HP is already in use by the other motor"
+};
+
 function buildNotification(nodeId, motorNum, payload) {
   const motorLabel = motorNum === "2" ? "Motor 2" : "Motor 1";
   const { event, fault } = payload;
   if (typeof fault === "number" && fault !== 0 && event === fault) {
-    return { title: motorLabel, body: `Fault detected (code ${fault}) on ${nodeId}` };
+    return { title: motorLabel, body: FAULT_TEXT[fault] || "Fault - the motor was stopped" };
   }
-  return { title: motorLabel, body: `Alert (code ${event}) on ${nodeId}` };
+  const valve = typeof payload.valve === "number" && payload.valve > 0 ? payload.valve : null;
+  if (valve && (event === 48 || event === 49)) {
+    return { title: motorLabel, body: `Valve ${valve} ${event === 48 ? "opened" : "closed"}` };
+  }
+  return { title: motorLabel, body: EVENT_TEXT[event] || "New alert - open the Irrigo app for details" };
 }
 
 async function tokensForFarmId(farmId) {
