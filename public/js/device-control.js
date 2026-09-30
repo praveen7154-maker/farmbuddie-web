@@ -220,6 +220,12 @@ async function saveSafety() {
     setNote("safetyNote", "Voltage Low must be between 120 V and 210 V.", "error");
     return;
   }
+  // Same range as the apps and the hub (30 s to 10 min, whole seconds).
+  const cooldown = num("fs_cyclicResumeCooldownSec");
+  if (cooldown !== undefined && (!Number.isInteger(cooldown) || cooldown < 30 || cooldown > 600)) {
+    setNote("safetyNote", "Cyclic Resume Cooldown must be a whole number of seconds from 30 to 600.", "error");
+    return;
+  }
   if (!confirm(
     "This changes the device's own protective thresholds (dry-run/overload/voltage cutoffs) for the " +
     (phaseMode === 1 ? "2-Phase" : "3-Phase") +
