@@ -19,7 +19,8 @@ const PUSH_EVENTS = new Set([
   48, 49,          // valve opened / closed (standalone action)
   51, 54, 55, 57,  // valve-gated start failed, no valve responded, two valves open, valve closed mid-run
   65,              // controller restarted while the motor was running
-  66, 67           // TNEB load limit: motor stopped / start refused (sanctioned HP)
+  66, 67,          // TNEB load limit: motor stopped / start refused (sanctioned HP)
+  68               // a due schedule could not start - another program was running
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
@@ -28,6 +29,8 @@ function isPushWorthy(payload) {
   if (typeof event !== "number") return false;
   if (typeof fault === "number" && fault !== 0 && event === fault) return true; // a fault tripping
   if (event === LEGACY_VOLTAGE_RESTORED && fault === 0) return true;
+  // A schedule's start that took over a motor the farmer was running by hand.
+  if (payload.took_over_manual === true) return true;
   return PUSH_EVENTS.has(event);
 }
 
@@ -66,7 +69,8 @@ const EVENT_TEXT = {
   64: "Voltage restored",
   65: "Controller restarted while the motor was running - it is being monitored again",
   66: "Motor stopped - both motors together exceed the sanctioned HP",
-  67: "Motor not started - the sanctioned HP is already in use by the other motor"
+  67: "Motor not started - the sanctioned HP is already in use by the other motor",
+  68: "A scheduled cyclic could not start - another cyclic program was already running"
 };
 
 function buildNotification(nodeId, motorNum, payload) {
@@ -78,6 +82,9 @@ function buildNotification(nodeId, motorNum, payload) {
   const valve = typeof payload.valve === "number" && payload.valve > 0 ? payload.valve : null;
   if (valve && (event === 48 || event === 49)) {
     return { title: motorLabel, body: `Valve ${valve} ${event === 48 ? "opened" : "closed"}` };
+  }
+  if (payload.took_over_manual === true) {
+    return { title: motorLabel, body: "Scheduled cyclic started - your manual run was switched to this schedule" };
   }
   return { title: motorLabel, body: EVENT_TEXT[event] || "New alert - open the Irrigo app for details" };
 }
