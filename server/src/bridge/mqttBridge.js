@@ -170,6 +170,8 @@ export function connectBridge() {
       if (payload && typeof payload === "object" && payload.event !== undefined) {
         await sendAlertPush(farmId, nodeId, motorNum, payload);
       }
+
+      syncDeviceClockIfNeeded(farmId, nodeId, motorNum, payload);
     }
 
     // Config echoes share the response topic with plain command acks (see
@@ -283,6 +285,35 @@ export function publishJson(topic, payload) {
   return new Promise((resolve, reject) => {
     client.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => (err ? reject(err) : resolve()));
   });
+}
+
+// A device keeps time on its own RTC: cyclic phases, schedules and the hub's
+// "refuse a start command that arrives minutes late" check all run off it.
+// The phones used to be its only time source, so a hub whose clock was
+// wrong (an RTC once reset to the build PC's local time - 5.5 h ahead)
+// stayed wrong until an app happened to resync it. Any status that says the
+// clock isn't synced, or is more than CLOCK_SKEW_MAX_SEC off, gets a
+// set_time from here - at most once per CLOCK_SYNC_MIN_GAP_MS per motor.
+const CLOCK_SKEW_MAX_SEC = 120;
+const CLOCK_SYNC_MIN_GAP_MS = 10 * 60 * 1000;
+const lastClockSyncMs = new Map();
+
+function syncDeviceClockIfNeeded(farmId, nodeId, motorNum, payload) {
+  if (!payload || typeof payload !== "object" || typeof payload.ts !== "number") return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const skewed = Math.abs(payload.ts - nowSec) > CLOCK_SKEW_MAX_SEC;
+  if (payload.time_synced !== false && !skewed) return;
+  const key = `${farmId}/${nodeId}/${motorNum}`;
+  const last = lastClockSyncMs.get(key) || 0;
+  if (Date.now() - last < CLOCK_SYNC_MIN_GAP_MS) return;
+  lastClockSyncMs.set(key, Date.now());
+  console.log(`[bridge] ${key}: clock ${skewed ? `off by ${payload.ts - nowSec}s` : "not synced"} - sending set_time`);
+  try {
+    publishCommand(farmId, nodeId, motorNum, { cmd: "set_time", id: Date.now(), ts: nowSec })
+      .catch((err) => console.error("[bridge] set_time publish failed:", err.message));
+  } catch (err) {
+    console.error("[bridge] set_time publish failed:", err.message);
+  }
 }
 
 export function publishCommand(farmId, nodeId, motorNum, commandPayload) {
