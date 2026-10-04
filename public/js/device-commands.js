@@ -76,3 +76,27 @@ export async function fetchConfigReadback(auth, { farmId, nodeId, motorNum, getC
 
   throw new Error("Device did not respond in time - it may be offline.");
 }
+
+/**
+ * Sends a command with its own id, then polls /telemetry for the device's
+ * ack carrying that id (motor{N}_response with cmd/id/ok). For a motor node
+ * the hub resends over the mesh and reports ok:false / motor_node_no_ack if
+ * the node never answered. Resolves with the ack payload - check .ok.
+ */
+export async function sendCommandAwaitAck(auth, { farmId, nodeId, motorNum, cmd, maxWaitMs = 20000, pollIntervalMs = 1500, ...params }) {
+  const id = Date.now();
+  await sendDeviceCommand(auth, { farmId, nodeId, motorNum, cmd, id, ...params });
+
+  const deadline = Date.now() + maxWaitMs;
+  const eventType = `motor${motorNum}_response`;
+
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, pollIntervalMs));
+
+    const events = await fetchDeviceEvents(auth, farmId, maxWaitMs + 5000);
+    const ack = events.find(e => e.event_type === eventType && Number(e.payload?.id) === id && e.payload?.cmd);
+    if (ack) return ack.payload;
+  }
+
+  throw new Error("No reply from the device - it may be offline. Check the device before retrying.");
+}

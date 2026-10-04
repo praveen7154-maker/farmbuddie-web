@@ -15,7 +15,7 @@
  * Each phase is pushed on its own - set_vi_calibration keeps every field
  * it isn't given. */
 
-import { sendDeviceCommand, fetchConfigReadback } from "/js/device-commands.js";
+import { sendDeviceCommand, sendCommandAwaitAck, fetchConfigReadback } from "/js/device-commands.js";
 
 const MOTOR_NUMS = ["1", "2", "3", "4"];
 let motorNum = "1";       // the motor the Control / VI / Safety sections act on
@@ -61,9 +61,11 @@ function setNote(id, text, kind) {
 async function runCommand(cmd, extraParams = {}, { confirmMessage } = {}) {
   if (!farm) return;
   if (confirmMessage && !confirm(confirmMessage)) return;
+  setNote("controlNote", `Sending ${cmd} to Motor ${motorNum}…`);
   try {
-    await sendDeviceCommand(auth, { ...target(), cmd, ...extraParams });
-    setNote("controlNote", `Sent: ${cmd}`, "success");
+    const ack = await sendCommandAwaitAck(auth, { ...target(), cmd, ...extraParams });
+    if (ack.ok) setNote("controlNote", `Motor ${motorNum}: ${cmd} done.`, "success");
+    else setNote("controlNote", `Motor ${motorNum} refused ${cmd}: ${ack.error || "unknown error"}`, "error");
   } catch (err) {
     console.error(`Command ${cmd} failed:`, err);
     setNote("controlNote", err.message, "error");
@@ -240,7 +242,7 @@ async function saveSafety() {
 
   setNote("safetyNote", "Saving…");
   try {
-    await sendDeviceCommand(auth, {
+    const ack = await sendCommandAwaitAck(auth, {
       ...target(),
       cmd: "set_thresholds",
       phase_mode: phaseMode,
@@ -256,7 +258,8 @@ async function saveSafety() {
       dol_pulse_ms: num("fs_dolPulseMs"),
       confirm_timeout_sec: num("fs_confirmTimeoutSec")
     });
-    setNote("safetyNote", "Sent to the device.", "success");
+    if (ack.ok) setNote("safetyNote", `Saved on Motor ${motorNum}.`, "success");
+    else setNote("safetyNote", `Motor ${motorNum} rejected the change: ${ack.error || "unknown error"}`, "error");
   } catch (err) {
     console.error("Save safety config failed:", err);
     setNote("safetyNote", err.message, "error");
@@ -328,7 +331,7 @@ export function initDeviceControl(firebaseAuth) {
 
   on("calFetch", fetchConstants);
   on("calRefreshReading", async () => {
-    await runCommand("get_status");
+    sendDeviceCommand(auth, { ...target(), cmd: "get_status" }).catch(() => {});
     setNote("calNote", "Asked the device for a fresh reading - the Device Reading column updates when it arrives.");
   });
 }
