@@ -3,6 +3,7 @@ import { auth } from "../firebaseAdmin.js";
 import { canAccessFarm } from "./ownership.js";
 import { getCachedConfigsForFarm } from "./farmConfigCache.js";
 import { loadLastHealthMessage } from "./firestoreMirror.js";
+import { normalizeMotorNum } from "./motorNumbers.js";
 
 // How long the app must wait between two commands landing on the SAME
 // farm's device - was per-phone client-side spacing (PumpRepository.kt's
@@ -172,7 +173,7 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
 
         try {
           await queueCommand(farmId, () => publishCommand(farmId, nodeId, motorNum, { cmd, ...params }));
-          console.log(`[live] farm ${farmId}: ${cmd} -> ${nodeId}/motor/${motorNum === "2" ? "2" : "1"}`);
+          console.log(`[live] farm ${farmId}: ${cmd} -> ${nodeId}/motor/${normalizeMotorNum(motorNum)}`);
         } catch (err) {
           console.error(`[bridge] live command failed for farm ${farmId}:`, err.message);
         }

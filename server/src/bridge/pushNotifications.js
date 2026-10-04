@@ -1,5 +1,6 @@
 import { db, messaging } from "../firebaseAdmin.js";
 import { config } from "../config.js";
+import { normalizeMotorNum } from "./motorNumbers.js";
 
 // Which device alerts are worth a push - mirrors the Irrigo app's own
 // PumpCodes.isPushWorthy() (and the EVENT_* codes in the Motor firmware's
@@ -68,13 +69,13 @@ const EVENT_TEXT = {
   57: "A valve was closed while running - the motor was stopped for safety",
   64: "Voltage restored",
   65: "Controller restarted while the motor was running - it is being monitored again",
-  66: "Motor stopped - both motors together exceed the sanctioned HP",
-  67: "Motor not started - the sanctioned HP is already in use by the other motor",
+  66: "Motor stopped - the running motors together exceed the sanctioned HP",
+  67: "Motor not started - the sanctioned HP is already in use by the other motors",
   68: "A scheduled cyclic could not start - another cyclic program was already running"
 };
 
 function buildNotification(nodeId, motorNum, payload) {
-  const motorLabel = motorNum === "2" ? "Motor 2" : "Motor 1";
+  const motorLabel = `Motor ${normalizeMotorNum(motorNum)}`;
   const { event, fault } = payload;
   if (typeof fault === "number" && fault !== 0 && event === fault) {
     return { title: motorLabel, body: FAULT_TEXT[fault] || "Fault - the motor was stopped" };

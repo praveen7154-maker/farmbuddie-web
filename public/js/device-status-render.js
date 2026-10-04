@@ -49,14 +49,16 @@ export function isDeviceOnline(deviceStatus) {
 /**
  * Real shape: deviceStatus.motor1/motor2, the firmware's raw `status`
  * topic payload (state/fault are integer codes, v/i are {r,y,b} phase
- * readings) - see Irrigo app's model/PumpModels.kt PumpStatus. motor2
- * only exists here at all once this farm's Motor_2 has ever published a
- * status (i.e. it's paired).
+ * readings) - see Irrigo app's model/PumpModels.kt PumpStatus. motor2..
+ * motor4 only exist here once that motor node has ever published a status
+ * (i.e. it's paired).
  */
 export function renderMotorsInto(grid, data, isOnline) {
   grid.innerHTML = "";
 
-  ["motor1", "motor2"].forEach((key, index) => {
+  // Motor 1 = the hub's own; motor2..motor4 = motor nodes (see the bridge's
+  // motorNumbers.js) - a card only for those that have ever reported.
+  ["motor1", "motor2", "motor3", "motor4"].forEach((key, index) => {
 
     if (!(key in data)) return; // never paired/never reported - no card at all
 

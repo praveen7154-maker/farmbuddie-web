@@ -52,7 +52,7 @@ export function otaAdminAuthRules() {
 // the bridge can't create a valid one itself).
 export function bridgeAuthRules() {
   return {
-    pubAuthRulePatterns: ["farm/[^/]+/[^/]+/motor/[12]/cmd", "farm/[^/]+/[^/]+/ota/cmd", OTA_BROADCAST_TOPIC],
+    pubAuthRulePatterns: ["farm/[^/]+/[^/]+/motor/[1-4]/cmd", "farm/[^/]+/[^/]+/ota/cmd", OTA_BROADCAST_TOPIC],
     subAuthRulePatterns: ["farm/[^/]+/.*"]
   };
 }

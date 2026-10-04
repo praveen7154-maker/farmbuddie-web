@@ -1,5 +1,6 @@
 import { db } from "../firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
+import { normalizeMotorNum } from "./motorNumbers.js";
 
 // farmId (controllers.uniqueId, e.g. "0003") -> farmers/{docId} — resolved
 // once per farmId and cached, since every incoming MQTT message would
@@ -44,7 +45,7 @@ export async function mirrorStatus(farmId, nodeId, motorNum, payload) {
     return;
   }
 
-  const motorKey = motorNum === "2" ? "motor2" : "motor1";
+  const motorKey = `motor${normalizeMotorNum(motorNum)}`;
 
   // update() with field paths REPLACES deviceStatus.motor1/motor2 as a
   // whole. set(..., { merge: true }) deep-merged it instead, so a field the

@@ -8,6 +8,7 @@ import { setCachedConfigFromResponse } from "./farmConfigCache.js";
 import { createTnebSync, loadFarmElectrical } from "./farmElectrical.js";
 import { createSmsSync, loadMainFarmerNumber } from "./farmSms.js";
 import { db } from "../firebaseAdmin.js";
+import { normalizeMotorNum } from "./motorNumbers.js";
 
 let client = null;
 // When the bridge last (re)subscribed - see isRetainedReplay().
@@ -29,7 +30,7 @@ function isRetainedReplay(packet) {
  *   farm/<farmId>/<nodeId>/motor/<motorNum>/cmd|status|response
  *   farm/<farmId>/<nodeId>/ota/cmd|status
  *   farm/<farmId>/<nodeId>/health
- * motorNum is "1" (this hub's own directly-wired motor) or "2" (a linked
+ * motorNum is "1" (this hub's own directly-wired motor) or "2".."4" (a linked
  * Motor_2 over the mesh) — motor NUMBERING, not the two-pump-changeover
  * "pumpA/pumpB" naming an earlier design used.
  * Returns null for anything that doesn't match, so callers can skip a
@@ -289,7 +290,7 @@ export function publishCommand(farmId, nodeId, motorNum, commandPayload) {
     throw new Error("Bridge is not connected to TBMQ");
   }
 
-  const motor = motorNum === "2" ? "2" : "1";
+  const motor = normalizeMotorNum(motorNum);
   const topic = `farm/${farmId}/${nodeId}/motor/${motor}/cmd`;
 
   return new Promise((resolve, reject) => {

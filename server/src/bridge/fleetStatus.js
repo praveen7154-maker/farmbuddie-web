@@ -1,4 +1,5 @@
 import { db } from "../firebaseAdmin.js";
+import { MOTOR_NUMBERS } from "./motorNumbers.js";
 
 // Same "still talking to the broker" threshold as the web admin panel's
 // own isDeviceOnline() (public/js/device-status-render.js) and device-view.js
@@ -42,8 +43,7 @@ export async function getFleetStatus() {
       lastSeen: lastSeenMs,
       deviceStatus: deviceStatus
         ? {
-            motor1: deviceStatus.motor1 || null,
-            motor2: deviceStatus.motor2 || null,
+            ...Object.fromEntries(MOTOR_NUMBERS.map((n) => [`motor${n}`, deviceStatus[`motor${n}`] || null])),
             health: deviceStatus.health || null,
           }
         : null,

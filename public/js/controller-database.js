@@ -302,9 +302,16 @@ function onlinePill(online) {
  * The master (the hub itself - it has no BLE pairing, so it isn't in
  * pairedUnits) first, then every node paired from the Irrigo app
  * (farmers/{id}.pairedUnits). Online states come from the hub's own live
- * reports (deviceStatus): its lastSeen for the master, Motor 2's relayed
+ * reports (deviceStatus): its lastSeen for the master, each motor node's relayed
  * status, and the valves-topic snapshot's node list for valve nodes.
  */
+// A motor node's relayed status ("MOTOR_3" -> deviceStatus.motor3), if it
+// has ever reported.
+function motorNodeStatus(ds, nodeLabel) {
+  const m = /^MOTOR_(\d+)$/.exec(String(nodeLabel || ""));
+  return m ? ds[`motor${m[1]}`] : null;
+}
+
 function pairedHardwareHtml(f) {
   const ds = f.deviceStatus || {};
   const health = ds.health || {};
@@ -330,7 +337,7 @@ function pairedHardwareHtml(f) {
     rows.push(`
       <div class="info-item">
         <b>${escHtml(u.nodeLabel)}</b> (Motor Node)${extra}
-        ${ds.motor2 ? onlinePill(isDeviceOnline(ds)) : ""}
+        ${motorNodeStatus(ds, u.nodeLabel) ? onlinePill(isDeviceOnline(ds)) : ""}
       </div>
     `);
   }

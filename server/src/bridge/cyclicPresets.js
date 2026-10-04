@@ -1,6 +1,8 @@
+import { PUMP_LETTERS } from "./motorNumbers.js";
+
 // A farm's saved "Motor Only" cyclic programs (ON/OFF timers), shared by
 // every phone on the farm - the plain-cyclic twin of valveSequences.js.
-// Kept per motor ("A" = Motor 1, "B" = Motor 2), one Firestore doc each:
+// Kept per motor ("A" = Motor 1, "B" = Motor 2, "C" = Motor 3 ...), one Firestore doc each:
 // farmCyclicPresets/<farmId>_<pump>.
 
 export const MAX_PRESETS = 5;              // Irrigo's MAX_PRESETS_PER_PUMP
@@ -9,7 +11,7 @@ export const MAX_PHASE_SEC = 24 * 3600;
 const intIn = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
 
 export function validPump(pump) {
-  return pump === "A" || pump === "B";
+  return PUMP_LETTERS.includes(pump);
 }
 
 // Returns the cleaned list, or throws { status: 400, message } on bad input.
