@@ -16,8 +16,10 @@ import { OTA_SIGNING_PUBLIC_KEY_PEM } from "./otaSigningKey.js";
 // without Postgres/MQTT/Firestore - see createOtaModule().
 
 export const OTA_BROADCAST_TOPIC = "motor/ota/broadcast";
-// ESP32 app slot (partitions: 2 x 1.25 MB). Anything bigger can't be flashed.
-export const MAX_FIRMWARE_BYTES = 1310720;
+// ESP32 app slot (min_spiffs partitions: 2 x 1.875 MB). Anything bigger can't
+// be flashed. A hub still on the old 2 x 1.25 MB table refuses an image too big
+// for it on its own (Update.begin fails) and reports the OTA as failed.
+export const MAX_FIRMWARE_BYTES = 1966080;
 const ESP_IMAGE_MAGIC = 0xe9;
 const VERSION_RE = /^[A-Za-z0-9._-]{1,32}$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
