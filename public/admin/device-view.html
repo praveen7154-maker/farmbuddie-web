@@ -95,6 +95,14 @@
 <h4 class="section-title">🎛️ Control</h4>
 <section class="card-industrial">
   <div class="fleet-btn-row">
+    <label>Motor:
+      <select id="ctlMotorSelect">
+        <option value="1">Motor 1</option>
+      </select>
+    </label>
+    <span class="fleet-form-note">Control, VI Calibration and Safety Limits below act on this motor.</span>
+  </div>
+  <div class="fleet-btn-row">
     <button class="fb-btn-primary small" id="ctlGetStatus">🔄 Get Status</button>
     <button class="fb-btn-primary small" id="ctlLightOn">💡 Light On</button>
     <button class="fb-btn-primary small" id="ctlLightOff">🔌 Light Off</button>
@@ -110,7 +118,7 @@
 
 <!-- VI CALIBRATION -->
 <details class="card-industrial fleet-section" open>
-  <summary class="section-title">🎚️ VI Calibration (Motor 1)</summary>
+  <summary class="section-title">🎚️ VI Calibration (<span class="ctlMotorLabel">Motor 1</span>)</summary>
   <p class="cal-help">
     1. Press <b>Fetch Device Constants</b>. 2. Measure the phase with a multimeter (voltage) or clamp meter
     (current - motor running) and enter it. 3. <b>Calculate</b> - new constant = constant × meter ÷ device reading.
@@ -142,7 +150,7 @@
 
 <!-- SAFETY LIMITS -->
 <details class="card-industrial fleet-section">
-  <summary class="section-title">🛡️ Safety Limits (Motor 1)</summary>
+  <summary class="section-title">🛡️ Safety Limits (<span class="ctlMotorLabel">Motor 1</span>)</summary>
   <div class="fleet-btn-row">
     <label>Phase Group:
       <select id="safetyPhaseGroup">

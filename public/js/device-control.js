@@ -2,7 +2,10 @@
  * safety limits and VI calibration (moved here from the Analytics page's
  * side panel so everything for one device is on one page).
  *
- * v1 scope: Motor 1 (the hub, motorNum "1").
+ * Acts on the motor picked in the Motor selector: "1" is the hub's own
+ * motor, "2".."4" are motor nodes (relayed by the hub over the mesh - see
+ * the bridge's motorNumbers.js). The selector lists only motors that have
+ * reported a status (deviceStatus.motor<N>).
  *
  * VI calibration: the hub computes every reading as
  *   reading = sensor RMS x constant
@@ -14,7 +17,8 @@
 
 import { sendDeviceCommand, fetchConfigReadback } from "/js/device-commands.js";
 
-const MOTOR_NUM = "1";
+const MOTOR_NUMS = ["1", "2", "3", "4"];
+let motorNum = "1";       // the motor the Control / VI / Safety sections act on
 
 // The hub rejects a constant outside this range (vi_sensor.cpp VI_CAL_MIN/MAX).
 const CAL_MIN = 1;
@@ -32,8 +36,8 @@ const CAL_ROWS = [
 let auth = null;
 let farm = null;          // latest farmer doc
 let deviceCal = null;     // last config_vi read from the hub
-let lastMotor1Json = "";
-let readingAt = null;     // when the live motor 1 reading last changed
+let lastMotorJson = "";
+let readingAt = null;     // when the selected motor's live reading last changed
 
 const $ = (id) => document.getElementById(id);
 
@@ -41,9 +45,11 @@ function target() {
   return {
     farmId: farm?.controller?.uniqueId,
     nodeId: farm?.deviceStatus?.nodeId || "MOTOR_1",
-    motorNum: MOTOR_NUM
+    motorNum
   };
 }
+
+const selectedMotor = () => farm?.deviceStatus?.[`motor${motorNum}`];
 
 function setNote(id, text, kind) {
   const el = $(id);
@@ -100,12 +106,12 @@ function setRowNote(key, text, kind) {
 }
 
 function renderCalValues() {
-  const motor1 = farm?.deviceStatus?.motor1;
+  const motor = selectedMotor();
   for (const { key, unit, reading } of CAL_ROWS) {
     const c = $(`calConst_${key}`);
     if (c) c.textContent = deviceCal ? fmt(deviceCal[key]) : "--";
     const r = $(`calReading_${key}`);
-    const value = reading(motor1);
+    const value = reading(motor);
     if (r) r.textContent = value == null ? "--" : `${value} ${unit}`;
   }
   const at = $("calReadingAt");
@@ -115,7 +121,7 @@ function renderCalValues() {
 function calculate(key) {
   const row = CAL_ROWS.find((r) => r.key === key);
   const oldConst = deviceCal?.[key];
-  const deviceReading = Number(row.reading(farm?.deviceStatus?.motor1));
+  const deviceReading = Number(row.reading(selectedMotor()));
   const meter = Number($(`calMeter_${key}`).value);
 
   if (oldConst == null) return setRowNote(key, "Press \"Fetch Device Constants\" first.", "error");
@@ -257,6 +263,46 @@ async function saveSafety() {
   }
 }
 
+/* ================= MOTOR SELECTOR ================= */
+
+// Motors that have reported a status; Motor 1 (the hub) always.
+function availableMotors() {
+  const ds = farm?.deviceStatus || {};
+  return MOTOR_NUMS.filter((n) => n === "1" || `motor${n}` in ds);
+}
+
+function renderMotorSelect() {
+  const sel = $("ctlMotorSelect");
+  if (!sel) return;
+  const nums = availableMotors();
+  const current = Array.from(sel.options).map((o) => o.value).join(",");
+  if (current !== nums.join(",")) {
+    sel.innerHTML = nums.map((n) => `<option value="${n}">Motor ${n}</option>`).join("");
+  }
+  if (!nums.includes(motorNum)) selectMotor("1");
+  sel.value = motorNum;
+}
+
+function selectMotor(n) {
+  if (n === motorNum) return;
+  motorNum = n;
+  // Constants, readings and limits belong to the previous motor - clear them.
+  deviceCal = null;
+  lastMotorJson = JSON.stringify(selectedMotor() ?? null);
+  readingAt = farm?.deviceStatus?.lastSeen?.toDate?.() ?? null;
+  document.querySelectorAll(".ctlMotorLabel").forEach((el) => { el.textContent = `Motor ${n}`; });
+  for (const { key } of CAL_ROWS) {
+    $(`calMeter_${key}`).value = "";
+    $(`calNew_${key}`).value = "";
+    setRowNote(key, "");
+  }
+  document.querySelectorAll("[id^='fs_']").forEach((el) => { el.value = ""; });
+  setNote("controlNote", "");
+  setNote("calNote", "");
+  setNote("safetyNote", "");
+  renderCalValues();
+}
+
 /* ================= WIRING ================= */
 
 export function initDeviceControl(firebaseAuth) {
@@ -275,6 +321,8 @@ export function initDeviceControl(firebaseAuth) {
     confirmMessage: "⚠️ EMERGENCY STOP - this immediately halts the motor. Continue?"
   }));
 
+  $("ctlMotorSelect")?.addEventListener("change", (e) => selectMotor(e.target.value));
+
   on("safetyFetch", fetchSafety);
   on("safetySave", saveSafety);
 
@@ -288,11 +336,12 @@ export function initDeviceControl(firebaseAuth) {
 /* Called with every Firestore snapshot of the farmer doc. */
 export function updateDeviceControl(farmerData) {
   farm = farmerData;
-  const motor1Json = JSON.stringify(farmerData?.deviceStatus?.motor1 ?? null);
-  if (motor1Json !== lastMotor1Json) {
+  renderMotorSelect();
+  const motorJson = JSON.stringify(selectedMotor() ?? null);
+  if (motorJson !== lastMotorJson) {
     // First snapshot: best guess is the last time the device reported at all.
-    readingAt = lastMotor1Json ? new Date() : (farmerData?.deviceStatus?.lastSeen?.toDate?.() ?? null);
-    lastMotor1Json = motor1Json;
+    readingAt = lastMotorJson ? new Date() : (farmerData?.deviceStatus?.lastSeen?.toDate?.() ?? null);
+    lastMotorJson = motorJson;
   }
   renderCalValues();
 }
