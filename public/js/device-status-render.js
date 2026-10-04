@@ -47,22 +47,47 @@ export function isDeviceOnline(deviceStatus) {
 }
 
 /**
+ * Motor nodes (motor "2".."4") the hub reports as paired, and whether each
+ * is online - from the hub's own status (motor1.motor_nodes: {"2": true,
+ * "3": false}; motor2_online on hub firmware from before that field).
+ * A node's own relayed status (deviceStatus.motor<N>) stays in Firestore
+ * after it stops reporting, so it can't tell either of these.
+ */
+export function motorNodeFlags(deviceStatus) {
+  const hub = deviceStatus?.motor1 || {};
+  if (hub.motor_nodes && typeof hub.motor_nodes === "object") return { ...hub.motor_nodes };
+  if (typeof hub.motor2_online === "boolean") return { "2": hub.motor2_online };
+  return {};
+}
+
+/** Online = the hub is online AND it reports this motor node online. "1" is the hub itself. */
+export function isMotorOnline(deviceStatus, motorNum) {
+  if (!isDeviceOnline(deviceStatus)) return false;
+  return String(motorNum) === "1" || motorNodeFlags(deviceStatus)[String(motorNum)] === true;
+}
+
+/**
  * Real shape: deviceStatus.motor1/motor2, the firmware's raw `status`
  * topic payload (state/fault are integer codes, v/i are {r,y,b} phase
  * readings) - see Irrigo app's model/PumpModels.kt PumpStatus. motor2..
  * motor4 only exist here once that motor node has ever published a status
  * (i.e. it's paired).
  */
-export function renderMotorsInto(grid, data, isOnline) {
+export function renderMotorsInto(grid, data, hubOnline) {
   grid.innerHTML = "";
 
   // Motor 1 = the hub's own; motor2..motor4 = motor nodes (see the bridge's
-  // motorNumbers.js) - a card only for those that have ever reported.
+  // motorNumbers.js) - a card only for those the hub reports as paired.
+  const paired = motorNodeFlags(data);
   ["motor1", "motor2", "motor3", "motor4"].forEach((key, index) => {
 
-    if (!(key in data)) return; // never paired/never reported - no card at all
+    const num = String(index + 1);
+    if (num !== "1" && !(num in paired)) return; // not paired (or removed) - no card
+    if (!(key in data) && num === "1") return;
 
     const motor = data[key] || {};
+    // A node card is live only while the hub says that node is online.
+    const isOnline = hubOnline && (num === "1" || paired[num] === true);
 
     const stateLabel = isOnline ? (STATE_LABELS[motor.state] ?? `Code ${motor.state}`) : "--";
     const faultLabel = isOnline ? FAULT_LABELS[motor.fault] : null;

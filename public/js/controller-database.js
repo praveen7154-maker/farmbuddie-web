@@ -1,6 +1,6 @@
 import { auth, db } from "/js/firebase-init.js";
 import { valveConfigViewHtml } from "/js/valve-config.js";
-import { isDeviceOnline } from "/js/device-status-render.js";
+import { isDeviceOnline, isMotorOnline } from "/js/device-status-render.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -305,11 +305,10 @@ function onlinePill(online) {
  * reports (deviceStatus): its lastSeen for the master, each motor node's relayed
  * status, and the valves-topic snapshot's node list for valve nodes.
  */
-// A motor node's relayed status ("MOTOR_3" -> deviceStatus.motor3), if it
-// has ever reported.
-function motorNodeStatus(ds, nodeLabel) {
+// "MOTOR_3" -> "3"; null for anything else.
+function motorNumberOf(nodeLabel) {
   const m = /^MOTOR_(\d+)$/.exec(String(nodeLabel || ""));
-  return m ? ds[`motor${m[1]}`] : null;
+  return m ? m[1] : null;
 }
 
 function pairedHardwareHtml(f) {
@@ -337,7 +336,7 @@ function pairedHardwareHtml(f) {
     rows.push(`
       <div class="info-item">
         <b>${escHtml(u.nodeLabel)}</b> (Motor Node)${extra}
-        ${motorNodeStatus(ds, u.nodeLabel) ? onlinePill(isDeviceOnline(ds)) : ""}
+        ${motorNumberOf(u.nodeLabel) ? onlinePill(isMotorOnline(ds, motorNumberOf(u.nodeLabel))) : ""}
       </div>
     `);
   }

@@ -1,6 +1,6 @@
 import { db } from "../firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
-import { normalizeMotorNum } from "./motorNumbers.js";
+import { MOTOR_NUMBERS, normalizeMotorNum } from "./motorNumbers.js";
 
 // farmId (controllers.uniqueId, e.g. "0003") -> farmers/{docId} — resolved
 // once per farmId and cached, since every incoming MQTT message would
@@ -51,11 +51,24 @@ export async function mirrorStatus(farmId, nodeId, motorNum, payload) {
   // whole. set(..., { merge: true }) deep-merged it instead, so a field the
   // hub stopped sending (the per-valve lists moved to the valves topic)
   // stayed in Firestore forever with its last value.
-  await db.collection("farmers").doc(farmerDocId).update({
+  const update = {
     "deviceStatus.nodeId": nodeId,
     "deviceStatus.lastSeen": new Date(),
     [`deviceStatus.${motorKey}`]: payload
-  });
+  };
+  // The hub's own status lists every paired motor node (motor_nodes,
+  // omitted when there are none). A node removed from the farm otherwise
+  // kept its last relayed status here forever, and the web panel kept
+  // showing it as a live motor.
+  if (motorKey === "motor1" && payload && typeof payload === "object" && "state" in payload) {
+    const paired = payload.motor_nodes && typeof payload.motor_nodes === "object" ? payload.motor_nodes : {};
+    for (const n of MOTOR_NUMBERS) {
+      if (n === "1" || n in paired) continue;
+      if (n === "2" && typeof payload.motor2_online === "boolean") continue;   // hub firmware from before motor_nodes
+      update[`deviceStatus.motor${n}`] = FieldValue.delete();
+    }
+  }
+  await db.collection("farmers").doc(farmerDocId).update(update);
 }
 
 /**

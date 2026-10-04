@@ -16,6 +16,7 @@
  * it isn't given. */
 
 import { sendDeviceCommand, sendCommandAwaitAck, fetchConfigReadback } from "/js/device-commands.js";
+import { motorNodeFlags } from "/js/device-status-render.js";
 
 const MOTOR_NUMS = ["1", "2", "3", "4"];
 let motorNum = "1";       // the motor the Control / VI / Safety sections act on
@@ -268,10 +269,10 @@ async function saveSafety() {
 
 /* ================= MOTOR SELECTOR ================= */
 
-// Motors that have reported a status; Motor 1 (the hub) always.
+// Motor 1 (the hub) always, plus the motor nodes the hub reports as paired.
 function availableMotors() {
-  const ds = farm?.deviceStatus || {};
-  return MOTOR_NUMS.filter((n) => n === "1" || `motor${n}` in ds);
+  const paired = motorNodeFlags(farm?.deviceStatus);
+  return MOTOR_NUMS.filter((n) => n === "1" || n in paired);
 }
 
 function renderMotorSelect() {
