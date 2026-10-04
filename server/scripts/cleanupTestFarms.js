@@ -5,17 +5,29 @@
 // the fleet is touched.
 //
 // Usage (from server/, or inside the bridge/provision-api container):
-//   node scripts/cleanupTestFarms.js                # dry run - prints what would happen
-//   node scripts/cleanupTestFarms.js --apply         # actually deletes
+//   node scripts/cleanupTestFarms.js --farms=0001,0002 --phones=9944639988            # dry run
+//   node scripts/cleanupTestFarms.js --farms=0001,0002 --phones=9944639988 --apply    # deletes
+//   ... --all-events   also empties device_events / farm_config_cache for EVERY
+//                      farm (a full test reset), not just the farms listed
 import { db } from "../src/firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { findCredentialsByName, deleteCredentials } from "../src/tbmqClient.js";
 import { pool } from "../src/bridge/postgres.js";
 
-const FARM_IDS = ["0001", "0006"];
-const TEST_PHONE = "9944639988";
+function listArg(name) {
+  const a = process.argv.find((x) => x.startsWith(`--${name}=`));
+  return a ? a.slice(name.length + 3).split(",").map((v) => v.trim()).filter(Boolean) : [];
+}
+const FARM_IDS = listArg("farms");
+const TEST_PHONES = listArg("phones");
 
 const apply = process.argv.includes("--apply");
+const allEvents = process.argv.includes("--all-events");
+
+if (FARM_IDS.length === 0) {
+  console.error("Name the farms: --farms=0001,0002 (and the test phones: --phones=9944639988,...)");
+  process.exit(1);
+}
 
 async function deleteTbmqCredentialByName(name) {
   const existing = await findCredentialsByName(name);
@@ -129,12 +141,26 @@ async function cleanupPhone(phone) {
 
 async function main() {
   console.log(apply ? "APPLYING cleanup (writes will happen)..." : "DRY RUN - pass --apply to actually delete/modify anything");
-  console.log(`Scope: farmIds ${JSON.stringify(FARM_IDS)}, phone ${TEST_PHONE}`);
+  console.log(`Scope: farmIds ${JSON.stringify(FARM_IDS)}, phones ${JSON.stringify(TEST_PHONES)}${allEvents ? ", plus ALL event history" : ""}`);
 
   for (const farmId of FARM_IDS) {
     await cleanupFarm(farmId);
   }
-  await cleanupPhone(TEST_PHONE);
+  for (const phone of TEST_PHONES) {
+    await cleanupPhone(phone);
+  }
+
+  if (allEvents) {
+    console.log("\n=== all event history ===");
+    if (apply) {
+      await pool.query("TRUNCATE device_events RESTART IDENTITY");
+      await pool.query("TRUNCATE farm_config_cache");
+      console.log("  Postgres: device_events and farm_config_cache emptied");
+    } else {
+      const { rows } = await pool.query("SELECT count(*) FROM device_events");
+      console.log(`  Postgres: would empty device_events (${rows[0].count} rows) and farm_config_cache`);
+    }
+  }
 
   console.log("\nDone.");
   process.exit(0);
