@@ -2,7 +2,7 @@ import { WebSocketServer } from "ws";
 import { auth } from "../firebaseAdmin.js";
 import { canAccessFarm } from "./ownership.js";
 import { getCachedConfigsForFarm } from "./farmConfigCache.js";
-import { loadLastHealthMessage } from "./firestoreMirror.js";
+import { loadLastHealthMessage, loadLastStatusMessages } from "./firestoreMirror.js";
 import { normalizeMotorNum } from "./motorNumbers.js";
 
 // How long the app must wait between two commands landing on the SAME
@@ -151,6 +151,18 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
           if (msg && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
         })
         .catch((err) => console.error(`[bridge] live last-health send failed for farm ${farmId}:`, err.message));
+
+      // Last known motor status for every motor, marked as cached - Home
+      // shows the last readings at once instead of waiting on the GSM
+      // get_status round trip. The app keeps buttons disabled until a live
+      // status arrives and never lets a cached one replace a live one.
+      loadLastStatusMessages(farmId)
+        .then((msgs) => {
+          for (const m of msgs) {
+            if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ kind: "status_cache", ...m }));
+          }
+        })
+        .catch((err) => console.error(`[bridge] live last-status send failed for farm ${farmId}:`, err.message));
 
       // Latest valve grid straight away (see rememberValves()) - an idle hub
       // only resends it every 30 min.

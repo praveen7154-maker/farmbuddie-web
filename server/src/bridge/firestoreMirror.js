@@ -118,6 +118,32 @@ export async function mirrorValves(farmId, nodeId, payload) {
  * hub's diagnostics straight away instead of "unknown" until the next health
  * report (every 5 minutes). Null if the farm has none yet.
  */
+/**
+ * Each motor's last mirrored status (deviceStatus.motor1..motor4) as
+ * { topic, payload, ageSec } - sent to a phone the moment its live channel
+ * opens (see liveGateway.js), so Home can show the last known readings
+ * straight away instead of waiting on a get_status round trip over GSM.
+ * ageSec is from the hub's lastSeen; the phone treats these as cached, not
+ * live (see the app's PumpRepository).
+ */
+export async function loadLastStatusMessages(farmId) {
+  const farmerDocId = await resolveFarmerDocId(farmId);
+  if (!farmerDocId) return [];
+  const snap = await db.collection("farmers").doc(farmerDocId).get();
+  const deviceStatus = snap.exists ? snap.data().deviceStatus : null;
+  if (!deviceStatus?.nodeId) return [];
+  const lastSeen = deviceStatus.lastSeen?.toDate?.();
+  const ageSec = lastSeen ? Math.max(0, Math.round((Date.now() - lastSeen.getTime()) / 1000)) : null;
+  const out = [];
+  for (const n of ["1", "2", "3", "4"]) {
+    const payload = deviceStatus[`motor${n}`];
+    if (payload && typeof payload === "object") {
+      out.push({ topic: `farm/${farmId}/${deviceStatus.nodeId}/motor/${n}/status`, payload, ageSec });
+    }
+  }
+  return out;
+}
+
 export async function loadLastHealthMessage(farmId) {
   const farmerDocId = await resolveFarmerDocId(farmId);
   if (!farmerDocId) return null;
