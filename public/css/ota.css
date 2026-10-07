@@ -28,7 +28,7 @@
 .ota-field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 280px; font-size: 13px; color: #374151; }
 .ota-field.narrow { flex: 0 1 220px; }
 .ota-field small, .ota-radio small { color: #6b7280; }
-.ota-field input[type="text"], .ota-field input[type="password"], .ota-search {
+.ota-field input[type="text"], .ota-field input[type="password"], .ota-field select, .ota-search {
   padding: 10px 12px;
   border: 1px solid #d1d5db;
   border-radius: 10px;
@@ -46,6 +46,7 @@
 .ota-check-col { width: 36px; }
 .ota-note { font-size: 12.5px; color: #6b7280; margin: 8px 0; }
 .ota-muted { color: #6b7280; font-weight: normal; font-size: 14px; }
+.ota-subhead { font-size: 16px; margin: 18px 0 8px; }
 .ota-actions { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
 .ota-actions .fb-btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .ota-status-text { font-size: 13px; color: #374151; }

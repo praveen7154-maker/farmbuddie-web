@@ -12,6 +12,12 @@ import { OTA_SIGNING_PUBLIC_KEY_PEM } from "./otaSigningKey.js";
 //   - records every hub's farm/<id>/<node>/ota/status reply against the
 //     release, for the page's live progress table and summary.
 //
+// Node images (motor-node / valve / filter-backwash) go the same way to the
+// chosen farms' hubs as "node_ota_start": the hub downloads and stages the
+// image, then hands it to its nodes over mesh/LoRa/RS485 (Motor repo's
+// node_ota_server.h). Each node's progress comes back on the hub's
+// ota/status with a "node" field and is kept per node.
+//
 // Everything is injected (store, publish, fleet list) so it can be tested
 // without Postgres/MQTT/Firestore - see createOtaModule().
 
@@ -24,19 +30,27 @@ const ESP_IMAGE_MAGIC = 0xe9;
 const VERSION_RE = /^[A-Za-z0-9._-]{1,32}$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
 const FARM_RE = /^\d{1,6}$/;
-// Hub states from the firmware's OtaManager::publishStatus().
-const ACTIVE_STATES = new Set(["starting", "downloading", "verifying", "flashing"]);
-const BUSY_ERRORS = new Set(["pump_running", "already_in_progress"]);
+// Hub states from the firmware's OtaManager::publishStatus() - plus, for a
+// node image, "downloaded"/"staged" (the hub has it and is handing it out).
+const ACTIVE_STATES = new Set(["starting", "downloading", "verifying", "flashing", "downloaded"]);
+const BUSY_ERRORS = new Set(["pump_running", "already_in_progress", "hub_slot_busy"]);
 
-export function otaManifest(sha256, size, version) {
+export const PRODUCTS = ["hub", "motor-node", "valve", "filter-backwash"];
+export const isNodeProduct = (p) => PRODUCTS.includes(p) && p !== "hub";
+
+// Must match the firmware byte for byte: v1 = the hub's OtaManager, v2 (node
+// images, binds the product) = the node repos' NodeOta.
+export function otaManifest(sha256, size, version, product = "hub") {
+  if (isNodeProduct(product)) return `farmbuddie-ota-v2\n${product}\n${sha256.toLowerCase()}\n${size}\n${version}`;
   return `farmbuddie-ota-v1\n${sha256.toLowerCase()}\n${size}\n${version}`;
 }
 
-export function verifyReleaseSignature(sha256, size, version, signatureB64, publicKeyPem = OTA_SIGNING_PUBLIC_KEY_PEM) {
+export function verifyReleaseSignature(sha256, size, version, signatureB64, publicKeyPem = OTA_SIGNING_PUBLIC_KEY_PEM,
+                                       product = "hub") {
   try {
     return crypto.verify(
       "sha256",
-      Buffer.from(otaManifest(sha256, size, version)),
+      Buffer.from(otaManifest(sha256, size, version, product)),
       { key: publicKeyPem, dsaEncoding: "der" },
       Buffer.from(signatureB64, "base64")
     );
@@ -48,7 +62,7 @@ export function verifyReleaseSignature(sha256, size, version, signatureB64, publ
 // How a target row reads on the page / in the summary.
 export function outcomeOf(target) {
   const { state, error } = target;
-  if (state === "validated") return "updated";
+  if (state === "validated" || state === "staged") return "updated";
   if (state === "failed" && BUSY_ERRORS.has(error)) return "busy";
   if (state === "failed" || state === "rolled_back") return "failed";
   if (ACTIVE_STATES.has(state)) return "in_progress";
@@ -61,12 +75,31 @@ export function summarize(targets) {
   return s;
 }
 
+// A node's row: states from the nodes' NodeOtaLink (via the hub).
+//   receiving / installed (waiting for the hub's go-ahead to reboot) -> in progress
+//   validated (new firmware confirmed) / current (was already on it)  -> updated
+export function nodeOutcomeOf(node) {
+  const { state } = node;
+  if (state === "validated" || state === "current") return "updated";
+  if (state === "failed" || state === "rolled_back") return "failed";
+  if (state === "receiving" || state === "installed") return "in_progress";
+  return "waiting";
+}
+
+export function summarizeNodes(nodes) {
+  const s = { total: nodes.length, updated: 0, in_progress: 0, waiting: 0, busy: 0, failed: 0 };
+  for (const n of nodes) s[nodeOutcomeOf(n)]++;
+  return s;
+}
+
 export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publicKeyPem = OTA_SIGNING_PUBLIC_KEY_PEM, now = () => new Date() }) {
   const firmwareUrl = (sha256) => `${publicBaseUrl}/ota/firmware/${sha256}.bin`;
 
   function startPayload(release, size) {
+    const node = isNodeProduct(release.product);
     return {
-      cmd: "ota_start",
+      cmd: node ? "node_ota_start" : "ota_start",
+      ...(node ? { product: release.product } : {}),
       id: Date.now(),
       url: release.url,
       version: release.version,
@@ -123,20 +156,23 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
 
   adminRouter.post("/firmware", express.raw({ type: "application/octet-stream", limit: "2mb" }), async (req, res) => {
     const version = String(req.get("X-Firmware-Version") || "");
+    const product = String(req.get("X-Firmware-Product") || "hub");
     const data = req.body;
     if (!VERSION_RE.test(version)) return res.status(400).json({ error: "Version must be 1-32 letters/digits/._-" });
+    if (!PRODUCTS.includes(product)) return res.status(400).json({ error: `Unknown product "${product}"` });
     if (!Buffer.isBuffer(data) || data.length === 0) return res.status(400).json({ error: "Empty upload - send the .bin as application/octet-stream" });
+    // A node image is staged in the hub's spare app slot, so the same limit applies.
     if (data.length > MAX_FIRMWARE_BYTES) return res.status(400).json({ error: `Firmware is ${data.length} bytes - more than the hub's ${MAX_FIRMWARE_BYTES}-byte app slot` });
     if (data[0] !== ESP_IMAGE_MAGIC) return res.status(400).json({ error: "Not an ESP32 firmware image - choose .pio/build/esp32dev/firmware.bin" });
     if (!data.includes(Buffer.from(publicKeyPem))) {
       return res.status(400).json({
-        error: "This firmware doesn't contain the fleet's OTA public key (include/ota_signing_key.h). Hubs running it would refuse every later update - rebuild from the current Motor repo."
+        error: "This firmware doesn't contain the fleet's OTA public key (include/ota_signing_key.h). Devices running it would refuse every later update - rebuild from the current repo."
       });
     }
     try {
       const sha256 = crypto.createHash("sha256").update(data).digest("hex");
-      await store.saveFirmware({ sha256, version, size: data.length, data, uploadedBy: req.decodedToken.email });
-      return res.json({ sha256, size: data.length, version, url: firmwareUrl(sha256) });
+      await store.saveFirmware({ sha256, version, product, size: data.length, data, uploadedBy: req.decodedToken.email });
+      return res.json({ sha256, size: data.length, version, product, url: firmwareUrl(sha256) });
     } catch (err) {
       console.error("[ota] firmware save failed:", err);
       return res.status(500).json({ error: "Failed to store the firmware" });
@@ -145,6 +181,7 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
 
   adminRouter.post("/releases", express.json(), async (req, res) => {
     const { sha256, version, signature, target } = req.body || {};
+    const product = String(req.body?.product || "hub");
     if (!SHA_RE.test(String(sha256)) || !VERSION_RE.test(String(version)) || typeof signature !== "string") {
       return res.status(400).json({ error: "sha256, version and signature are required" });
     }
@@ -152,12 +189,20 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
       const fw = await store.getFirmwareMeta(sha256);
       if (!fw) return res.status(404).json({ error: "Upload the firmware first" });
       if (fw.version !== version) return res.status(409).json({ error: `That file was uploaded as version ${fw.version}, not ${version}` });
-      if (!verifyReleaseSignature(sha256, fw.size, version, signature, publicKeyPem)) {
-        return res.status(400).json({ error: "Signature doesn't verify against the hubs' key - wrong .pem?" });
+      if ((fw.product || "hub") !== product) {
+        return res.status(409).json({ error: `That file was uploaded as a ${fw.product || "hub"} image, not ${product}` });
+      }
+      if (!verifyReleaseSignature(sha256, fw.size, version, signature, publicKeyPem, product)) {
+        return res.status(400).json({ error: "Signature doesn't verify against the devices' key - wrong .pem?" });
       }
 
       const fleet = await listFleet();
       const all = target === "all";
+      // Each hub downloads, stages and restarts for a node image - only to
+      // the farms picked, never the whole fleet at once.
+      if (all && isNodeProduct(product)) {
+        return res.status(400).json({ error: "Node updates go to selected farms only" });
+      }
       let targets;
       if (all) {
         targets = fleet;
@@ -174,7 +219,7 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
       if (targets.length === 0) return res.status(400).json({ error: "No farms to update" });
 
       const release = {
-        sha256, version, signature, url: firmwareUrl(sha256),
+        sha256, version, signature, product, url: firmwareUrl(sha256),
         mode: all ? "all" : "farms", createdBy: req.decodedToken.email
       };
       const releaseId = await store.createRelease(release, targets.map((t) => ({ farmId: t.farmId, nodeId: t.nodeId })), now());
@@ -196,7 +241,11 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     try {
       const releases = await store.listReleases(30);
       return res.json({
-        releases: releases.map((r) => ({ ...r.release, summary: summarize(r.targets) }))
+        releases: releases.map((r) => ({
+          ...r.release,
+          summary: summarize(r.targets),
+          ...(isNodeProduct(r.release.product) ? { nodeSummary: summarizeNodes(r.nodes || []) } : {})
+        }))
       });
     } catch (err) {
       console.error("[ota] list failed:", err);
@@ -208,10 +257,14 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     try {
       const r = await store.getRelease(Number(req.params.id));
       if (!r) return res.status(404).json({ error: "No such release" });
+      const nodes = r.nodes || [];
       return res.json({
         release: r.release,
         summary: summarize(r.targets),
-        targets: r.targets.map((t) => ({ ...t, outcome: outcomeOf(t) }))
+        targets: r.targets.map((t) => ({ ...t, outcome: outcomeOf(t) })),
+        ...(isNodeProduct(r.release.product)
+          ? { nodeSummary: summarizeNodes(nodes), nodes: nodes.map((n) => ({ ...n, outcome: nodeOutcomeOf(n) })) }
+          : {})
       });
     } catch (err) {
       console.error("[ota] get failed:", err);
@@ -244,7 +297,11 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
   async function handleOtaStatus(farmId, payload) {
     if (!payload || payload.type !== "ota_status" || typeof payload.state !== "string") return;
     try {
-      await store.recordStatus(farmId, payload, now());
+      if (typeof payload.node === "string" && payload.node && payload.node !== "hub") {
+        await store.recordNodeStatus(farmId, payload, now());   // one node's progress on a node image
+      } else {
+        await store.recordStatus(farmId, payload, now());       // the hub's own update, or its staging step
+      }
     } catch (err) {
       console.error("[ota] status record failed:", err);
     }

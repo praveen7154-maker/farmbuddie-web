@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "bridge": "node src/bridge/index.js"
+    "bridge": "node src/bridge/index.js",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"

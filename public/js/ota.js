@@ -29,11 +29,28 @@ const ERROR_TEXT = {
   chunked_not_supported: "Download server used chunked transfer",
   too_many_redirects: "Too many redirects on the download link",
   connect_failed: "Couldn't reach the download server",
-  no_response: "Download server didn't answer"
+  no_response: "Download server didn't answer",
+  // Node images - hub staging step and the units themselves.
+  hub_slot_busy: "Hub's own last update isn't confirmed yet - retry in a few minutes",
+  unknown_product: "Hub firmware doesn't know this kind of unit - update the hub first",
+  image_too_big: "Image too big for the slot",
+  no_ota_slot: "Unit still on the old flash layout - needs one USB flash",
+  wrong_product: "Image is for another kind of unit",
+  sha256_mismatch: "Received image didn't match - it will be fetched again",
+  write_failed: "Unit couldn't write its flash",
+  commit_failed: "Unit couldn't switch to the new firmware",
+  stalled: "Transfer stalled for an hour - unit offline or out of range",
+  validating: "Unit is still confirming its previous update"
+};
+const PRODUCT_TEXT = { hub: "Hub", "motor-node": "Motor node", valve: "Valve unit", "filter-backwash": "Filter backwash" };
+const NODE_STATE_TEXT = {
+  receiving: "Receiving", installed: "Installed - waiting", validated: "Updated", current: "Already on it",
+  failed: "Failed", rolled_back: "Rolled back"
 };
 const STATE_TEXT = {
   sent: "Waiting for hub", starting: "Starting", downloading: "Downloading", verifying: "Verifying",
-  flashing: "Installing", validated: "Updated", failed: "Failed", rolled_back: "Rolled back"
+  flashing: "Installing", validated: "Updated", failed: "Failed", rolled_back: "Rolled back",
+  downloaded: "Downloaded", staged: "Handing out to units"
 };
 
 let config = null;          // { publicKeyPem, maxFirmwareBytes, farms }
@@ -47,6 +64,8 @@ let pollStartedAt = 0;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const mode = () => document.querySelector('input[name="mode"]:checked').value;
+const product = () => $("productInput").value;
+const isNode = () => product() !== "hub";
 const fmtTime = (t) => (t ? new Date(t).toLocaleString() : "-");
 
 async function api(path, options = {}) {
@@ -102,6 +121,15 @@ $("binInput").addEventListener("change", async (e) => {
   updateReleaseButton();
 });
 $("versionInput").addEventListener("input", () => { renderChecks(); updateReleaseButton(); });
+$("productInput").addEventListener("change", () => {
+  // Node updates go to selected farms only (each hub restarts to stage one).
+  const allRadio = document.querySelector('input[name="mode"][value="all"]');
+  allRadio.disabled = isNode();
+  if (isNode() && allRadio.checked) document.querySelector('input[name="mode"][value="farms"]').checked = true;
+  $("nodeNote").hidden = !isNode();
+  renderFarms();
+  updateReleaseButton();
+});
 
 function versionValue() {
   return $("versionInput").value.trim();
@@ -112,7 +140,7 @@ function fileProblems() {
   if (!fileInfo) return ["Choose the firmware.bin"];
   if (!fileInfo.isEsp) p.push("Not an ESP32 firmware image");
   if (config && fileInfo.size > config.maxFirmwareBytes) p.push(`Too big for the hub (${fileInfo.size} > ${config.maxFirmwareBytes} bytes)`);
-  if (!fileInfo.hasKey) p.push("Doesn't contain the fleet's OTA public key - rebuild from the current Motor repo");
+  if (!fileInfo.hasKey) p.push("Doesn't contain the fleet's OTA public key - rebuild from the current repo");
   if (!/^[A-Za-z0-9._-]{1,32}$/.test(versionValue())) p.push("Enter the version (same as FIRMWARE_VERSION in config.h)");
   return p;
 }
@@ -123,7 +151,7 @@ function renderChecks() {
   const items = [
     [true, `${esc(fileInfo.name)} - ${(fileInfo.size / 1024).toFixed(0)} KB, SHA-256 <code>${fileInfo.sha256.slice(0, 16)}…</code>`],
     [fileInfo.isEsp, fileInfo.isEsp ? "ESP32 firmware image" : "Not an ESP32 firmware image"],
-    [fileInfo.hasKey, fileInfo.hasKey ? "Contains the fleet's OTA public key" : "Does NOT contain the fleet's OTA public key - hubs would refuse later updates"],
+    [fileInfo.hasKey, fileInfo.hasKey ? "Contains the fleet's OTA public key" : "Does NOT contain the fleet's OTA public key - devices would refuse later updates"],
     [!config || fileInfo.size <= config.maxFirmwareBytes, "Fits the hub's app slot"]
   ];
   ul.innerHTML = items.map(([ok, text]) => `<li class="${ok ? "ok" : "bad"}">${text}</li>`).join("");
@@ -209,19 +237,22 @@ $("releaseBtn").addEventListener("click", async () => {
   const all = mode() === "all";
   const farmIds = selectedFarmIds();
   const what = all ? `ALL ${config.farms.length} farms` : `farm${farmIds.length > 1 ? "s" : ""} ${farmIds.join(", ")}`;
-  if (!confirm(`Send firmware ${version} to ${what}?`)) return;
+  const kind = PRODUCT_TEXT[product()];
+  if (!confirm(isNode()
+    ? `Send ${kind} firmware ${version} to the hub of ${what}? Each hub restarts once, then updates its ${kind.toLowerCase()}s.`
+    : `Send firmware ${version} to ${what}?`)) return;
 
   $("releaseBtn").disabled = true;
   try {
     setReleaseStatus("Unlocking key…");
     const key = await loadSigningKey(pemText, $("passInput").value);
     setReleaseStatus("Signing…");
-    const signature = await signRelease(key, config.publicKeyPem, fileInfo.sha256, fileInfo.size, version);
+    const signature = await signRelease(key, config.publicKeyPem, fileInfo.sha256, fileInfo.size, version, product());
 
     setReleaseStatus("Uploading firmware…");
     const up = await api("/ota/firmware", {
       method: "POST",
-      headers: { "Content-Type": "application/octet-stream", "X-Firmware-Version": version },
+      headers: { "Content-Type": "application/octet-stream", "X-Firmware-Version": version, "X-Firmware-Product": product() },
       body: fileBytes
     });
     if (up.sha256 !== fileInfo.sha256) throw new Error("Server stored a different file than was signed - try again");
@@ -230,7 +261,7 @@ $("releaseBtn").addEventListener("click", async () => {
     const rel = await api("/ota/releases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sha256: fileInfo.sha256, version, signature, target: all ? "all" : { farmIds } })
+      body: JSON.stringify({ sha256: fileInfo.sha256, version, signature, product: product(), target: all ? "all" : { farmIds } })
     });
 
     // Don't keep the key material around.
@@ -265,15 +296,20 @@ async function refreshRelease() {
   try {
     const d = await api(`/ota/releases/${currentReleaseId}`);
     renderRelease(d);
-    const busy = d.summary.in_progress + d.summary.waiting;
+    const ns = d.nodeSummary;
+    // A node update keeps going long after the hubs have staged it.
+    const busy = d.summary.in_progress + d.summary.waiting + (ns ? ns.in_progress + (ns.total === 0 ? 1 : 0) : 0);
     if (busy === 0 || Date.now() - pollStartedAt > POLL_GIVE_UP_MS) clearInterval(pollTimer);
   } catch (err) {
     $("retryStatus").textContent = err.message;
   }
 }
 
-function renderRelease({ release, summary, targets }) {
-  $("progressTitle").textContent = `- #${release.id}, version ${release.version}, ${release.mode === "all" ? "all farms" : "selected farms"}, ${fmtTime(release.createdAt)}`;
+function renderRelease({ release, summary, targets, nodeSummary, nodes }) {
+  const node = release.product && release.product !== "hub";
+  $("progressTitle").textContent = `- #${release.id}, ${PRODUCT_TEXT[release.product] || "Hub"} ${release.version}, ${release.mode === "all" ? "all farms" : "selected farms"}, ${fmtTime(release.createdAt)}`;
+  $("nodeSection").hidden = !node;
+  if (node) renderNodes(release, nodeSummary, nodes || []);
   $("sumUpdated").textContent = summary.updated;
   $("sumProgress").textContent = summary.in_progress;
   $("sumWaiting").textContent = summary.waiting;
@@ -299,6 +335,26 @@ function renderRelease({ release, summary, targets }) {
   $("retryBtn").disabled = retryable === 0;
 }
 
+function renderNodes(release, s, nodes) {
+  $("nodeSummaryText").textContent = s && s.total
+    ? `- ${s.updated} updated, ${s.in_progress} in progress, ${s.failed} failed`
+    : "- none reporting yet (the hub hands it out a minute or so after staging)";
+  $("nodeBody").innerHTML = nodes.length ? nodes.map((n) => {
+    const pct = n.state === "receiving" && Number.isFinite(n.percent)
+      ? `<span class="ota-bar"><span style="width:${Math.max(0, Math.min(100, n.percent))}%"></span></span> ${n.percent}%`
+      : n.outcome === "updated" || n.state === "installed" ? "100%" : "";
+    return `<tr>
+      <td>${esc(n.farmId)}</td>
+      <td>${esc(n.node)}</td>
+      <td><span class="ota-pill ${n.outcome}">${esc(NODE_STATE_TEXT[n.state] || n.state)}</span></td>
+      <td>${pct}</td>
+      <td>${esc(n.version || "")}</td>
+      <td>${esc(n.error ? (ERROR_TEXT[n.error] || n.error) : "")}</td>
+      <td>${fmtTime(n.updatedAt)}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="7">No unit has reported yet</td></tr>`;
+}
+
 $("retryBtn").addEventListener("click", async () => {
   if (!currentReleaseId || !confirm("Resend this update to every hub that isn't updated yet?")) return;
   try {
@@ -317,12 +373,16 @@ async function loadHistory() {
   const { releases } = await api("/ota/releases");
   $("historyBody").innerHTML = releases.length ? releases.map((r) => {
     const s = r.summary;
-    const result = [`${s.updated}/${s.total} updated`, s.failed && `${s.failed} failed`, s.busy && `${s.busy} busy`,
-      (s.waiting + s.in_progress) && `${s.waiting + s.in_progress} pending`].filter(Boolean).join(", ");
+    const n = r.nodeSummary;
+    const result = n
+      ? [`${n.updated}/${n.total} units updated`, n.failed && `${n.failed} failed`, n.in_progress && `${n.in_progress} in progress`,
+        s.failed && `${s.failed} hub(s) failed to stage`].filter(Boolean).join(", ")
+      : [`${s.updated}/${s.total} updated`, s.failed && `${s.failed} failed`, s.busy && `${s.busy} busy`,
+        (s.waiting + s.in_progress) && `${s.waiting + s.in_progress} pending`].filter(Boolean).join(", ");
     return `<tr data-id="${r.id}">
-      <td>${r.id}</td><td>${esc(r.version)}</td><td>${r.mode === "all" ? "All farms" : `${s.total} farm${s.total > 1 ? "s" : ""}`}</td>
+      <td>${r.id}</td><td>${esc(PRODUCT_TEXT[r.product] || "Hub")}</td><td>${esc(r.version)}</td><td>${r.mode === "all" ? "All farms" : `${s.total} farm${s.total > 1 ? "s" : ""}`}</td>
       <td>${esc(result)}</td><td>${esc(r.createdBy || "-")}</td><td>${fmtTime(r.createdAt)}</td></tr>`;
-  }).join("") : `<tr><td colspan="6">No releases yet</td></tr>`;
+  }).join("") : `<tr><td colspan="7">No releases yet</td></tr>`;
 }
 $("historyBody").addEventListener("click", (e) => {
   const row = e.target.closest("tr[data-id]");

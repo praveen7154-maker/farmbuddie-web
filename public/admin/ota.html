@@ -51,6 +51,15 @@
 <section class="ota-card">
   <h2><span class="ota-step">1</span> Firmware</h2>
   <div class="ota-row">
+    <label class="ota-field narrow">
+      <span>For <small>(which repo it was built from)</small></span>
+      <select id="productInput">
+        <option value="hub">Hub / Motor 1 (Motor repo)</option>
+        <option value="motor-node">Motor node (Motor-Node repo)</option>
+        <option value="valve">Valve unit (Valve repo)</option>
+        <option value="filter-backwash">Filter backwash unit (Filter-Backwash repo)</option>
+      </select>
+    </label>
     <label class="ota-field">
       <span>firmware.bin <small>(.pio/build/esp32dev/firmware.bin)</small></span>
       <input type="file" id="binInput" accept=".bin">
@@ -61,6 +70,11 @@
     </label>
   </div>
   <ul class="ota-checks" id="binChecks"></ul>
+  <p class="ota-note" id="nodeNote" hidden>A node update goes to each chosen farm's hub, which downloads it, restarts once and
+    hands it to every unit of this type over its own link (WiFi mesh about 3 min, RS485 5-10 min, LoRa 15-25 min).
+    Units only switch to it while no motor or program is running; each one falls back to its old firmware by itself if
+    the new one doesn't come up. Units still on the old single-slot flash layout need one USB flash first (they report
+    "no_ota_slot").</p>
 </section>
 
 <!-- 2. TARGETS -->
@@ -124,6 +138,17 @@
       <tbody id="targetBody"></tbody>
     </table>
   </div>
+  <div id="nodeSection" hidden>
+    <h3 class="ota-subhead">Units <span id="nodeSummaryText" class="ota-muted"></span></h3>
+    <div class="fb-table-card">
+      <table class="fb-table">
+        <thead><tr><th>Farm ID</th><th>Unit</th><th>Status</th><th>Progress</th><th>Version</th><th>Details</th><th>Last update</th></tr></thead>
+        <tbody id="nodeBody"></tbody>
+      </table>
+    </div>
+    <p class="ota-note">Units appear here as they start reporting - one that never shows is offline, out of range, or
+      not of this type. "Installed - waiting" = it has the new firmware and switches over as soon as the farm is idle.</p>
+  </div>
   <p class="ota-note">"Waiting for hub" = no reply yet: the hub is offline, or it is downloading over GSM (its MQTT is off for 3-6 min) - normal.
     Refreshes every 5 seconds.</p>
   <div class="ota-actions">
@@ -137,8 +162,8 @@
   <h2>History</h2>
   <div class="fb-table-card">
     <table class="fb-table">
-      <thead><tr><th>#</th><th>Version</th><th>Sent to</th><th>Result</th><th>By</th><th>When</th></tr></thead>
-      <tbody id="historyBody"><tr><td colspan="6">Loading…</td></tr></tbody>
+      <thead><tr><th>#</th><th>For</th><th>Version</th><th>Sent to</th><th>Result</th><th>By</th><th>When</th></tr></thead>
+      <tbody id="historyBody"><tr><td colspan="7">Loading…</td></tr></tbody>
     </table>
   </div>
 </section>

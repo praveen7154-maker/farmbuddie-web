@@ -1,7 +1,10 @@
 // OTA signing, entirely in the browser - the fleet's private signing key
 // and its passphrase never leave this page (only the signature goes to
 // the VPS). Same result as the Motor repo's tools/ota_admin.py:
-//   manifest  = "farmbuddie-ota-v1\n<sha256 hex>\n<size>\n<version>"
+//   manifest  = "farmbuddie-ota-v1\n<sha256 hex>\n<size>\n<version>"           (hub)
+//               "farmbuddie-ota-v2\n<product>\n<sha256 hex>\n<size>\n<version>" (node image:
+//               motor-node / valve / filter-backwash - binds the product, so an
+//               image can't be installed on another kind of device)
 //   signature = base64( DER ECDSA-P256-SHA256(manifest) )
 // which the hub checks with mbedtls against the public key compiled into
 // its firmware (include/ota_signing_key.h) before downloading anything.
@@ -14,7 +17,10 @@
 const subtle = globalThis.crypto.subtle;
 const enc = new TextEncoder();
 
-export function otaManifest(sha256Hex, size, version) {
+export function otaManifest(sha256Hex, size, version, product = "hub") {
+  if (product && product !== "hub") {
+    return `farmbuddie-ota-v2\n${product}\n${sha256Hex.toLowerCase()}\n${size}\n${version}`;
+  }
   return `farmbuddie-ota-v1\n${sha256Hex.toLowerCase()}\n${size}\n${version}`;
 }
 
@@ -170,8 +176,8 @@ function toBase64(bytes) {
 
 // Signs the manifest and double-checks the signature against the public
 // key the hubs carry, so a wrong .pem is caught here, not on the farms.
-export async function signRelease(privateKey, publicKeyPem, sha256, size, version) {
-  const manifest = enc.encode(otaManifest(sha256, size, version));
+export async function signRelease(privateKey, publicKeyPem, sha256, size, version, product = "hub") {
+  const manifest = enc.encode(otaManifest(sha256, size, version, product));
   const raw = new Uint8Array(await subtle.sign({ name: "ECDSA", hash: "SHA-256" }, privateKey, manifest));
   const pub = await importPublicKey(publicKeyPem);
   const ok = await subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, raw, manifest);
