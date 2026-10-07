@@ -85,6 +85,19 @@
     <label class="ota-radio"><input type="radio" name="mode" value="all"> All farms</label>
     <input type="search" id="farmSearch" class="ota-search" placeholder="Search farm ID or farmer">
   </div>
+  <div class="ota-row ota-filters">
+    <label class="ota-filter"><span>Status</span>
+      <select id="farmStatusFilter">
+        <option value="">All</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+      </select>
+    </label>
+    <label class="ota-filter"><span>Firmware now</span>
+      <select id="farmVersionFilter"><option value="">All versions</option></select>
+    </label>
+    <span class="ota-muted" id="farmCount"></span>
+  </div>
   <div class="fb-table-card ota-farms">
     <table class="fb-table">
       <thead>
@@ -94,6 +107,7 @@
       <tbody id="farmBody"><tr><td colspan="5">Loading…</td></tr></tbody>
     </table>
   </div>
+  <div class="ota-pager" id="farmPager"></div>
   <p class="ota-note" id="targetNote"></p>
   <label class="ota-field narrow" id="confirmAllWrap" hidden>
     <span>Type the version again to confirm updating <b>all farms</b></span>
@@ -160,12 +174,24 @@
 <!-- HISTORY -->
 <section class="ota-card">
   <h2>History</h2>
+  <div class="ota-row ota-filters">
+    <label class="ota-filter"><span>For</span>
+      <select id="historyProductFilter">
+        <option value="">All</option>
+        <option value="hub">Hub</option>
+        <option value="motor-node">Motor node</option>
+        <option value="valve">Valve unit</option>
+        <option value="filter-backwash">Filter backwash</option>
+      </select>
+    </label>
+  </div>
   <div class="fb-table-card">
     <table class="fb-table">
       <thead><tr><th>#</th><th>For</th><th>Version</th><th>Sent to</th><th>Result</th><th>By</th><th>When</th></tr></thead>
       <tbody id="historyBody"><tr><td colspan="7">Loading…</td></tr></tbody>
     </table>
   </div>
+  <div class="ota-pager" id="historyPager"></div>
 </section>
 
 </main>

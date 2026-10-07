@@ -61,6 +61,11 @@ let currentReleaseId = null;
 let pollTimer = null;
 let pollStartedAt = 0;
 
+const PAGE_SIZE = 10;
+const selectedFarms = new Set();   // kept across pages and filters
+let farmPage = 1;
+let historyPage = 1;
+
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const mode = () => document.querySelector('input[name="mode"]:checked').value;
@@ -93,6 +98,7 @@ onAuthStateChanged(auth, async (user) => {
   }
   try {
     config = await api("/ota/config");
+    fillVersionFilter();
     renderFarms();
     await loadHistory();
   } catch (err) {
@@ -158,24 +164,70 @@ function renderChecks() {
 }
 
 // ---------------- 2. targets ----------------
-function renderFarms() {
+// One button per page, with "…" gaps for long lists. onGo(page).
+function renderPager(el, page, totalPages, totalItems, label, onGo) {
+  if (totalItems <= PAGE_SIZE) { el.innerHTML = totalItems ? `<span class="ota-muted">${totalItems} ${label}</span>` : ""; return; }
+  const pages = [];
+  for (let p = 1; p <= totalPages; p++) {
+    if (p === 1 || p === totalPages || Math.abs(p - page) <= 1) pages.push(p);
+    else if (pages[pages.length - 1] !== "…") pages.push("…");
+  }
+  const from = (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, totalItems);
+  el.innerHTML = `<span class="ota-muted">${from}-${to} of ${totalItems} ${label}</span>
+    <button data-go="${page - 1}" ${page <= 1 ? "disabled" : ""}>‹</button>
+    ${pages.map((p) => p === "…" ? `<span class="ota-muted">…</span>`
+      : `<button data-go="${p}" class="${p === page ? "active" : ""}">${p}</button>`).join("")}
+    <button data-go="${page + 1}" ${page >= totalPages ? "disabled" : ""}>›</button>`;
+  el.onclick = (e) => {
+    const b = e.target.closest("button[data-go]");
+    if (b && !b.disabled) onGo(Number(b.dataset.go));
+  };
+}
+
+function fillVersionFilter() {
+  const versions = [...new Set((config?.farms || []).map((f) => f.fwVersion).filter(Boolean))].sort();
+  $("farmVersionFilter").innerHTML = `<option value="">All versions</option>` +
+    versions.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("") +
+    ((config?.farms || []).some((f) => !f.fwVersion) ? `<option value="__none">Unknown</option>` : "");
+}
+
+function filteredFarms() {
   const q = $("farmSearch").value.trim().toLowerCase();
-  const farms = (config?.farms || []).filter((f) =>
-    !q || f.farmId.includes(q) || String(f.farmerName || "").toLowerCase().includes(q));
-  const checked = new Set([...document.querySelectorAll(".farmPick:checked")].map((c) => c.value));
-  $("farmBody").innerHTML = farms.length ? farms.map((f) => `
+  const status = $("farmStatusFilter").value;
+  const version = $("farmVersionFilter").value;
+  return (config?.farms || []).filter((f) =>
+    (!q || f.farmId.includes(q) || String(f.farmerName || "").toLowerCase().includes(q)) &&
+    (!status || (status === "online") === Boolean(f.online)) &&
+    (!version || (version === "__none" ? !f.fwVersion : f.fwVersion === version)));
+}
+
+function renderFarms() {
+  const farms = filteredFarms();
+  const totalPages = Math.max(1, Math.ceil(farms.length / PAGE_SIZE));
+  farmPage = Math.min(Math.max(1, farmPage), totalPages);
+  const shown = farms.slice((farmPage - 1) * PAGE_SIZE, farmPage * PAGE_SIZE);
+  const disabled = mode() === "all" ? "disabled" : "";
+  $("farmBody").innerHTML = shown.length ? shown.map((f) => `
     <tr>
-      <td><input type="checkbox" class="farmPick" value="${esc(f.farmId)}" ${checked.has(f.farmId) ? "checked" : ""} ${mode() === "all" ? "disabled" : ""}></td>
+      <td><input type="checkbox" class="farmPick" value="${esc(f.farmId)}" ${selectedFarms.has(f.farmId) ? "checked" : ""} ${disabled}></td>
       <td>${esc(f.farmId)}</td>
       <td>${esc(f.farmerName || "-")}</td>
       <td><span class="vps-dot ${f.online ? "ok" : "down"}"></span> ${f.online ? "Online" : "Offline"}</td>
       <td>${esc(f.fwVersion || "-")}</td>
-    </tr>`).join("") : `<tr><td colspan="5">No farms with a controller</td></tr>`;
+    </tr>`).join("") : `<tr><td colspan="5">${config?.farms?.length ? "No farm matches the filters" : "No farms with a controller"}</td></tr>`;
+  // Header box = every farm the filters show (all pages), not just this page.
+  const allShownPicked = farms.length > 0 && farms.every((f) => selectedFarms.has(f.farmId));
+  $("selectAll").checked = allShownPicked;
+  $("selectAll").disabled = mode() === "all";
+  $("selectAll").title = `Select all ${farms.length} farm${farms.length === 1 ? "" : "s"} matching the filters`;
+  $("farmCount").textContent = `${farms.length} of ${config?.farms?.length || 0} farms shown`;
+  renderPager($("farmPager"), farmPage, totalPages, farms.length, "farms", (p) => { farmPage = p; renderFarms(); });
   updateTargetNote();
 }
 
 function selectedFarmIds() {
-  return [...document.querySelectorAll(".farmPick:checked")].map((c) => c.value);
+  return [...selectedFarms];
 }
 
 function updateTargetNote() {
@@ -185,16 +237,28 @@ function updateTargetNote() {
   const offline = all ? (config?.farms || []).filter((f) => !f.online).length : 0;
   $("targetNote").textContent = all
     ? `All ${n} farms. ${offline ? `${offline} are offline now - they'll show "Waiting"; resend to them later.` : ""}`
-    : n ? `${n} farm${n > 1 ? "s" : ""} selected.` : "Tick the farm(s) to update - start with one hub.";
+    : n ? `${n} farm${n > 1 ? "s" : ""} selected: ${selectedFarmIds().slice(0, 12).join(", ")}${n > 12 ? ", …" : ""}.`
+      : "Tick the farm(s) to update - start with one hub.";
   updateReleaseButton();
 }
 
-$("farmSearch").addEventListener("input", renderFarms);
+const refilter = () => { farmPage = 1; renderFarms(); };
+$("farmSearch").addEventListener("input", refilter);
+$("farmStatusFilter").addEventListener("change", refilter);
+$("farmVersionFilter").addEventListener("change", refilter);
 document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", renderFarms));
-$("farmBody").addEventListener("change", (e) => { if (e.target.classList.contains("farmPick")) updateTargetNote(); });
+$("farmBody").addEventListener("change", (e) => {
+  if (!e.target.classList.contains("farmPick")) return;
+  if (e.target.checked) selectedFarms.add(e.target.value);
+  else selectedFarms.delete(e.target.value);
+  renderFarms();
+});
 $("selectAll").addEventListener("change", (e) => {
-  document.querySelectorAll(".farmPick:not(:disabled)").forEach((c) => { c.checked = e.target.checked; });
-  updateTargetNote();
+  for (const f of filteredFarms()) {
+    if (e.target.checked) selectedFarms.add(f.farmId);
+    else selectedFarms.delete(f.farmId);
+  }
+  renderFarms();
 });
 $("confirmAllInput").addEventListener("input", updateReleaseButton);
 
@@ -270,6 +334,7 @@ $("releaseBtn").addEventListener("click", async () => {
     pemText = null;
     $("confirmAllInput").value = "";
     setReleaseStatus(`Sent to ${rel.targets} hub${rel.targets > 1 ? "s" : ""} - watch the progress below.`);
+    historyPage = 1;
     await loadHistory();
     openRelease(rel.releaseId);
   } catch (err) {
@@ -370,7 +435,12 @@ $("retryBtn").addEventListener("click", async () => {
 
 // ---------------- history ----------------
 async function loadHistory() {
-  const { releases } = await api("/ota/releases");
+  const product = $("historyProductFilter").value;
+  const d = await api(`/ota/releases?page=${historyPage}${product ? `&product=${encodeURIComponent(product)}` : ""}`);
+  const { releases } = d;
+  const total = Number.isFinite(d.total) ? d.total : releases.length;
+  renderPager($("historyPager"), d.page || 1, Math.max(1, Math.ceil(total / PAGE_SIZE)), total, "releases",
+    (p) => { historyPage = p; loadHistory().catch((err) => showPageError(err.message)); });
   $("historyBody").innerHTML = releases.length ? releases.map((r) => {
     const s = r.summary;
     const n = r.nodeSummary;
@@ -384,6 +454,10 @@ async function loadHistory() {
       <td>${esc(result)}</td><td>${esc(r.createdBy || "-")}</td><td>${fmtTime(r.createdAt)}</td></tr>`;
   }).join("") : `<tr><td colspan="7">No releases yet</td></tr>`;
 }
+$("historyProductFilter").addEventListener("change", () => {
+  historyPage = 1;
+  loadHistory().catch((err) => showPageError(err.message));
+});
 $("historyBody").addEventListener("click", (e) => {
   const row = e.target.closest("tr[data-id]");
   if (row) openRelease(Number(row.dataset.id));

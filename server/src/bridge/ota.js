@@ -239,8 +239,16 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
 
   adminRouter.get("/releases", async (req, res) => {
     try {
-      const releases = await store.listReleases(30);
+      // ?page=1.. (10 per page), ?product=hub|motor-node|valve|filter-backwash
+      const pageSize = 10;
+      const page = Math.max(1, Math.min(10000, parseInt(req.query.page, 10) || 1));
+      const product = PRODUCTS.includes(String(req.query.product)) ? String(req.query.product) : null;
+      const [releases, total] = await Promise.all([
+        store.listReleases(pageSize, (page - 1) * pageSize, product),
+        store.countReleases ? store.countReleases(product) : null
+      ]);
       return res.json({
+        page, pageSize, total,
         releases: releases.map((r) => ({
           ...r.release,
           summary: summarize(r.targets),

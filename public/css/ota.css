@@ -42,7 +42,7 @@
 .ota-checks .bad::before { content: "✘ "; color: #dc2626; }
 .ota-checks .bad { color: #b91c1c; }
 .ota-checks code { font-size: 12px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
-.ota-farms { max-height: 340px; overflow-y: auto; }
+.ota-farms { overflow-x: auto; }   /* 10 rows a page - no inner scroll */
 .ota-check-col { width: 36px; }
 .ota-note { font-size: 12.5px; color: #6b7280; margin: 8px 0; }
 .ota-muted { color: #6b7280; font-weight: normal; font-size: 14px; }
@@ -76,3 +76,13 @@
 .ota-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 16px; }
 .ota-summary .fb-stat-card { padding: 14px 16px; }
 .ota-summary .fb-stat-card h2 { margin: 4px 0 0; }
+
+/* Filters + 10-per-page pagination (farms and history). */
+.ota-filters { align-items: flex-end; gap: 14px; margin-bottom: 10px; }
+.ota-filter { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #374151; }
+.ota-filter select { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; background: #fff; }
+.ota-pager { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.ota-pager button { min-width: 34px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; }
+.ota-pager button.active { background: #15803d; border-color: #15803d; color: #fff; }
+.ota-pager button:disabled { opacity: 0.4; cursor: default; }
+.ota-pager .ota-muted { margin-right: auto; font-size: 13px; }

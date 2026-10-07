@@ -150,3 +150,33 @@ test("status messages are routed to the hub row or the node rows", async () => {
     assert.equal(store.calls.nodeStatus[0].payload.node, "V1-4");
   });
 });
+
+test("history is paged 10 at a time and filtered by product", async () => {
+  const seen = [];
+  const ota = createOtaModule({
+    store: {
+      async listReleases(limit, offset, product) { seen.push({ limit, offset, product }); return []; },
+      async countReleases(product) { return product ? 3 : 25; }
+    },
+    publish: async () => {}, listFleet: async () => [], publicBaseUrl: "https://example.test", publicKeyPem: PUB_PEM
+  });
+  const app = express();
+  app.use((req, _res, next) => { req.decodedToken = { email: "admin@test" }; next(); });
+  app.use("/ota", ota.adminRouter);
+  const server = app.listen(0);
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/ota`;
+    const a = await (await fetch(`${base}/releases?page=3`)).json();
+    assert.deepEqual({ page: a.page, pageSize: a.pageSize, total: a.total }, { page: 3, pageSize: 10, total: 25 });
+    const b = await (await fetch(`${base}/releases?product=valve`)).json();
+    assert.equal(b.total, 3);
+    await fetch(`${base}/releases?product=bogus`);
+    assert.deepEqual(seen, [
+      { limit: 10, offset: 20, product: null },
+      { limit: 10, offset: 0, product: "valve" },
+      { limit: 10, offset: 0, product: null }
+    ]);
+  } finally {
+    server.close();
+  }
+});

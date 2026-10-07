@@ -128,8 +128,13 @@ export const pgOtaStore = {
     return { release: { ...rows[0], id: Number(rows[0].id) }, targets: t.rows, nodes: n.rows };
   },
 
-  async listReleases(limit) {
-    const { rows } = await pool.query(`SELECT ${releaseCols} FROM ota_releases ORDER BY id DESC LIMIT $1`, [limit]);
+  // Newest first, one page at a time; product = null for every kind.
+  async listReleases(limit, offset = 0, product = null) {
+    const { rows } = await pool.query(
+      `SELECT ${releaseCols} FROM ota_releases WHERE ($3::text IS NULL OR product = $3)
+       ORDER BY id DESC LIMIT $1 OFFSET $2`,
+      [limit, offset, product]
+    );
     const out = [];
     for (const r of rows) {
       const t = await pool.query(`SELECT state, error FROM ota_release_targets WHERE release_id = $1`, [r.id]);
@@ -139,6 +144,12 @@ export const pgOtaStore = {
       out.push({ release: { ...r, id: Number(r.id) }, targets: t.rows, nodes: n });
     }
     return out;
+  },
+
+  async countReleases(product = null) {
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM ota_releases WHERE ($1::text IS NULL OR product = $1)`, [product]);
+    return rows[0].n;
   },
 
   async markSent(releaseId, farmIds, at) {
