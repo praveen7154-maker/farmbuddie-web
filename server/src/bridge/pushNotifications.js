@@ -21,7 +21,9 @@ const PUSH_EVENTS = new Set([
   51, 54, 55, 57,  // valve-gated start failed, no valve responded, two valves open, valve closed mid-run
   65,              // controller restarted while the motor was running
   66, 67,          // TNEB load limit: motor stopped / start refused (sanctioned HP)
-  68               // a due schedule could not start - another program was running
+  68,              // a due schedule could not start - another program was running
+  69,              // manual valve switch: the new valve did not open, the old one was kept open
+  70               // a sequence valve did not open (tried twice) - skipped, others continue
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
@@ -71,7 +73,9 @@ const EVENT_TEXT = {
   65: "Controller restarted while the motor was running - it is being monitored again",
   66: "Motor stopped - the running motors together exceed the sanctioned HP",
   67: "Motor not started - the sanctioned HP is already in use by the other motors",
-  68: "A scheduled cyclic could not start - another cyclic program was already running"
+  68: "A scheduled cyclic could not start - another cyclic program was already running",
+  69: "The new valve did not open - the previous valve was kept open and the motor keeps running",
+  70: "A valve did not open (tried twice) - skipped, the other valves continue. Please check it"
 };
 
 function buildNotification(nodeId, motorNum, payload) {
@@ -83,6 +87,13 @@ function buildNotification(nodeId, motorNum, payload) {
   const valve = typeof payload.valve === "number" && payload.valve > 0 ? payload.valve : null;
   if (valve && (event === 48 || event === 49)) {
     return { title: motorLabel, body: `Valve ${valve} ${event === 48 ? "opened" : "closed"}` };
+  }
+  const previous = typeof payload.previous_valve === "number" && payload.previous_valve > 0 ? payload.previous_valve : null;
+  if (valve && previous && event === 69) {
+    return { title: motorLabel, body: `Valve ${valve} did not open - Valve ${previous} was kept open and the motor keeps running` };
+  }
+  if (valve && event === 70) {
+    return { title: motorLabel, body: `Valve ${valve} did not open (tried twice) - skipped, the other valves continue. Please check Valve ${valve}` };
   }
   if (payload.took_over_manual === true) {
     return { title: motorLabel, body: "Scheduled cyclic started - your manual run was switched to this schedule" };
