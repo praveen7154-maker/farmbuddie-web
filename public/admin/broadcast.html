@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Message Broadcast | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  <link rel="stylesheet" href="/css/ota.css">
+  <link rel="stylesheet" href="/css/broadcast.css">
+  <link rel="stylesheet" href="/css/admin-mobile.css">
+</head>
+
+<body class="fb-layout">
+
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/vps-status.html">🖥️ VPS & TBMQ</a>
+    <a href="/admin/ota.html">🚀 Firmware OTA</a>
+    <a class="active" href="/admin/broadcast.html">📢 Message Broadcast</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>📢 Message Broadcast</h1>
+  <span class="fb-user">Admin</span>
+</header>
+
+<div id="pageError" class="ota-alert error" hidden></div>
+<div id="pageOk" class="ota-alert ok" hidden></div>
+
+<!-- REACH -->
+<section class="bc-reach">
+  <div class="bc-reach-card"><span class="bc-reach-icon">🧑‍🌾</span><div><p>Farms</p><h2 id="totFarms">–</h2></div></div>
+  <div class="bc-reach-card"><span class="bc-reach-icon">📱</span><div><p>Farmer phones</p><h2 id="totPhones">–</h2></div></div>
+  <div class="bc-reach-card"><span class="bc-reach-icon">🔔</span><div><p>App installs (push-ready)</p><h2 id="totDevices">–</h2></div></div>
+  <div class="bc-reach-card"><span class="bc-reach-icon">✉️</span><div><p>Messages sent</p><h2 id="totSent">–</h2></div></div>
+</section>
+
+<!-- 1. COMPOSE -->
+<section class="ota-card">
+  <h2><span class="ota-step">1</span> Message</h2>
+  <div class="bc-compose">
+    <div class="bc-form">
+      <div class="bc-label">Type</div>
+      <div class="bc-cats" id="catChips">
+        <label><input type="radio" name="cat" value="general" checked><span>📢 General</span></label>
+        <label><input type="radio" name="cat" value="update"><span>🔄 Update</span></label>
+        <label><input type="radio" name="cat" value="reminder"><span>⏰ Reminder</span></label>
+        <label><input type="radio" name="cat" value="offer"><span>🎁 Offer</span></label>
+        <label><input type="radio" name="cat" value="alert"><span>⚠️ Alert</span></label>
+      </div>
+
+      <label class="ota-field bc-template">
+        <span>Start from a template <small>(optional)</small></span>
+        <select id="templateSelect">
+          <option value="">— Blank message —</option>
+        </select>
+      </label>
+
+      <label class="ota-field">
+        <span>Title <small class="bc-count" id="titleCount">0 / 80</small></span>
+        <input type="text" id="titleInput" maxlength="80" placeholder="e.g. Irrigo app update available" autocomplete="off">
+      </label>
+      <label class="ota-field">
+        <span>Message <small class="bc-count" id="bodyCount">0 / 1000</small></span>
+        <textarea id="bodyInput" maxlength="1000" rows="5" placeholder="Write the announcement for your farmers…"></textarea>
+      </label>
+
+      <label class="bc-toggle"><input type="checkbox" id="tamilToggle"> Add a Tamil version <small>(shown to farmers using the app in Tamil)</small></label>
+      <div id="tamilFields" hidden>
+        <label class="ota-field">
+          <span>தலைப்பு (Tamil title) <small class="bc-count" id="titleTaCount">0 / 80</small></span>
+          <input type="text" id="titleTaInput" maxlength="80" lang="ta" autocomplete="off">
+        </label>
+        <label class="ota-field">
+          <span>செய்தி (Tamil message) <small class="bc-count" id="bodyTaCount">0 / 1000</small></span>
+          <textarea id="bodyTaInput" maxlength="1000" rows="5" lang="ta"></textarea>
+        </label>
+      </div>
+
+      <label class="bc-toggle"><input type="checkbox" id="importantToggle"> Mark as important <small>(highlighted at the top of the farmer's list)</small></label>
+    </div>
+
+    <div class="bc-preview-wrap">
+      <div class="bc-preview-head">
+        <span>Preview in the Irrigo app</span>
+        <div class="bc-lang" id="previewLang">
+          <button data-lang="en" class="active">EN</button><button data-lang="ta">த</button>
+        </div>
+      </div>
+      <div class="bc-phone">
+        <div class="bc-phone-bar"><span>9:41</span><span>📶 🔋</span></div>
+        <div class="bc-phone-title">← Farm Buddie Official</div>
+        <div class="bc-msg" id="previewCard">
+          <div class="bc-msg-head">
+            <div class="bc-avatar">FB</div>
+            <div class="bc-who">
+              <div class="bc-name">Farm Buddie Official <span class="bc-verified" title="Verified">✓</span></div>
+              <div class="bc-when">Just now</div>
+            </div>
+            <span class="bc-chip" id="previewChip">📢 General</span>
+          </div>
+          <div class="bc-msg-title" id="previewTitle">Your title</div>
+          <div class="bc-msg-body" id="previewBody">Your message appears here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. RECIPIENTS -->
+<section class="ota-card">
+  <h2><span class="ota-step">2</span> Send to</h2>
+  <div class="ota-row">
+    <label class="ota-radio"><input type="radio" name="audience" value="all" checked> All farmers</label>
+    <label class="ota-radio"><input type="radio" name="audience" value="farms"> Selected farms</label>
+  </div>
+  <div id="farmPicker" hidden>
+    <div class="ota-row ota-filters">
+      <input type="search" id="farmSearch" class="ota-search" placeholder="Search farm ID, farmer, Farm Buddie ID or place">
+      <label class="ota-filter"><span>Device</span>
+        <select id="onlineFilter">
+          <option value="">All</option>
+          <option value="online">Online</option>
+          <option value="offline">Offline</option>
+        </select>
+      </label>
+      <label class="ota-filter"><span>Irrigo app</span>
+        <select id="appFilter">
+          <option value="">All</option>
+          <option value="yes">Installed</option>
+          <option value="no">Not installed</option>
+        </select>
+      </label>
+      <button class="bc-link" id="clearSelection" type="button">Clear selection</button>
+    </div>
+    <div class="fb-table-card ota-farms">
+      <table class="fb-table">
+        <thead>
+          <tr><th class="ota-check-col"><input type="checkbox" id="selectAll" title="Select all shown"></th>
+            <th>Farm ID</th><th>Farmer</th><th>Farm Buddie ID</th><th>Place</th><th>Device</th><th>Phones</th><th>App installs</th></tr>
+        </thead>
+        <tbody id="farmBody"><tr><td colspan="8">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="ota-pager" id="farmPager"></div>
+  </div>
+  <div class="bc-reach-line" id="reachLine"></div>
+</section>
+
+<!-- 3. DELIVERY -->
+<section class="ota-card">
+  <h2><span class="ota-step">3</span> When</h2>
+  <div class="ota-row">
+    <label class="ota-radio"><input type="radio" name="when" value="now" checked> Send now</label>
+    <label class="ota-radio"><input type="radio" name="when" value="later"> Schedule</label>
+    <label class="ota-field narrow" id="sendAtWrap" hidden>
+      <span>Send at <small>(your local time)</small></span>
+      <input type="datetime-local" id="sendAtInput">
+    </label>
+    <label class="ota-field narrow">
+      <span>Show until <small>(optional - hidden after this)</small></span>
+      <input type="datetime-local" id="expiresAtInput">
+    </label>
+  </div>
+  <p class="ota-note">Every message stays in the farmer's "Farm Buddie Official" list, so a phone that was switched off or missed the
+    notification still sees it the next time the app opens. You can recall a message later from the history below.</p>
+  <div class="ota-actions">
+    <button id="sendBtn" class="fb-btn-primary" disabled>📢 Send message</button>
+    <span id="sendStatus" class="ota-status-text"></span>
+  </div>
+</section>
+
+<!-- HISTORY -->
+<section class="ota-card">
+  <h2>Sent messages</h2>
+  <div class="ota-row ota-filters">
+    <label class="ota-filter"><span>Show</span>
+      <select id="historyFilter">
+        <option value="">All</option>
+        <option value="sent">Sent</option>
+        <option value="scheduled">Scheduled</option>
+        <option value="recalled">Recalled</option>
+      </select>
+    </label>
+  </div>
+  <div class="fb-table-card">
+    <table class="fb-table">
+      <thead><tr><th>#</th><th>Type</th><th>Title</th><th>To</th><th>When</th><th>Notified</th><th>Read</th><th>By</th><th></th></tr></thead>
+      <tbody id="historyBody"><tr><td colspan="9">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <div class="ota-pager" id="historyPager"></div>
+</section>
+
+</main>
+
+<!-- DETAIL -->
+<div class="bc-modal" id="detailModal" hidden>
+  <div class="bc-modal-box">
+    <button class="bc-modal-close" id="detailClose" aria-label="Close">✕</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<script type="module" src="/js/broadcast.js"></script>
+<script src="/js/admin-mobile.js" defer></script>
+</body>
+</html>

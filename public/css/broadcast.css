@@ -1,0 +1,117 @@
+/* Message Broadcast page (admin/broadcast.html) - builds on ota.css's cards, fields and pager. */
+.ota-alert.ok { background: #ecfdf5; color: #166534; }
+
+/* Reach strip */
+.bc-reach { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.bc-reach-card {
+  display: flex; align-items: center; gap: 14px;
+  background: #fff; border-radius: 14px; padding: 16px 18px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+.bc-reach-card p { margin: 0; font-size: 12.5px; color: #6b7280; }
+.bc-reach-card h2 { margin: 2px 0 0; font-size: 24px; color: #14532d; }
+.bc-reach-icon {
+  width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 22px; background: linear-gradient(135deg, #e0f2fe, #dcfce7);
+}
+
+/* Compose + preview */
+.bc-compose { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 28px; align-items: start; }
+.bc-form .ota-field { margin-bottom: 14px; }
+.bc-form textarea {
+  padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px;
+  font-family: inherit; resize: vertical; min-height: 110px; line-height: 1.45;
+}
+.bc-form input[type="text"]:focus, .bc-form textarea:focus, .bc-form select:focus {
+  outline: none; border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+}
+.bc-label { font-size: 13px; color: #374151; margin-bottom: 6px; }
+.bc-count { float: right; color: #9ca3af; font-variant-numeric: tabular-nums; }
+.bc-count.near { color: #b45309; }
+.bc-template { max-width: 360px; }
+
+.bc-cats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.bc-cats label { cursor: pointer; }
+.bc-cats input { position: absolute; opacity: 0; pointer-events: none; }
+.bc-cats span {
+  display: inline-block; padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  border: 1px solid #d1d5db; background: #fff; color: #374151; transition: all 0.15s ease;
+}
+.bc-cats input:checked + span { background: #15803d; border-color: #15803d; color: #fff; box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25); }
+.bc-cats input:focus-visible + span { outline: 2px solid #16a34a; outline-offset: 2px; }
+
+.bc-toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #1f2937; margin: 4px 0 14px; cursor: pointer; }
+.bc-toggle small { color: #6b7280; }
+
+.bc-preview-wrap { position: sticky; top: 16px; }
+.bc-preview-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #6b7280; margin-bottom: 8px; }
+.bc-lang { display: inline-flex; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
+.bc-lang button { border: 0; background: #fff; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.bc-lang button.active { background: #1d9bf0; color: #fff; }
+
+.bc-phone {
+  border-radius: 28px; padding: 12px 12px 22px; min-height: 360px;
+  background: linear-gradient(180deg, #eef6ff 0%, #f0fdf4 100%);
+  border: 8px solid #111827; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+}
+.bc-phone-bar { display: flex; justify-content: space-between; font-size: 11px; color: #374151; padding: 0 6px 6px; }
+.bc-phone-title { font-weight: 700; font-size: 15px; color: #0f172a; padding: 6px 6px 12px; }
+
+.bc-msg {
+  background: #fff; border-radius: 16px; padding: 14px; border: 1px solid #e5e7eb;
+  box-shadow: 0 6px 18px rgba(29, 155, 240, 0.08);
+}
+.bc-msg.important { border: 1.5px solid #f59e0b; background: linear-gradient(180deg, #fffbeb, #fff 40%); }
+.bc-msg-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.bc-avatar {
+  width: 38px; height: 38px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; font-size: 13px; background: linear-gradient(135deg, #1d9bf0, #15803d);
+}
+.bc-who { flex: 1; min-width: 0; }
+.bc-name { font-weight: 700; font-size: 13.5px; color: #0f172a; display: flex; align-items: center; gap: 4px; }
+.bc-verified {
+  display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%;
+  background: #1d9bf0; color: #fff; font-size: 10px; font-weight: 900;
+}
+.bc-when { font-size: 11px; color: #6b7280; }
+.bc-chip { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #e0f2fe; color: #075985; white-space: nowrap; }
+.bc-chip.update { background: #dcfce7; color: #166534; }
+.bc-chip.reminder { background: #ede9fe; color: #5b21b6; }
+.bc-chip.offer { background: #fce7f3; color: #9d174d; }
+.bc-chip.alert { background: #fee2e2; color: #991b1b; }
+.bc-msg-title { font-weight: 800; font-size: 15px; color: #0f172a; margin-bottom: 4px; word-wrap: break-word; }
+.bc-msg-body { font-size: 13.5px; color: #374151; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; max-height: 260px; overflow: auto; }
+
+/* Recipients */
+.bc-reach-line { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: #f0fdf4; font-size: 14px; color: #14532d; }
+.bc-selected { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.bc-selected span { background: #fff; border: 1px solid #bbf7d0; border-radius: 999px; padding: 2px 10px; font-size: 12px; color: #166534; }
+.bc-warn { color: #b45309; font-weight: 700; }
+.bc-link { background: none; border: 0; color: #15803d; font-weight: 600; cursor: pointer; font-size: 13px; padding: 4px 6px; }
+.bc-link.danger { color: #b91c1c; }
+.bc-link:hover { text-decoration: underline; }
+.ota-card input[type="datetime-local"] { padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; }
+
+/* History */
+#historyBody tr { cursor: pointer; }
+.bc-title-cell { text-align: left !important; max-width: 320px; font-weight: 600; }
+
+/* Detail modal */
+.bc-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.bc-modal[hidden] { display: none; }
+.bc-modal-box { background: #fff; border-radius: 18px; width: min(720px, 100%); max-height: 90vh; overflow: auto; padding: 24px; position: relative; }
+.bc-modal-close { position: absolute; top: 12px; right: 14px; border: 0; background: #f3f4f6; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 14px; }
+.bc-detail-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bc-modal-box h3 { margin: 12px 0 6px; font-size: 19px; }
+.bc-modal-box h4 { margin: 18px 0 6px; font-size: 14px; color: #374151; }
+.bc-detail-body { white-space: pre-wrap; line-height: 1.55; color: #1f2937; font-size: 14px; margin: 0; }
+.bc-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin: 16px 0 8px; }
+.bc-detail-grid div { background: #f9fafb; border-radius: 10px; padding: 10px 12px; }
+.bc-detail-grid p { margin: 0; font-size: 11.5px; color: #6b7280; }
+.bc-detail-grid b { font-size: 15px; color: #0f172a; }
+.ota-card [hidden], #tamilFields[hidden], #farmPicker[hidden] { display: none !important; }
+
+@media (max-width: 960px) {
+  .bc-compose { grid-template-columns: 1fr; }
+  .bc-preview-wrap { position: static; max-width: 380px; }
+}

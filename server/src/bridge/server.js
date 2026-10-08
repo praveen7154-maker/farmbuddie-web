@@ -16,6 +16,9 @@ import { normalizeFarmElectrical } from "./farmElectrical.js";
 import { validateSequences, loadValveSequences, saveValveSequences } from "./valveSequences.js";
 import { validPump, validatePresets, loadCyclicPresets, saveCyclicPresets } from "./cyclicPresets.js";
 import { db } from "../firebaseAdmin.js";
+import { createAnnouncementsModule } from "./announcements.js";
+import { pgAnnouncementStore } from "./announcementStore.js";
+import { loadAudience, phoneFarmIds, sendPush, removeDevices } from "./announcementsFirebase.js";
 
 export const app = express();
 // nginx (on the host) is the only caller - the port is published on
@@ -65,6 +68,14 @@ const limiter = rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: tru
 app.use(cors(corsOptions), limiter, verifyFirebaseToken);
 
 app.use("/ota", ota.adminRouter);
+
+// Message Broadcast (admin panel > Message Broadcast) and each phone's
+// "Farm Buddie Official" feed in the Irrigo app - see announcements.js.
+export const broadcast = createAnnouncementsModule({
+  store: pgAnnouncementStore, loadAudience, phoneFarmIds, sendPush, removeDevices
+});
+app.use("/broadcast", broadcast.adminRouter);
+app.use("/announcements", broadcast.farmerRouter);
 
 /**
  * POST /command/device
