@@ -64,6 +64,21 @@ export async function queryEvents(farmId, since) {
   return rows.reverse();
 }
 
+// A farm's motor alerts (status-topic messages carrying "event" - see
+// mqttBridge.js) recorded after `since`, oldest first, at most `limit`.
+export async function queryAlerts(farmId, since, limit) {
+  const { rows } = await pool.query(
+    `SELECT event_type, payload, recorded_at
+     FROM device_events
+     WHERE farm_id = $1 AND recorded_at > $2
+       AND event_type LIKE 'motor%\\_status' AND payload ? 'event'
+     ORDER BY recorded_at ASC
+     LIMIT $3`,
+    [farmId, since, limit]
+  );
+  return rows;
+}
+
 async function cleanupOldEvents() {
   try {
     const result = await pool.query(

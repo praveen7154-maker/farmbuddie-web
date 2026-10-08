@@ -5,7 +5,7 @@ import { config } from "../config.js";
 import { verifyFirebaseToken } from "../middleware/verifyFirebaseToken.js";
 import { canAccessFarm } from "./ownership.js";
 import { publishCommand, isBridgeConnected } from "./mqttBridge.js";
-import { queryEvents, checkPostgresHealth } from "./postgres.js";
+import { queryEvents, queryAlerts, checkPostgresHealth } from "./postgres.js";
 import { getFleetStatus } from "./fleetStatus.js";
 import { issueDeviceCredentialByFarmId } from "../deviceProvisioning.js";
 import { buildDeviceQrPng } from "./qrPayload.js";
@@ -22,6 +22,7 @@ import { loadAudience, phoneFarmIds, sendPush, removeDevices } from "./announcem
 import { createReportService } from "./reportService.js";
 import { pgReportStore } from "./reportStore.js";
 import { MOTOR_NUMBERS } from "./motorNumbers.js";
+import { ALERTS_PAGE, alertsSince, alertPage } from "./alertHistory.js";
 
 export const app = express();
 // nginx (on the host) is the only caller - the port is published on
@@ -324,6 +325,34 @@ app.get("/reports/:farmId", async (req, res) => {
     if (err && err.status) return res.status(err.status).json({ error: err.message });
     console.error("reports error:", err);
     return res.status(500).json({ error: "Failed to build the report" });
+  }
+});
+
+/**
+ * GET /alerts/:farmId?since=<epoch ms>
+ * The controller's alerts (faults, power cuts and restores, starts and
+ * stops, cyclic and valve events - every motor) recorded after `since`,
+ * oldest first, up to 500 a call - so the Irrigo app's Notifications list
+ * catches up on what happened while the app was closed. Continue from
+ * `until` while `more` is true; see alertHistory.js. Same access rule as
+ * /telemetry.
+ */
+app.get("/alerts/:farmId", async (req, res) => {
+  const { farmId } = req.params;
+  if (!/^\d{1,6}$/.test(farmId)) {
+    return res.status(400).json({ error: "Invalid farmId" });
+  }
+  try {
+    if (!(await canAccessFarm(req.decodedToken, farmId))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    const nowMs = Date.now();
+    const sinceMs = alertsSince(req.query.since, nowMs);
+    const rows = await queryAlerts(farmId, new Date(sinceMs), ALERTS_PAGE);
+    return res.json(alertPage(rows, sinceMs, nowMs));
+  } catch (err) {
+    console.error("alerts error:", err);
+    return res.status(500).json({ error: "Failed to load alerts" });
   }
 });
 
