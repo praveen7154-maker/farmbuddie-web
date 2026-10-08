@@ -19,6 +19,9 @@ import { db } from "../firebaseAdmin.js";
 import { createAnnouncementsModule } from "./announcements.js";
 import { pgAnnouncementStore } from "./announcementStore.js";
 import { loadAudience, phoneFarmIds, sendPush, removeDevices } from "./announcementsFirebase.js";
+import { createReportService } from "./reportService.js";
+import { pgReportStore } from "./reportStore.js";
+import { MOTOR_NUMBERS } from "./motorNumbers.js";
 
 export const app = express();
 // nginx (on the host) is the only caller - the port is published on
@@ -293,6 +296,34 @@ app.put("/farm/:farmId/cyclic-presets/:pump", async (req, res) => {
     if (err && err.status) return res.status(err.status).json({ error: err.message });
     console.error("cyclic presets save error:", err);
     return res.status(500).json({ error: "Failed to save cyclic presets" });
+  }
+});
+
+/**
+ * GET /reports/:farmId?motor=1&from=YYYY-MM-DD&to=YYYY-MM-DD
+ * The Irrigo app's Reports screen: day-by-day motor runs (start / end /
+ * mode / why it stopped), run time, starts, estimated energy, 3-phase power
+ * hours, valve watering, faults and supply voltage - see reports.js. Days
+ * are India local days; `to` defaults to today, `from` to 6 days before.
+ * Same access rule as /telemetry.
+ */
+export const reports = createReportService({ store: pgReportStore });
+app.get("/reports/:farmId", async (req, res) => {
+  const { farmId } = req.params;
+  const motor = String(req.query.motor || "1");
+  if (!/^\d{1,6}$/.test(farmId) || !MOTOR_NUMBERS.includes(motor)) {
+    return res.status(400).json({ error: "Invalid farmId or motor" });
+  }
+  try {
+    if (!(await canAccessFarm(req.decodedToken, farmId))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    const { from, to } = reports.parseRange(req.query);
+    return res.json(await reports.getReport(farmId, motor, from, to));
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.message });
+    console.error("reports error:", err);
+    return res.status(500).json({ error: "Failed to build the report" });
   }
 });
 

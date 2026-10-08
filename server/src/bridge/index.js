@@ -4,18 +4,21 @@ import { ensureFarmConfigCacheSchema } from "./farmConfigCache.js";
 import { connectBridge, publishCommand, setOtaStatusHandler } from "./mqttBridge.js";
 import { ensureOtaSchema } from "./otaStore.js";
 import { ensureAnnouncementSchema } from "./announcementStore.js";
+import { ensureReportSchema } from "./reportStore.js";
 import { startFarmerDocCacheRefresh } from "./firestoreMirror.js";
 import { attachLiveGateway } from "./liveGateway.js";
-import { app, ota, broadcast } from "./server.js";
+import { app, ota, broadcast, reports } from "./server.js";
 
 async function main() {
   await ensureSchema();
   await ensureFarmConfigCacheSchema();
   await ensureOtaSchema();
   await ensureAnnouncementSchema();
+  await ensureReportSchema();
   setOtaStatusHandler(ota.handleOtaStatus);
   startRetentionCleanup();
   broadcast.startScheduler();
+  reports.startRollUp();
   startFarmerDocCacheRefresh();
   connectBridge();
 
