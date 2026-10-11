@@ -72,6 +72,11 @@ const mode = () => document.querySelector('input[name="mode"]:checked').value;
 const product = () => $("productInput").value;
 const isNode = () => product() !== "hub";
 const fmtTime = (t) => (t ? new Date(t).toLocaleString() : "-");
+// "2m 05s" since a GSM download started.
+const gsmElapsed = (t) => {
+  const sec = t ? Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 1000)) : 0;
+  return `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, "0")}s`;
+};
 
 async function api(path, options = {}) {
   const idToken = await auth.currentUser.getIdToken();
@@ -381,14 +386,22 @@ function renderRelease({ release, summary, targets, nodeSummary, nodes }) {
   $("sumBusy").textContent = summary.busy;
   $("sumFailed").textContent = summary.failed;
   $("targetBody").innerHTML = targets.map((t) => {
+    // Over GSM the hub's one modem is busy with the download, so "starting"
+    // is the last it says until it restarts on the new firmware (or reports
+    // a failure) - show the time since then instead of a blank.
+    const gsmDownloading = t.state === "starting" && t.transport === "gsm" && t.outcome === "in_progress";
     const pct = t.state === "downloading" && Number.isFinite(t.percent)
       ? `<span class="ota-bar"><span style="width:${Math.max(0, Math.min(100, t.percent))}%"></span></span> ${t.percent}%`
+      : gsmDownloading ? `<span class="ota-bar indeterminate"><span></span></span> ${gsmElapsed(t.updatedAt)}`
       : t.outcome === "updated" ? "100%" : "";
-    const detail = t.error ? (ERROR_TEXT[t.error] || t.error) : t.outcome === "updated" ? `Running ${esc(t.fwVersion || release.version)}` : "";
+    const detail = t.error ? (ERROR_TEXT[t.error] || t.error)
+      : t.outcome === "updated" ? `Running ${esc(t.fwVersion || release.version)}`
+      : gsmDownloading ? "Over GSM - usually 3-6 min, no progress until it restarts" : "";
+    const stateText = gsmDownloading ? "Downloading" : STATE_TEXT[t.state] || t.state;
     return `<tr>
       <td>${esc(t.farmId)}</td>
       <td>${esc(t.nodeId)}</td>
-      <td><span class="ota-pill ${t.outcome}">${esc(STATE_TEXT[t.state] || t.state)}</span></td>
+      <td><span class="ota-pill ${t.outcome}">${esc(stateText)}</span></td>
       <td>${pct}</td>
       <td>${esc((t.transport || "").toUpperCase())}</td>
       <td>${esc(detail)}</td>

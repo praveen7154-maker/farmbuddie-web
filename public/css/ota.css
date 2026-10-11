@@ -70,6 +70,9 @@
 .ota-pill.failed { background: #fee2e2; color: #991b1b; }
 .ota-bar { width: 90px; height: 7px; background: #e5e7eb; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
 .ota-bar > span { display: block; height: 100%; background: #2e7d32; }
+/* GSM download: no percent to show (see ota.js), just that it's under way. */
+.ota-bar.indeterminate > span { width: 35%; animation: ota-slide 1.4s ease-in-out infinite; }
+@keyframes ota-slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
 #historyBody tr { cursor: pointer; }
 /* .ota-field sets display:flex, which would otherwise override [hidden]. */
 .ota-card [hidden], .ota-card[hidden], .ota-alert[hidden] { display: none !important; }

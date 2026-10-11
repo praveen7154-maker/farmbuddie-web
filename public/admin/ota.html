@@ -164,8 +164,9 @@
     <p class="ota-note">Units appear here as they start reporting - one that never shows is offline, out of range, or
       not of this type. "Installed - waiting" = it has the new firmware and switches over as soon as the farm is idle.</p>
   </div>
-  <p class="ota-note">"Waiting for hub" = no reply yet: the hub is offline, or it is downloading over GSM (its MQTT is off for 3-6 min) - normal.
-    Refreshes every 5 seconds.</p>
+  <p class="ota-note">"Waiting for hub" = no reply yet: the hub is offline or busy. Over GSM the hub can't send progress while it downloads
+    (its one modem is busy with the download) - the row shows the time since it started instead, usually 3-6 min, then it restarts on the
+    new firmware. Refreshes every 5 seconds.</p>
   <div class="ota-actions">
     <button id="retryBtn" class="fb-btn-primary small">🔁 Resend to hubs not updated</button>
     <span id="retryStatus" class="ota-status-text"></span>
