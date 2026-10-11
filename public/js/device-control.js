@@ -309,9 +309,32 @@ function selectMotor(n) {
 
 /* ================= WIRING ================= */
 
+/* Live readings while this page is on screen. The hub reports every 10 s
+ * only for 2.5 min after a command reaches it (APP_ACTIVE_WINDOW_MS in its
+ * config.h), otherwise every 2 min running / 10 min idle - so this page sat
+ * on readings minutes old unless the Irrigo app happened to be open too.
+ * Same as the app: ask the hub and each paired motor node when the page
+ * opens or comes back on screen, then every minute while it stays there;
+ * nothing while it's in the background. */
+const KEEPALIVE_MS = 60 * 1000;
+let lastKeepaliveMs = 0;
+
+function keepalive() {
+  if (!auth?.currentUser || !farm?.controller?.uniqueId || document.visibilityState !== "visible") return;
+  if (Date.now() - lastKeepaliveMs < KEEPALIVE_MS) return;
+  lastKeepaliveMs = Date.now();
+  const paired = motorNodeFlags(farm.deviceStatus);
+  for (const m of MOTOR_NUMS) {
+    if (m !== "1" && paired[m] !== true) continue;
+    sendDeviceCommand(auth, { ...target(), motorNum: m, cmd: "get_status" }).catch(() => {});
+  }
+}
+
 export function initDeviceControl(firebaseAuth) {
   auth = firebaseAuth;
   renderCalTable();
+  setInterval(keepalive, 5000);
+  document.addEventListener("visibilitychange", keepalive);
 
   const on = (id, fn) => $(id)?.addEventListener("click", fn);
 
@@ -340,6 +363,7 @@ export function initDeviceControl(firebaseAuth) {
 /* Called with every Firestore snapshot of the farmer doc. */
 export function updateDeviceControl(farmerData) {
   farm = farmerData;
+  keepalive();
   renderMotorSelect();
   const motorJson = JSON.stringify(selectedMotor() ?? null);
   if (motorJson !== lastMotorJson) {
