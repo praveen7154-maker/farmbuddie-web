@@ -14,7 +14,30 @@ const CAT = {
   offer: { icon: "🎁", label: "Offer" },
   alert: { icon: "⚠️", label: "Alert" }
 };
+// {version}, {date}, {time}... are blanks to fill in - the message can't be
+// sent while one is left (see formProblem()).
 const TEMPLATES = [
+  {
+    name: "Firmware update - master controller", category: "update", important: true,
+    title: "Controller update to v{version} on {date}",
+    body: "Your Farm Buddie master controller will be updated to firmware v{version} on {date}, {time}. During the update the controller restarts, and motors and valves cannot be controlled from the app. Please keep irrigation stopped during this time, and start it again once Maintenance shows firmware v{version}. Your settings and programs are kept.",
+    titleTa: "கண்ட்ரோலர் அப்டேட் v{version} – {date}",
+    bodyTa: "{date} அன்று {time} நேரத்தில் உங்கள் Farm Buddie மாஸ்டர் கண்ட்ரோலர் ஃபர்ம்வேர் v{version}-க்கு அப்டேட் செய்யப்படும். அப்டேட்டின் போது கண்ட்ரோலர் மறுதொடக்கம் ஆகும்; அந்த நேரத்தில் செயலியிலிருந்து மோட்டார் மற்றும் வால்வுகளை இயக்க முடியாது. தயவுசெய்து இந்த நேரத்தில் பாசனத்தை நிறுத்தி வைக்கவும்; Maintenance-இல் ஃபர்ம்வேர் v{version} என காட்டிய பின் மீண்டும் தொடங்கவும். உங்கள் அமைப்புகள் மற்றும் புரோகிராம்கள் மாறாது."
+  },
+  {
+    name: "Firmware update - motor nodes", category: "update", important: true,
+    title: "Motor node update to v{version} on {date}",
+    body: "The motor nodes on your farm (Motor 2, Motor 3) will be updated to firmware v{version} on {date}, {time}. Each node restarts once during the update, and that motor cannot be controlled until it is back. Please keep irrigation on these motors stopped during this time, and start it again after the update. Your settings and programs are kept.",
+    titleTa: "மோட்டார் நோடு அப்டேட் v{version} – {date}",
+    bodyTa: "{date} அன்று {time} நேரத்தில் உங்கள் பண்ணையின் மோட்டார் நோடுகள் (Motor 2, Motor 3) ஃபர்ம்வேர் v{version}-க்கு அப்டேட் செய்யப்படும். அப்டேட்டின் போது ஒவ்வொரு நோடும் ஒருமுறை மறுதொடக்கம் ஆகும்; அது திரும்பும் வரை அந்த மோட்டாரை இயக்க முடியாது. தயவுசெய்து இந்த நேரத்தில் அந்த மோட்டார்களின் பாசனத்தை நிறுத்தி வைக்கவும்; அப்டேட் முடிந்த பின் மீண்டும் தொடங்கவும். உங்கள் அமைப்புகள் மற்றும் புரோகிராம்கள் மாறாது."
+  },
+  {
+    name: "Firmware update - master and motor nodes", category: "update", important: true,
+    title: "Farm Buddie firmware update on {date}",
+    body: "Your Farm Buddie master controller (to v{version}) and motor nodes (to v{node_version}) will be updated on {date}, {time}. They restart during the update, and motors and valves cannot be controlled from the app. Please keep all irrigation stopped during this time, and start it again once Maintenance shows firmware v{version}. Your settings and programs are kept.",
+    titleTa: "Farm Buddie ஃபர்ம்வேர் அப்டேட் – {date}",
+    bodyTa: "{date} அன்று {time} நேரத்தில் உங்கள் Farm Buddie மாஸ்டர் கண்ட்ரோலர் v{version}-க்கும், மோட்டார் நோடுகள் v{node_version}-க்கும் அப்டேட் செய்யப்படும். அப்டேட்டின் போது அவை மறுதொடக்கம் ஆகும்; அந்த நேரத்தில் செயலியிலிருந்து மோட்டார் மற்றும் வால்வுகளை இயக்க முடியாது. தயவுசெய்து இந்த நேரத்தில் எல்லா பாசனத்தையும் நிறுத்தி வைக்கவும்; Maintenance-இல் ஃபர்ம்வேர் v{version} என காட்டிய பின் மீண்டும் தொடங்கவும். உங்கள் அமைப்புகள் மற்றும் புரோகிராம்கள் மாறாது."
+  },
   {
     name: "Irrigo app update", category: "update",
     title: "New Irrigo app update available",
@@ -117,6 +140,7 @@ $("templateSelect").addEventListener("change", (e) => {
   $("bodyTaInput").value = t.bodyTa;
   $("tamilToggle").checked = true;
   $("tamilFields").hidden = false;
+  $("importantToggle").checked = !!t.important;
   refreshCompose();
 });
 
@@ -260,6 +284,9 @@ function toLocalInput(d) {
 function formProblem() {
   if (!$("titleInput").value.trim()) return "Add a title";
   if (!$("bodyInput").value.trim()) return "Write the message";
+  const fields = ["titleInput", "bodyInput"].concat($("tamilToggle").checked ? ["titleTaInput", "bodyTaInput"] : []);
+  const blank = fields.map((id) => $(id).value.match(/\{[a-z_]+\}/)).find(Boolean);
+  if (blank) return `Fill in ${blank[0]} (in English and Tamil)`;
   if ($("tamilToggle").checked && $("titleTaInput").value.trim() && !$("bodyTaInput").value.trim()) return "Add the Tamil message too";
   if (radio("audience") === "farms" && selected.size === 0) return "Select at least one farm";
   if (radio("when") === "later") {
