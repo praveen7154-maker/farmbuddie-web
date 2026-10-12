@@ -81,9 +81,12 @@ async function loadFarmer() {
               alt="Farmer Photo"
               style="width:160px;height:180px;object-fit:cover;border-radius:18px;border:2px solid #2e7d32;box-shadow:0 8px 22px rgba(0,0,0,0.18);"
             />`
-          : `<div style="width:160px;height:180px;border-radius:18px;border:2px dashed #bbb;display:flex;align-items:center;justify-content:center;font-size:14px;color:#777;background:#f5f5f5;">
-              No Photo Available
-            </div>`
+          : `<img
+              src="/assets/farmer-default.png"
+              alt="Farm Buddie"
+              title="No farmer photo - photo uploads are off for now"
+              style="width:160px;height:180px;object-fit:contain;padding:18px;box-sizing:border-box;background:#fff;border-radius:18px;border:2px solid #2e7d32;box-shadow:0 8px 22px rgba(0,0,0,0.18);"
+            />`
       }
     </div>
 
