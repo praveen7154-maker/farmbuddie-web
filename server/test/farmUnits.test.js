@@ -11,7 +11,8 @@ test("motor nodes come from the app's paired list or the hub's motor_nodes", () 
   assert.equal(farmUnitCounts({ pairedUnits: { motorNodes: { MOTOR_2: {}, MOTOR_3: {} } } }).motorNodes, 2);
   assert.equal(farmUnitCounts({ deviceStatus: { motor1: { motor_nodes: { 2: true } } } }).motorNodes, 1);
   assert.equal(farmUnitCounts({ deviceStatus: { motor1: { motor2_online: false } } }).motorNodes, 1);
-  assert.equal(farmUnitCounts({ deviceStatus: { motor1: {}, motor3: { state: "OFF" } } }).motorNodes, 1);
+  // A motor3 status left in the record after the node was removed doesn't count.
+  assert.equal(farmUnitCounts({ deviceStatus: { motor1: {}, motor3: { state: "OFF" } } }).motorNodes, 0);
 });
 
 test("a backwash node is not counted as a valve unit", () => {
