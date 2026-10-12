@@ -1,14 +1,14 @@
 import { auth, db } from "/js/firebase-init.js";
 import { renderValveConfigSection, readValveConfig, fillValveConfig } from "/js/valve-config.js";
-import { prepareUpload, applyDocumentUploadSetting } from "/js/upload-prep.js";
+import { prepareUpload, applyDocumentUploadSetting, FARMER_DOCS } from "/js/upload-prep.js";
 import { DOCUMENT_UPLOADS } from "/js/config.js";
 
 // Valve Configuration + Additional Features fields (IRRIGO and IRRIGO_PLUS alike)
 renderValveConfigSection();
-// Aadhaar / other document / photo uploads off until Storage is set up (config.js).
-applyDocumentUploadSetting(DOCUMENT_UPLOADS, ["aadhaarFile", "otherDoc", "farmerPhoto"], {
-  card: document.getElementById("aadhaarFile")?.closest(".fb-card")
-});
+// Aadhaar / other document / photo uploads off until Storage is set up
+// (config.js): a "hard copy collected?" checklist instead, filled in once
+// the farmer has loaded.
+let docSetting = { uploadsOn: true, readHardcopies: () => null };
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -348,6 +348,9 @@ fillValveConfig(f.valveConfig);
   aadhaarUrl = f.documents?.aadhaarUrl || "";
   otherDocUrl = f.documents?.otherDocUrl || "";
   farmerPhotoUrl = f.documents?.farmerPhotoUrl || "";
+  docSetting = applyDocumentUploadSetting(DOCUMENT_UPLOADS, ["aadhaarFile", "otherDoc", "farmerPhoto"], {
+    card: document.getElementById("aadhaarFile")?.closest(".fb-card"), checklist: FARMER_DOCS, existing: f.hardcopies || {}
+  });
 
   if (farmerRole) farmerRole.value = f.role || "MAIN";
 
@@ -1013,6 +1016,7 @@ showLoader("Updating Farmer...");
         otherDocUrl,
         farmerPhotoUrl
       },
+      ...(docSetting.uploadsOn ? {} : { hardcopies: docSetting.readHardcopies(), hardcopiesUpdatedAt: serverTimestamp() }),
 
       updatedAt: serverTimestamp(),
       updatedBy: auth.currentUser.uid
@@ -1271,6 +1275,7 @@ return;
           emailId: updatedData.emailId,
           address: updatedData.address,
           documents: updatedData.documents,
+          ...(updatedData.hardcopies ? { hardcopies: updatedData.hardcopies } : {}),
 
            // 🔥 ADD THIS
           leadSource: updatedData.leadSource,

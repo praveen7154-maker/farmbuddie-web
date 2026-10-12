@@ -18,7 +18,7 @@ import {
   runTransaction,
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { formatFarmBuddieId, claimNextNumber } from "/js/id-format.js";
-import { prepareUpload, applyDocumentUploadSetting } from "/js/upload-prep.js";
+import { prepareUpload, applyDocumentUploadSetting, FARMER_DOCS } from "/js/upload-prep.js";
 import { DOCUMENT_UPLOADS } from "/js/config.js";
 
 
@@ -40,8 +40,9 @@ import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisi
 /* ✅ INITIALIZE STORAGE */
 const storage = getStorage();
 
-// Aadhaar / other document / photo uploads off until Storage is set up (config.js).
-applyDocumentUploadSetting(DOCUMENT_UPLOADS, ["aadhaarFile", "otherDoc", "farmerPhoto"]);
+// Aadhaar / other document / photo uploads off until Storage is set up
+// (config.js): a "hard copy collected?" checklist instead.
+const docSetting = applyDocumentUploadSetting(DOCUMENT_UPLOADS, ["aadhaarFile", "otherDoc", "farmerPhoto"], { checklist: FARMER_DOCS });
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -857,6 +858,7 @@ if (preparedPhoto) farmerPhotoUrl = await uploadPrepared(preparedPhoto, "farmer-
     otherDocUrl,
     farmerPhotoUrl
   },
+  ...(docSetting.uploadsOn ? {} : { hardcopies: docSetting.readHardcopies(), hardcopiesUpdatedAt: serverTimestamp() }),
   
   appUsers: [
     { name: appUser2Name.value.trim(), mobile: cleanedAppUser2 },

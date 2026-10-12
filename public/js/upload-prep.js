@@ -63,21 +63,67 @@ export async function prepareUpload(file, label = "File", { maxSide = 1600 } = {
   }
 }
 
-// Hides the given file inputs' fields (and `card`, if given) while document
-// uploads are off (config.js DOCUMENT_UPLOADS), leaving a short note
-// instead. Returns whether uploads are on.
-export function applyDocumentUploadSetting(enabled, inputIds, { card = null, note = "Documents: paper copies are kept for now - uploads are off." } = {}) {
-  if (enabled) return true;
+// While document uploads are off (config.js DOCUMENT_UPLOADS) the file
+// inputs are hidden and a "hard copy collected?" Yes / No checklist takes
+// their place, so the record still says which paper documents are on file.
+//   checklist: [{ key, label }]   existing: { key: true|false } (edit pages)
+// Returns { uploadsOn, readHardcopies } - readHardcopies() gives
+// { key: true|false } for the record (null while uploads are on).
+export function applyDocumentUploadSetting(enabled, inputIds, { card = null, checklist = [], existing = {} } = {}) {
+  if (enabled) return { uploadsOn: true, readHardcopies: () => null };
   const fields = inputIds.map((id) => document.getElementById(id)?.closest(".fb-field")).filter(Boolean);
-  const target = card || fields[0];
-  if (target) {
-    const p = document.createElement("p");
-    p.className = "fb-doc-note";
-    p.style.cssText = "color:#6b7280;font-size:13px;margin:6px 0 12px";
-    p.textContent = note;
-    target.insertAdjacentElement("beforebegin", p);
-  }
-  if (card) card.hidden = true;
   fields.forEach((f) => { f.hidden = true; });
-  return false;
+  if (card) card.hidden = true;
+
+  const box = document.createElement("div");
+  box.className = "fb-card hardcopy-card";
+  box.innerHTML = `
+    <h2>📄 Hard Copy Documents Collected</h2>
+    <p style="color:#6b7280;font-size:13px;margin:-4px 0 12px">Uploads are off for now - tick which paper copies you have collected.</p>
+    <div class="fb-grid">
+      ${checklist.map(({ key, label }) => `
+        <div class="fb-field">
+          <label>${label}</label>
+          <div style="display:flex;gap:18px;align-items:center;padding:8px 0">
+            <label style="display:flex;gap:6px;align-items:center;font-weight:500"><input type="radio" name="hc_${key}" value="yes" ${existing?.[key] === true ? "checked" : ""}> Yes</label>
+            <label style="display:flex;gap:6px;align-items:center;font-weight:500"><input type="radio" name="hc_${key}" value="no" ${existing?.[key] === true ? "" : "checked"}> No</label>
+          </div>
+        </div>`).join("")}
+    </div>`;
+  // Where the documents were: in place of their own card, or right after
+  // the card that holds the file fields.
+  const anchor = card || fields[0]?.closest(".fb-card");
+  if (card) card.insertAdjacentElement("beforebegin", box);
+  else if (anchor) anchor.insertAdjacentElement("afterend", box);
+
+  return {
+    uploadsOn: false,
+    readHardcopies: () => Object.fromEntries(checklist.map(({ key }) =>
+      [key, box.querySelector(`input[name="hc_${key}"]:checked`)?.value === "yes"]))
+  };
 }
+
+// "✅ Collected / ❌ Not collected" rows for the View pages.
+export function hardcopyRows(checklist, hardcopies) {
+  if (!hardcopies) return "";
+  return checklist.map(({ key, label }) => `
+    <div class="info-item"><b>${label}:</b> ${hardcopies[key] ? "✅ Hard copy collected" : "❌ Not collected"}</div>`).join("");
+}
+
+// The documents each record tracks (upload field / hard copy).
+export const DISTRIBUTOR_DOCS = [
+  { key: "gst", label: "GST Certificate" },
+  { key: "pan", label: "PAN Card" },
+  { key: "aadhaar", label: "Aadhaar" },
+  { key: "cheque", label: "Cancelled Cheque" },
+  { key: "msme", label: "MSME Certificate" },
+  { key: "itr", label: "Last Year ITR" },
+  { key: "other1", label: "Other Document 1" },
+  { key: "other2", label: "Other Document 2" },
+  { key: "other3", label: "Other Document 3" }
+];
+export const FARMER_DOCS = [
+  { key: "aadhaar", label: "Aadhaar" },
+  { key: "other", label: "Other Document" },
+  { key: "photo", label: "Farmer Photo" }
+];

@@ -11,7 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
 import { formatDistributorId, claimNextNumber } from "/js/id-format.js";
-import { prepareUpload, applyDocumentUploadSetting } from "/js/upload-prep.js";
+import { prepareUpload, applyDocumentUploadSetting, DISTRIBUTOR_DOCS } from "/js/upload-prep.js";
 import { DOCUMENT_UPLOADS, DOCUMENTS_REQUIRED } from "/js/config.js";
 
 import {
@@ -95,9 +95,12 @@ const DOC_FIELDS = [
 // Must be attached when DOCUMENTS_REQUIRED (config.js) - the ✱ ones.
 const REQUIRED_DOCS = ["panFile", "aadhaarFile", "chequeFile"];
 
-const uploadsOn = applyDocumentUploadSetting(DOCUMENT_UPLOADS, DOC_FIELDS.map((d) => d[1]), {
-  card: document.getElementById("gstFile")?.closest(".fb-card")
+// Uploads off: a "hard copy collected?" checklist instead (upload-prep.js).
+const docSetting = applyDocumentUploadSetting(DOCUMENT_UPLOADS, DOC_FIELDS.map((d) => d[1]), {
+  card: document.getElementById("gstFile")?.closest(".fb-card"),
+  checklist: DISTRIBUTOR_DOCS
 });
+const uploadsOn = docSetting.uploadsOn;
 if (uploadsOn && DOCUMENTS_REQUIRED) document.querySelectorAll(".doc-req").forEach((el) => { el.hidden = false; });
 
 async function prepareDocuments() {
@@ -237,7 +240,8 @@ document.getElementById("distributorForm")
     status: "active",
     createdAt: serverTimestamp(),
     createdBy: auth.currentUser.uid,
-    documents: documents
+    documents: documents,
+    ...(uploadsOn ? {} : { hardcopies: docSetting.readHardcopies(), hardcopiesUpdatedAt: serverTimestamp() })
     });
 
    hideLoader();

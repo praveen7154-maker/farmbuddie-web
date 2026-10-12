@@ -5,6 +5,7 @@ import { onAuthStateChanged, signOut }
 import { doc, getDoc }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { BRIDGE_BASE_URL } from "/js/config.js";
+import { hardcopyRows, DISTRIBUTOR_DOCS } from "/js/upload-prep.js";
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -85,8 +86,12 @@ async function loadDistributor() {
         <div class="info-item"><b>Branch:</b> ${d.bankDetails?.branchLocation || "-"}</div>
       </div>
 
+    ${d.hardcopies ? `
+    <div class="section-title">📄 Hard Copy Documents</div>
+    <div class="info-grid">${hardcopyRows(DISTRIBUTOR_DOCS, d.hardcopies)}</div>` : ""}
+
     <div class="section-title">📂 Uploaded Documents</div>
-    ${Object.values(d.documents || {}).some(Boolean) ? "" : `<p style="color:#6b7280;font-size:13px">None uploaded - paper copies are kept.</p>`}
+    ${Object.values(d.documents || {}).some(Boolean) ? "" : `<p style="color:#6b7280;font-size:13px">None uploaded.</p>`}
     <div class="info-grid">
 
       ${renderDoc("GST Certificate", d.documents?.gstUrl)}

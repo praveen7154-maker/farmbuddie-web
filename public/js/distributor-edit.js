@@ -1,5 +1,5 @@
 import { auth, db } from "/js/firebase-init.js";
-import { prepareUpload, applyDocumentUploadSetting } from "/js/upload-prep.js";
+import { prepareUpload, applyDocumentUploadSetting, DISTRIBUTOR_DOCS } from "/js/upload-prep.js";
 import { DOCUMENT_UPLOADS } from "/js/config.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
@@ -83,6 +83,10 @@ async function loadDistributor() {
   document.getElementById("accountNumber").value = d.bankDetails?.accountNumber || "";
   document.getElementById("ifsc").value = d.bankDetails?.ifsc || "";
   document.getElementById("branchLocation").value = d.bankDetails?.branchLocation || "";
+
+  docSetting = applyDocumentUploadSetting(DOCUMENT_UPLOADS,
+    ["gstFile", "panFile", "aadhaarFile", "chequeFile", "msmeFile", "itrFile", "otherDoc1", "otherDoc2", "otherDoc3"],
+    { card: document.getElementById("gstFile")?.closest(".fb-card"), checklist: DISTRIBUTOR_DOCS, existing: d.hardcopies || {} });
 }
 
 /* ================= VALIDATION ================= */
@@ -124,10 +128,9 @@ function validateFields(data) {
   return true;
 }
 
-// Document uploads off until Storage is set up (config.js) - see upload-prep.js.
-applyDocumentUploadSetting(DOCUMENT_UPLOADS,
-  ["gstFile", "panFile", "aadhaarFile", "chequeFile", "msmeFile", "itrFile", "otherDoc1", "otherDoc2", "otherDoc3"],
-  { card: document.getElementById("gstFile")?.closest(".fb-card") });
+// Document uploads off until Storage is set up (config.js): the "hard copy
+// collected?" checklist instead, filled in once the record has loaded.
+let docSetting = { uploadsOn: true, readHardcopies: () => null };
 
 /* ================= FILE UPLOAD ================= */
 // Photos -> small WebP, PDFs under 2 MB - see upload-prep.js. fileName's own
@@ -214,6 +217,7 @@ document.getElementById("distributorForm")
   },
 
   documents: updatedDocuments,
+  ...(docSetting.uploadsOn ? {} : { hardcopies: docSetting.readHardcopies(), hardcopiesUpdatedAt: serverTimestamp() }),
   updatedAt: serverTimestamp(),
   updatedBy: auth.currentUser.uid
 });

@@ -1,5 +1,6 @@
 import { auth, db } from "/js/firebase-init.js";
 import { valveConfigViewHtml } from "/js/valve-config.js";
+import { hardcopyRows, FARMER_DOCS } from "/js/upload-prep.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -45,8 +46,11 @@ async function loadFarmer() {
 
   /* ===== DOCUMENT FALLBACK LOGIC ===== */
   let documentsData = f.documents || {};
+  // Hard copies belong to the person: a farm made with Add Farm shows the
+  // ones recorded on the farmer's other farm.
+  let hardcopies = f.hardcopies || null;
 
-  if (!documentsData?.farmerPhotoUrl && f.primaryMobile) {
+  if ((!documentsData?.farmerPhotoUrl || !hardcopies) && f.primaryMobile) {
     const farmQuery = query(
       collection(db, "farmers"),
       where("primaryMobile", "==", f.primaryMobile)
@@ -56,9 +60,10 @@ async function loadFarmer() {
 
     farmSnap.forEach(docSnap => {
       const farmData = docSnap.data();
-      if (farmData.documents?.farmerPhotoUrl) {
+      if (!documentsData?.farmerPhotoUrl && farmData.documents?.farmerPhotoUrl) {
         documentsData = farmData.documents;
       }
+      if (!hardcopies && farmData.hardcopies) hardcopies = farmData.hardcopies;
     });
   }
 
@@ -147,6 +152,10 @@ async function loadFarmer() {
     </div>
 
     <!-- DOCUMENTS -->
+    ${hardcopies ? `
+    <div class="section-title">📄 Hard Copy Documents</div>
+    <div class="info-grid">${hardcopyRows(FARMER_DOCS, hardcopies)}</div>` : ""}
+
     <div class="section-title">📂 Uploaded Documents</div>
     <div class="info-grid">
       <div class="info-item">
