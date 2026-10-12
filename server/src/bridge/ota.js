@@ -40,6 +40,28 @@ export const PRODUCTS = ["hub", "motor-node", "valve", "filter-backwash"];
 export const isNodeProduct = (p) => PRODUCTS.includes(p) && p !== "hub";
 const PRODUCT_NAMES = { "motor-node": "motor node", valve: "valve unit", "filter-backwash": "filter backwash node" };
 
+// Every image says which device it is for (FW_PRODUCT_MARKER in each repo's
+// config.h): "FARMBUDDIE-FW-PRODUCT=<product>;". The signature only proves
+// the admin released the file, not that the right file was picked - a
+// motor-node image flashed onto a hub would leave the hub running the wrong
+// program until someone flashes it by USB. Same parsing as the hub's
+// ProductLabelScanner (Motor repo, ota_manager.cpp) and public/js/ota.js.
+const LABEL_PREFIX = Buffer.from("FARMBUDDIE-FW-PRODUCT=");
+export function productLabels(data) {
+  const found = new Set();
+  for (let i = data.indexOf(LABEL_PREFIX); i >= 0; i = data.indexOf(LABEL_PREFIX, i + 1)) {
+    let j = i + LABEL_PREFIX.length;
+    let value = "";
+    while (j < data.length && value.length <= 24) {
+      const c = data[j];
+      if ((c >= 0x61 && c <= 0x7a) || (c >= 0x30 && c <= 0x39) || c === 0x2d) { value += String.fromCharCode(c); j++; }
+      else break;
+    }
+    if (value.length >= 1 && value.length <= 24 && data[j] === 0x3b) found.add(value);
+  }
+  return [...found];
+}
+
 // Must match the firmware byte for byte: v1 = the hub's OtaManager, v2 (node
 // images, binds the product) = the node repos' NodeOta.
 export function otaManifest(sha256, size, version, product = "hub") {
@@ -166,6 +188,13 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     // A node image is staged in the hub's spare app slot, so the same limit applies.
     if (data.length > MAX_FIRMWARE_BYTES) return res.status(400).json({ error: `Firmware is ${data.length} bytes - more than the hub's ${MAX_FIRMWARE_BYTES}-byte app slot` });
     if (data[0] !== ESP_IMAGE_MAGIC) return res.status(400).json({ error: "Not an ESP32 firmware image - choose .pio/build/esp32dev/firmware.bin" });
+    const labels = productLabels(data);
+    if (labels.length === 0) {
+      return res.status(400).json({ error: "This firmware doesn't say which device it is for - rebuild it from the current repo" });
+    }
+    if (labels.length > 1 || labels[0] !== product) {
+      return res.status(400).json({ error: `This file is ${labels.join(" + ")} firmware, not ${product} - pick the right file or the right type` });
+    }
     if (!data.includes(Buffer.from(publicKeyPem))) {
       return res.status(400).json({
         error: "This firmware doesn't contain the fleet's OTA public key (include/ota_signing_key.h). Devices running it would refuse every later update - rebuild from the current repo."

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import express from "express";
 import {
-  createOtaModule, otaManifest, verifyReleaseSignature, nodeOutcomeOf, summarizeNodes, outcomeOf
+  createOtaModule, productLabels, otaManifest, verifyReleaseSignature, nodeOutcomeOf, summarizeNodes, outcomeOf
 } from "../src/bridge/ota.js";
 import { loadSigningKey, signRelease, otaManifest as browserManifest } from "../../public/js/ota-crypto.js";
 
@@ -83,16 +83,42 @@ async function withServer(fn) {
   }
 }
 
-function fakeImage(size = 4096) {
+function fakeImage(product = "hub", size = 4096) {
   const data = Buffer.alloc(size, 0x11);
   data[0] = 0xe9;
   Buffer.from(PUB_PEM).copy(data, 100);
+  if (product) Buffer.from(`FARMBUDDIE-FW-PRODUCT=${product};`).copy(data, 3000);
   return data;
 }
 
+test("productLabels reads the image's device label", () => {
+  // A hub image also holds the bare prefix its own scanner searches for.
+  const hub = Buffer.concat([Buffer.from("xxFARMBUDDIE-FW-PRODUCT=\0yyFARMBUDDIE-FW-PRODUCT=hub;\0")]);
+  assert.deepEqual(productLabels(hub), ["hub"]);
+  assert.deepEqual(productLabels(Buffer.from("FARMBUDDIE-FW-PRODUCT=motor-node;")), ["motor-node"]);
+  assert.deepEqual(productLabels(Buffer.from("FARMBUDDIE-FW-PRODUCT=Hub;")), []);
+  assert.deepEqual(productLabels(Buffer.from("nothing here")), []);
+});
+
+test("an image labelled for another device, or not labelled, is refused", async () => {
+  await withServer(async ({ base, store }) => {
+    const upload = (data, product) => fetch(`${base}/firmware`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Firmware-Version": "1.0.4", ...(product ? { "X-Firmware-Product": product } : {}) },
+      body: data
+    });
+    const wrong = await upload(fakeImage("motor-node"));           // sent as a hub image
+    assert.equal(wrong.status, 400);
+    assert.match((await wrong.json()).error, /motor-node firmware, not hub/);
+    assert.equal((await upload(fakeImage("hub"), "valve")).status, 400);
+    assert.equal((await upload(fakeImage(null))).status, 400);
+    assert.equal((await upload(fakeImage("motor-node"), "motor-node")).status, 200);
+  });
+});
+
 test("a valve image goes to the chosen farms' hubs as node_ota_start", async () => {
   await withServer(async ({ base, store, published }) => {
-    const data = fakeImage();
+    const data = fakeImage("valve");
     const up = await (await fetch(`${base}/firmware`, {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream", "X-Firmware-Version": "1.0.2", "X-Firmware-Product": "valve" },

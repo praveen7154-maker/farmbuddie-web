@@ -56,6 +56,24 @@ const unitsText = (f) => {
     .map(([p, n]) => `${n} ${UNIT_WORD[p][n === 1 ? 0 : 1]}`);
   return parts.length ? parts.join(", ") : "Hub only";
 };
+// Which device the image says it is for - see productLabels() in the
+// server's ota.js (same rules).
+function productLabels(bytes) {
+  const prefix = new TextEncoder().encode("FARMBUDDIE-FW-PRODUCT=");
+  const found = new Set();
+  outer: for (let i = 0; i + prefix.length < bytes.length; i++) {
+    for (let k = 0; k < prefix.length; k++) if (bytes[i + k] !== prefix[k]) continue outer;
+    let j = i + prefix.length;
+    let value = "";
+    while (j < bytes.length && value.length <= 24) {
+      const c = bytes[j];
+      if ((c >= 0x61 && c <= 0x7a) || (c >= 0x30 && c <= 0x39) || c === 0x2d) { value += String.fromCharCode(c); j++; }
+      else break;
+    }
+    if (value.length >= 1 && value.length <= 24 && bytes[j] === 0x3b) found.add(value);
+  }
+  return [...found];
+}
 const PRODUCT_TEXT = { hub: "Hub", "motor-node": "Motor node", valve: "Valve unit", "filter-backwash": "Filter backwash" };
 const NODE_STATE_TEXT = {
   receiving: "Receiving", installed: "Installed - waiting", validated: "Updated", current: "Already on it",
@@ -139,7 +157,8 @@ $("binInput").addEventListener("change", async (e) => {
       size: fileBytes.length,
       sha256: await sha256Hex(fileBytes),
       isEsp: fileBytes[0] === 0xe9,
-      hasKey: config ? bytesInclude(fileBytes, config.publicKeyPem) : false
+      hasKey: config ? bytesInclude(fileBytes, config.publicKeyPem) : false,
+      labels: productLabels(fileBytes)
     };
   }
   renderChecks();
@@ -147,6 +166,7 @@ $("binInput").addEventListener("change", async (e) => {
 });
 $("versionInput").addEventListener("input", () => { renderChecks(); updateReleaseButton(); });
 $("productInput").addEventListener("change", () => {
+  renderChecks();
   // Node updates go to selected farms only (each hub restarts to stage one).
   const allRadio = document.querySelector('input[name="mode"][value="all"]');
   allRadio.disabled = isNode();
@@ -167,10 +187,21 @@ function fileProblems() {
   const p = [];
   if (!fileInfo) return ["Choose the firmware.bin"];
   if (!fileInfo.isEsp) p.push("Not an ESP32 firmware image");
+  const lp = labelProblem();
+  if (lp) p.push(lp);
   if (config && fileInfo.size > config.maxFirmwareBytes) p.push(`Too big for the hub (${fileInfo.size} > ${config.maxFirmwareBytes} bytes)`);
   if (!fileInfo.hasKey) p.push("Doesn't contain the fleet's OTA public key - rebuild from the current repo");
   if (!/^[A-Za-z0-9._-]{1,32}$/.test(versionValue())) p.push("Enter the version (same as FIRMWARE_VERSION in config.h)");
   return p;
+}
+
+function labelProblem() {
+  const l = fileInfo?.labels || [];
+  if (l.length === 0) return "Firmware doesn't say which device it is for - rebuild it from the current repo";
+  if (l.length > 1 || l[0] !== product()) {
+    return `This is ${l.map((x) => PRODUCT_TEXT[x] || x).join(" + ")} firmware - the type above is ${PRODUCT_TEXT[product()]}`;
+  }
+  return null;
 }
 
 function renderChecks() {
@@ -179,6 +210,7 @@ function renderChecks() {
   const items = [
     [true, `${esc(fileInfo.name)} - ${(fileInfo.size / 1024).toFixed(0)} KB, SHA-256 <code>${fileInfo.sha256.slice(0, 16)}…</code>`],
     [fileInfo.isEsp, fileInfo.isEsp ? "ESP32 firmware image" : "Not an ESP32 firmware image"],
+    [!labelProblem(), labelProblem() || `${PRODUCT_TEXT[product()]} firmware - matches the type above`],
     [fileInfo.hasKey, fileInfo.hasKey ? "Contains the fleet's OTA public key" : "Does NOT contain the fleet's OTA public key - devices would refuse later updates"],
     [!config || fileInfo.size <= config.maxFirmwareBytes, "Fits the hub's app slot"]
   ];
