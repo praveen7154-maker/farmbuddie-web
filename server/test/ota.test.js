@@ -64,7 +64,10 @@ async function withServer(fn) {
   const ota = createOtaModule({
     store,
     publish: async (topic, payload) => published.push({ topic, payload }),
-    listFleet: async () => [{ farmId: "1", nodeId: "MOTOR_1", online: true }, { farmId: "2", nodeId: "MOTOR_1", online: true }],
+    listFleet: async () => [
+      { farmId: "1", nodeId: "MOTOR_1", online: true, units: { motorNodes: 2, valves: 0, backwash: 0 } },
+      { farmId: "2", nodeId: "MOTOR_1", online: true, units: { motorNodes: 0, valves: 3, backwash: 0 } }
+    ],
     publicBaseUrl: "https://example.test",
     publicKeyPem: PUB_PEM
   });
@@ -110,6 +113,12 @@ test("a valve image goes to the chosen farms' hubs as node_ota_start", async () 
     // A hub-style (v1) signature doesn't pass for a node image.
     const hubSig = await signRelease(key, PUB_PEM, up.sha256, up.size, "1.0.2", "hub");
     assert.equal((await post({ sha256: up.sha256, version: "1.0.2", signature: hubSig, product: "valve", target: { farmIds: ["1"] } })).status, 400);
+
+    // Not to a farm without a valve unit - its hub would fetch it for nobody.
+    const none = await post({ sha256: up.sha256, version: "1.0.2", signature: sig, product: "valve", target: { farmIds: ["1", "2"] } });
+    assert.equal(none.status, 400);
+    assert.match((await none.json()).error, /Farm\(s\) 1 have no valve unit/);
+    assert.equal(published.length, 0);
 
     const ok = await post({ sha256: up.sha256, version: "1.0.2", signature: sig, product: "valve", target: { farmIds: ["2"] } });
     assert.equal(ok.status, 200);

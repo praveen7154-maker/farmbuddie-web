@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import express from "express";
 import { OTA_SIGNING_PUBLIC_KEY_PEM } from "./otaSigningKey.js";
+import { unitsForProduct } from "./farmUnits.js";
 
 // Web-panel OTA (admin panel > OTA). The admin uploads a firmware.bin, signs
 // the release IN THE BROWSER with the fleet key (public/js/ota-crypto.js -
@@ -37,6 +38,7 @@ const BUSY_ERRORS = new Set(["pump_running", "already_in_progress", "hub_slot_bu
 
 export const PRODUCTS = ["hub", "motor-node", "valve", "filter-backwash"];
 export const isNodeProduct = (p) => PRODUCTS.includes(p) && p !== "hub";
+const PRODUCT_NAMES = { "motor-node": "motor node", valve: "valve unit", "filter-backwash": "filter backwash node" };
 
 // Must match the firmware byte for byte: v1 = the hub's OtaManager, v2 (node
 // images, binds the product) = the node repos' NodeOta.
@@ -217,6 +219,14 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
         targets = ids.map((id) => byId.get(id));
       }
       if (targets.length === 0) return res.status(400).json({ error: "No farms to update" });
+      // A node image only goes to farms that have that kind of unit -
+      // otherwise the hub downloads it, restarts and offers it to nobody.
+      if (isNodeProduct(product)) {
+        const without = targets.filter((t) => t.units && unitsForProduct(t.units, product) === 0).map((t) => t.farmId);
+        if (without.length) {
+          return res.status(400).json({ error: `Farm(s) ${without.join(", ")} have no ${PRODUCT_NAMES[product]} - untick them` });
+        }
+      }
 
       const release = {
         sha256, version, signature, product, url: firmwareUrl(sha256),

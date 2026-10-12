@@ -31,6 +31,7 @@ const ERROR_TEXT = {
   connect_failed: "Couldn't reach the download server",
   no_response: "Download server didn't answer",
   // Node images - hub staging step and the units themselves.
+  no_units: "This farm has no unit of this kind - nothing to update",
   hub_slot_busy: "Hub's own last update isn't confirmed yet - retry in a few minutes",
   unknown_product: "Hub firmware doesn't know this kind of unit - update the hub first",
   image_too_big: "Image too big for the slot",
@@ -41,6 +42,19 @@ const ERROR_TEXT = {
   commit_failed: "Unit couldn't switch to the new firmware",
   stalled: "Transfer stalled for an hour - unit offline or out of range",
   validating: "Unit is still confirming its previous update"
+};
+// How many units of the chosen kind a farm has (server: farmUnits.js);
+// null for a hub image - every farm has a hub.
+const UNIT_KEY = { "motor-node": "motorNodes", valve: "valves", "filter-backwash": "backwash" };
+const UNIT_WORD = { "motor-node": ["motor node", "motor nodes"], valve: ["valve unit", "valve units"], "filter-backwash": ["backwash node", "backwash nodes"] };
+const unitCount = (f, p = product()) => (UNIT_KEY[p] ? Number(f.units?.[UNIT_KEY[p]] || 0) : null);
+// A farm the chosen image can go to. An old server without units: all.
+const eligible = (f) => !isNode() || !f.units || unitCount(f) > 0;
+const unitsText = (f) => {
+  if (!f.units) return "-";
+  const parts = Object.entries(UNIT_KEY).map(([p, k]) => [p, Number(f.units[k] || 0)]).filter(([, n]) => n > 0)
+    .map(([p, n]) => `${n} ${UNIT_WORD[p][n === 1 ? 0 : 1]}`);
+  return parts.length ? parts.join(", ") : "Hub only";
 };
 const PRODUCT_TEXT = { hub: "Hub", "motor-node": "Motor node", valve: "Valve unit", "filter-backwash": "Filter backwash" };
 const NODE_STATE_TEXT = {
@@ -138,6 +152,9 @@ $("productInput").addEventListener("change", () => {
   allRadio.disabled = isNode();
   if (isNode() && allRadio.checked) document.querySelector('input[name="mode"][value="farms"]').checked = true;
   $("nodeNote").hidden = !isNode();
+  // A farm ticked for another kind of image may not have this kind of unit.
+  for (const f of config?.farms || []) if (!eligible(f)) selectedFarms.delete(f.farmId);
+  farmPage = 1;
   renderFarms();
   updateReleaseButton();
 });
@@ -201,7 +218,7 @@ function filteredFarms() {
   const q = $("farmSearch").value.trim().toLowerCase();
   const status = $("farmStatusFilter").value;
   const version = $("farmVersionFilter").value;
-  return (config?.farms || []).filter((f) =>
+  return (config?.farms || []).filter((f) => eligible(f) &&
     (!q || f.farmId.includes(q) || String(f.farmerName || "").toLowerCase().includes(q)) &&
     (!status || (status === "online") === Boolean(f.online)) &&
     (!version || (version === "__none" ? !f.fwVersion : f.fwVersion === version)));
@@ -220,13 +237,19 @@ function renderFarms() {
       <td>${esc(f.farmerName || "-")}</td>
       <td><span class="vps-dot ${f.online ? "ok" : "down"}"></span> ${f.online ? "Online" : "Offline"}</td>
       <td>${esc(f.fwVersion || "-")}</td>
-    </tr>`).join("") : `<tr><td colspan="5">${config?.farms?.length ? "No farm matches the filters" : "No farms with a controller"}</td></tr>`;
+      <td>${esc(unitsText(f))}</td>
+    </tr>`).join("") : `<tr><td colspan="6">${!config?.farms?.length ? "No farms with a controller"
+      : isNode() && !config.farms.some(eligible) ? `No farm has a ${UNIT_WORD[product()][0]} paired`
+      : "No farm matches the filters"}</td></tr>`;
   // Header box = every farm the filters show (all pages), not just this page.
   const allShownPicked = farms.length > 0 && farms.every((f) => selectedFarms.has(f.farmId));
   $("selectAll").checked = allShownPicked;
   $("selectAll").disabled = mode() === "all";
   $("selectAll").title = `Select all ${farms.length} farm${farms.length === 1 ? "" : "s"} matching the filters`;
-  $("farmCount").textContent = `${farms.length} of ${config?.farms?.length || 0} farms shown`;
+  const pool = (config?.farms || []).filter(eligible).length;
+  $("farmCount").textContent = isNode()
+    ? `${farms.length} of ${pool} farms with a ${UNIT_WORD[product()][0]} shown`
+    : `${farms.length} of ${config?.farms?.length || 0} farms shown`;
   renderPager($("farmPager"), farmPage, totalPages, farms.length, "farms", (p) => { farmPage = p; renderFarms(); });
   updateTargetNote();
 }

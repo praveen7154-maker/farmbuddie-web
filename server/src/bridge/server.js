@@ -58,7 +58,8 @@ export const ota = createOtaModule({
       nodeId: f.nodeId || "MOTOR_1",
       farmerName: f.farmerName,
       online: f.online,
-      fwVersion: f.deviceStatus?.health?.fw_version || null
+      fwVersion: f.deviceStatus?.health?.fw_version || null,
+      units: f.units
     })),
   publicBaseUrl: config.otaPublicBaseUrl
 });

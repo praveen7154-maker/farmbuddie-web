@@ -1,5 +1,6 @@
 import { db } from "../firebaseAdmin.js";
 import { MOTOR_NUMBERS } from "./motorNumbers.js";
+import { farmUnitCounts } from "./farmUnits.js";
 
 // Same "still talking to the broker" threshold as the web admin panel's
 // own isDeviceOnline() (public/js/device-status-render.js) and device-view.js
@@ -41,6 +42,7 @@ export async function getFleetStatus() {
       farmBuddieId: f.farmBuddieId || null,
       online,
       lastSeen: lastSeenMs,
+      units: farmUnitCounts(f),   // { motorNodes, valves, backwash } - see farmUnits.js
       deviceStatus: deviceStatus
         ? {
             ...Object.fromEntries(MOTOR_NUMBERS.map((n) => [`motor${n}`, deviceStatus[`motor${n}`] || null])),
