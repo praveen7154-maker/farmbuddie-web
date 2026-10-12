@@ -31,3 +31,12 @@ test("unitsForProduct picks the right count", () => {
   assert.equal(unitsForProduct(u, "filter-backwash"), 1);
   assert.equal(unitsForProduct(u, "hub"), null);
 });
+
+test("a removed unit an old phone uploaded again doesn't count; a new pairing does", () => {
+  const f = { pairedUnits: {
+    motorNodes: { MOTOR_2: { nodeLabel: "MOTOR_2", provisionedAtMs: 1000 }, MOTOR_3: { nodeLabel: "MOTOR_3", provisionedAtMs: 9000 } },
+    valves: { V1: { unitLabel: "V1", provisionedAtMs: 1000 } },
+    removed: { motorNodes: { MOTOR_2: 5000, MOTOR_3: 5000 }, valves: { V1: 5000 } }
+  } };
+  assert.deepEqual(farmUnitCounts(f), { motorNodes: 1, valves: 0, backwash: 0 });
+});

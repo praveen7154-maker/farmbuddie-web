@@ -311,6 +311,17 @@ function motorNumberOf(nodeLabel) {
   return m ? m[1] : null;
 }
 
+// A unit paired at or before its removal note (pairedUnits.removed.<kind>.
+// <label>) is a removed one an old app version uploaded again - see the
+// Irrigo app's PairedUnitsRepository.removedAt().
+function livePairedUnits(f, kind, labelKey) {
+  const removed = f.pairedUnits?.removed?.[kind] || {};
+  return Object.values(f.pairedUnits?.[kind] || {}).filter((u) => {
+    const at = removed[u?.[labelKey]];
+    return !(typeof at === "number" && (u.provisionedAtMs || 0) <= at);
+  });
+}
+
 function pairedHardwareHtml(f) {
   const ds = f.deviceStatus || {};
   const health = ds.health || {};
@@ -330,7 +341,7 @@ function pairedHardwareHtml(f) {
     `);
   }
 
-  const motorNodes = Object.values(f.pairedUnits?.motorNodes || {});
+  const motorNodes = livePairedUnits(f, "motorNodes", "nodeLabel");
   for (const u of motorNodes) {
     const extra = u.bleDeviceName ? ` · ${escHtml(u.bleDeviceName)}` : "";
     rows.push(`
@@ -342,7 +353,7 @@ function pairedHardwareHtml(f) {
   }
 
   const liveUnits = Array.isArray(ds.valves?.units) ? ds.valves.units : [];
-  const valves = Object.values(f.pairedUnits?.valves || {})
+  const valves = livePairedUnits(f, "valves", "unitLabel")
     .sort((a, b) => (a.valveOffset ?? 0) - (b.valveOffset ?? 0));
   for (const u of valves) {
     const first = (u.valveOffset ?? 0) + 1;

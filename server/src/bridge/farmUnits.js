@@ -15,17 +15,27 @@
 // valve unit there - harmless: a valve image sent to it is refused by the
 // unit itself (wrong_product).
 
+// A unit paired at or before its removal note is a removed one that a phone
+// on an old app version uploaded again (Irrigo PairedUnitsRepository.removedAt()).
+function livePaired(paired, kind, labelKey) {
+  const removed = paired.removed?.[kind] || {};
+  return Object.values(paired[kind] || {}).filter((u) => {
+    const at = removed[u?.[labelKey]];
+    return !(typeof at === "number" && (u?.provisionedAtMs || 0) <= at);
+  });
+}
+
 export function farmUnitCounts(farmer) {
   const paired = farmer?.pairedUnits || {};
   const status = farmer?.deviceStatus || {};
   const motor1 = status.motor1 || {};
 
-  const pairedMotor = Object.keys(paired.motorNodes || {}).length;
+  const pairedMotor = livePaired(paired, "motorNodes", "nodeLabel").length;
   const reportedMotor = motor1.motor_nodes && typeof motor1.motor_nodes === "object"
     ? Object.keys(motor1.motor_nodes).length
     : (typeof motor1.motor2_online === "boolean" ? 1 : 0);
 
-  const pairedValveUnits = Object.values(paired.valves || {});
+  const pairedValveUnits = livePaired(paired, "valves", "unitLabel");
   const pairedBackwash = pairedValveUnits.filter((u) => u && u.hasPressureSensors === true).length;
   const pairedValves = pairedValveUnits.length - pairedBackwash;
   const liveUnits = Array.isArray(status.valves?.units) ? status.valves.units.length : 0;
