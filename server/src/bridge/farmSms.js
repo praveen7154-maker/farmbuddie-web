@@ -15,10 +15,31 @@ export function mainFarmerSmsNumber(doc) {
   return digits.length === 10 ? `+91${digits}` : "";
 }
 
-// null = no farm record for this farmId (leave the hub alone).
+// The main farmer can switch SMS alerts off from the Irrigo Profile screen
+// (farmers/<doc>.smsAlertsEnabled === false); the hub then gets an empty
+// number, which its firmware treats as "send no SMS".
+export function smsAlertsEnabled(doc) {
+  return doc?.smsAlertsEnabled !== false;
+}
+
+// What the hub's SMS number should be: the main number, "" when the farmer
+// switched SMS off, null = no farm record or no main number (leave the hub alone).
+export function hubSmsTarget(doc) {
+  const number = mainFarmerSmsNumber(doc);
+  if (!number) return null;
+  return smsAlertsEnabled(doc) ? number : "";
+}
+
 export async function loadMainFarmerNumber(db, farmId) {
   const snap = await db.collection("farmers").where("controller.uniqueId", "==", farmId).limit(1).get();
-  return snap.empty ? null : mainFarmerSmsNumber(snap.docs[0].data());
+  return snap.empty ? null : hubSmsTarget(snap.docs[0].data());
+}
+
+// Only the farm's main farmer (their login phone = primaryMobile) may switch it.
+export function isMainFarmer(decodedToken, doc) {
+  const caller = String(decodedToken?.phone_number ?? "").replace(/\D/g, "").slice(-10);
+  const main = mainFarmerSmsNumber(doc).replace(/\D/g, "").slice(-10);
+  return caller.length === 10 && caller === main;
 }
 
 // Same shape as farmElectrical.js createTnebSync(): called for every health
@@ -29,7 +50,7 @@ export function createSmsSync({ loadNumber, publish, now = () => Date.now(), res
   return async function onHealth(farmId, nodeId, payload) {
     if (typeof payload?.sms_to !== "string") return;
     const want = await loadNumber(farmId);
-    if (!want) return; // no farm record, or no main number on it - keep whatever the hub has
+    if (want === null || want === undefined) return; // no farm record, or no main number on it - keep whatever the hub has
     if (payload.sms_to === want) {
       lastSent.delete(farmId);
       return;

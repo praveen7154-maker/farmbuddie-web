@@ -13,6 +13,7 @@ import { createOtaModule } from "./ota.js";
 import { pgOtaStore } from "./otaStore.js";
 import { publishJson } from "./mqttBridge.js";
 import { normalizeFarmElectrical } from "./farmElectrical.js";
+import { isMainFarmer } from "./farmSms.js";
 import { validateSequences, loadValveSequences, saveValveSequences } from "./valveSequences.js";
 import { validPump, validatePresets, loadCyclicPresets, saveCyclicPresets } from "./cyclicPresets.js";
 import { db } from "../firebaseAdmin.js";
@@ -221,6 +222,34 @@ app.get("/farm/:farmId/electrical", async (req, res) => {
   } catch (err) {
     console.error("farm electrical error:", err);
     return res.status(500).json({ error: "Failed to load the farm's electrical setup" });
+  }
+});
+
+/**
+ * PUT /farm/:farmId/sms-alerts   body: { enabled: true|false }
+ * The main farmer's SMS alert switch (Irrigo Profile screen). Saved on the
+ * farm record; the hub's SMS number follows it (empty = no SMS) - see
+ * farmSms.js. Only the main farmer's own login may change it.
+ */
+app.put("/farm/:farmId/sms-alerts", async (req, res) => {
+  const { farmId } = req.params;
+  if (!/^\d{1,6}$/.test(farmId)) return res.status(400).json({ error: "Invalid farmId" });
+  if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "enabled must be true or false" });
+  try {
+    if (!(await canAccessFarm(req.decodedToken, farmId))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    const snap = await db.collection("farmers").where("controller.uniqueId", "==", farmId).limit(1).get();
+    if (snap.empty) return res.status(404).json({ error: "No farm record for this farmId" });
+    const doc = snap.docs[0];
+    if (!isMainFarmer(req.decodedToken, doc.data())) {
+      return res.status(403).json({ error: "Only the main farmer can change SMS alerts" });
+    }
+    await doc.ref.update({ smsAlertsEnabled: req.body.enabled });
+    return res.json(normalizeFarmElectrical(farmId, { ...doc.data(), smsAlertsEnabled: req.body.enabled }));
+  } catch (err) {
+    console.error("sms alerts save error:", err);
+    return res.status(500).json({ error: "Failed to save the SMS setting" });
   }
 });
 

@@ -40,6 +40,8 @@ export function normalizeFarmElectrical(farmId, doc) {
     // The farm's main farmer number - the only SMS alert number (see
     // farmSms.js); shown read-only on every app user's Profile screen.
     mainPhone: mainDigits.length === 10 ? `+91${mainDigits}` : null,
+    // Main farmer's SMS alert switch (Profile screen) - see farmSms.js.
+    smsAlertsEnabled: doc?.smsAlertsEnabled !== false,
     pumps: pumps.filter((p) => p.hp !== null && p.service !== null),
     services: services.filter((s) => s.sanctionedHp !== null)
   };

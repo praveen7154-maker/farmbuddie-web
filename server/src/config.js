@@ -53,9 +53,10 @@ export const config = {
   bootstrapRequireDeviceKey: process.env.BOOTSTRAP_REQUIRE_DEVICE_KEY === "true",
   // Alert pushes as data-only messages, which the Irrigo app turns into one
   // notification per fault / per recovery (see bridge/pushNotifications.js).
-  // App builds from before that change can't show data-only pushes, so this
-  // stays off (notification-style pushes) until most farmers have updated.
-  pushDataOnly: process.env.PUSH_DATA_ONLY === "true",
+  // On unless explicitly "false": a push with a notification block is shown
+  // by Android itself ("Motor 1 - Power outage", no farm name) on top of the
+  // app's own notification for the same alert - two notifications per alert.
+  pushDataOnly: process.env.PUSH_DATA_ONLY !== "false",
   // Where hubs download web-panel OTA firmware from - the bridge's public
   // HTTPS address (nginx maps /bridge to it). Must be https://.
   otaPublicBaseUrl: process.env.OTA_PUBLIC_BASE_URL || "https://api.farmbuddie.com/bridge"
