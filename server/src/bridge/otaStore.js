@@ -146,6 +146,15 @@ export const pgOtaStore = {
     return out;
   },
 
+  // Newest released version per product - { hub: "1.0.2", valve: "1.0.1", ... }.
+  async latestReleaseVersions() {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (COALESCE(product, 'hub')) COALESCE(product, 'hub') AS product, version
+         FROM ota_releases ORDER BY COALESCE(product, 'hub'), id DESC`
+    );
+    return Object.fromEntries(rows.map((r) => [r.product, r.version]));
+  },
+
   async countReleases(product = null) {
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n FROM ota_releases WHERE ($1::text IS NULL OR product = $1)`, [product]);

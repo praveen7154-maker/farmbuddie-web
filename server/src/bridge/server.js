@@ -226,6 +226,22 @@ app.get("/farm/:farmId/electrical", async (req, res) => {
 });
 
 /**
+ * GET /firmware/latest
+ * The newest firmware released from the web OTA page for each product
+ * ({ hub, "motor-node", valve, "filter-backwash" }) - the Irrigo app's node
+ * cards show "Update available" when a node reports an older version. Any
+ * signed-in user; versions only, nothing farm-specific.
+ */
+app.get("/firmware/latest", async (req, res) => {
+  try {
+    return res.json(await pgOtaStore.latestReleaseVersions());
+  } catch (err) {
+    console.error("latest firmware error:", err);
+    return res.status(500).json({ error: "Failed to load firmware versions" });
+  }
+});
+
+/**
  * PUT /farm/:farmId/sms-alerts   body: { enabled: true|false }
  * The main farmer's SMS alert switch (Irrigo Profile screen). Saved on the
  * farm record; the hub's SMS number follows it (empty = no SMS) - see
