@@ -4,8 +4,8 @@ import express from "express";
 
 // Distributor logins for the Irrigo Admin app.
 //
-// A distributor signs in with their distributor ID (FB-DIST-0001, made by
-// the web panel's Distributor Onboarding) and a password. The first
+// A distributor signs in with their distributor ID (D26FBA0001, made by
+// the web panel's Distributor Onboarding - see public/js/id-format.js) and a password. The first
 // password is the ID itself; that login only lets them set a new one -
 // nothing else answers until they do. They then see and manage only the
 // farmers they onboarded (the farmer record's leadSource.distributorId):
@@ -21,8 +21,9 @@ const scrypt = promisify(crypto.scrypt);
 export const TOKEN_PREFIX = "fbd_";
 const SESSION_DAYS = 30;
 const MIN_PASSWORD = 8;
-// A distributor ID typed in the app: FB-DIST-0001 (any case, spaces trimmed).
-const ID_RE = /^FB-DIST-\d{1,8}$/;
+// A distributor ID typed in the app (any case, spaces trimmed): the current
+// format D26FBA0001, or an older FB-DIST-0001.
+const ID_RE = /^(D\d{2}FB[A-Z]\d{4}|FB-DIST-\d{1,8})$/;
 // Wrong passwords per distributor ID before it's locked for a while (on
 // top of the per-address limit server.js puts on /distributor/login).
 const MAX_FAILURES = 10;

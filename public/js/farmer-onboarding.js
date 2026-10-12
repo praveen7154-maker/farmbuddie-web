@@ -10,14 +10,14 @@ import {
   collection,
   addDoc,
   getDocs,
-  getDoc,
-  setDoc,
   query,
   where,
   doc,
   updateDoc,
   serverTimestamp,
+  runTransaction,
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+import { formatFarmBuddieId, claimNextNumber } from "/js/id-format.js";
 
 /* ✅ ADD STORAGE IMPORT */
 import {
@@ -156,32 +156,13 @@ window.calculateWarrantyEnd = function () {
 };
 
 /* =================GENERATE FARM BUDDIE ID ================= */
-async function previewNextFarmBuddieId() {
-
-  const year = new Date().getFullYear();
-  const counterRef = doc(db, "counters", "farmers");
-
-  const snap = await getDoc(counterRef);
-
-  let current = snap.exists()
-    ? snap.data().current || 0
-    : 0;
-
-  const next = current + 1;
-
-  return {
-    farmBuddieId: `FARM-${year}-${String(next).padStart(4, "0")}`,
-    nextCounter: next
-  };
-}
-
-async function commitFarmCounter(nextValue) {
-
-  const counterRef = doc(db, "counters", "farmers");
-
-  await setDoc(counterRef, {
-    current: nextValue
-  }, { merge: true });
+// FBC26A00001 - see id-format.js. The number is taken from the counter in a
+// transaction (shared with Add Farm): it used to be read here and saved
+// only after the farmer was created, so two admins onboarding at the same
+// time could both get the same Farm Buddie ID.
+async function claimFarmBuddieId() {
+  const n = await claimNextNumber(db, runTransaction, doc(db, "counters", "farmers"));
+  return formatFarmBuddieId(n);
 }
 /* ================= MCU VARIANT → SERIAL ================= */
 window.handleMcuVariant = async function () {
@@ -785,8 +766,7 @@ if (selectedFarmNumber === "Farm 1") {
 }
 
 /* ===== NOW GENERATE ID ===== */
-const { farmBuddieId, nextCounter } =
-  await previewNextFarmBuddieId();
+const farmBuddieId = await claimFarmBuddieId();
 
 // 🔐 Create identityId (per person, not per farm)
 let identityId;
@@ -1111,8 +1091,6 @@ pumpServiceMapping: Array.from({ length: parseInt(motorCount || 0) })
         "\n\nYou can retry from the MCU / Controller page."
       );
     }
-
-    await commitFarmCounter(nextCounter);
 
     window.location.href = "/admin/farmer-database.html";
 

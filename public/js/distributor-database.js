@@ -162,7 +162,8 @@ document.getElementById("searchInput")?.addEventListener("input", (e) => {
   const searched = filteredDistributors.filter(d => {
 
     const id = d.distributorId?.toLowerCase() || "";
-    const idNumeric = d.distributorId?.replace("FB-DIST-", "") || "";
+    // The running number at the end - "0001" of D26FBA0001 (or old FB-DIST-0001).
+    const idNumeric = d.distributorId?.match(/(\d+)$/)?.[1] || "";
     const name = d.name?.toLowerCase() || "";
     const mobile = d.primaryMobile || "";
 

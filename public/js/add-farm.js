@@ -26,6 +26,7 @@ import {
 } from "/js/phone-auth.js";
 
 import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisioning.js";
+import { formatFarmBuddieId, claimNextNumber } from "/js/id-format.js";
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -100,21 +101,10 @@ window.handleNetworkType = function () {
   }
 };
 /* ================= FARM ID GENERATOR ================= */
+// FBC26A00001 - see id-format.js (same counter as Farmer Onboarding).
 async function generateFarmBuddieId() {
-
-  const year = new Date().getFullYear();
-  const counterRef = doc(db, "counters", "farmers");
-
-  return await runTransaction(db, async (tx) => {
-
-    const snap = await tx.get(counterRef);
-    let current = snap.exists() ? snap.data().current || 0 : 0;
-
-    current += 1;
-    tx.set(counterRef, { current }, { merge: true });
-
-    return `FARM-${year}-${String(current).padStart(4, "0")}`;
-  });
+  const n = await claimNextNumber(db, runTransaction, doc(db, "counters", "farmers"));
+  return formatFarmBuddieId(n);
 }
 
 

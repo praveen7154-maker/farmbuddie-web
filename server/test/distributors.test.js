@@ -18,7 +18,11 @@ function fakeStore() {
   };
 }
 
-const DISTRIBUTORS = { "FB-DIST-0001": { name: "Ravi Agencies", status: "active" }, "FB-DIST-0002": { name: "Old Co", status: "inactive" } };
+const DISTRIBUTORS = {
+  "FB-DIST-0001": { name: "Ravi Agencies", status: "active" },
+  "FB-DIST-0002": { name: "Old Co", status: "inactive" },
+  "D26FBA0003": { name: "New Format Traders", status: "active" }
+};
 
 async function withServer(fn) {
   const store = fakeStore();
@@ -123,5 +127,14 @@ test("referrals and redemptions: only this distributor's farmers'", async () => 
     assert.deepEqual((await call("/distributor/referrals", { token: t })).body.referrals.map((r) => r.id), ["r1"]);
     assert.deepEqual((await call("/distributor/redemptions", { token: t })).body.redemptions.map((r) => r.id), ["b1"]);
     assert.equal(store.accounts.get("FB-DIST-0001").mustChange, false);
+  });
+});
+
+test("the current ID format signs in too (any case)", async () => {
+  await withServer(async ({ call }) => {
+    const r = await call("/distributor/login", { method: "POST", body: { distributorId: "d26fba0003", password: "D26FBA0003" } });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.distributorId, "D26FBA0003");
+    assert.equal((await call("/distributor/login", { method: "POST", body: { distributorId: "D26FB0003", password: "x" } })).status, 400);
   });
 });

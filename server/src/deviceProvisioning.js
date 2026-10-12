@@ -24,7 +24,7 @@ import { config } from "./config.js";
  * Real topic tree (see irrigo-admin's mqtt/Topics.kt, and verified
  * directly against the Motor firmware's own connectivity.cpp) is
  * farm/{farmId}/{nodeId}/motor/.../..., where farmId is this same short
- * controllers.uniqueId (e.g. "0001") — NOT farmBuddieId's "FARM-2026-xxxx"
+ * controllers.uniqueId (e.g. "0001") — NOT farmBuddieId's "FBC26A00001"
  * format. The master hub is the only thing with an MQTT connection and
  * relays for any BLE-linked secondary nodes (motor-node/valve/filter)
  * under the same farmId, so the ACL is scoped to the whole farm subtree

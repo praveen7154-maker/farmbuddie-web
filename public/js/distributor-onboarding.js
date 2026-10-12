@@ -7,9 +7,10 @@ import {
   addDoc,
   doc,
   runTransaction,
-  serverTimestamp,
-  getDoc
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+
+import { formatDistributorId, claimNextNumber } from "/js/id-format.js";
 
 import {
   getStorage,
@@ -67,22 +68,11 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ================= SAFE COUNTER ================= */
+// D26FBA0001 - see id-format.js. Also the distributor's Irrigo Admin app
+// login (the bridge's distributors.js checks this shape).
 async function generateDistributorId() {
-
-  const counterRef = doc(db, "counters", "distributorCounter");
-
-  return await runTransaction(db, async (tx) => {
-
-    const snap = await tx.get(counterRef);
-
-    let current = snap.exists() ? snap.data().current || 0 : 0;
-
-    current += 1;
-
-    tx.set(counterRef, { current }, { merge: true });
-
-    return `FB-DIST-${String(current).padStart(4, "0")}`;
-  });
+  const n = await claimNextNumber(db, runTransaction, doc(db, "counters", "distributorCounter"));
+  return formatDistributorId(n);
 }
 
 /* ================= FILE UPLOAD ================= */
@@ -185,14 +175,11 @@ document.getElementById("distributorForm")
       return;
     }
 
-    /* ===== PREVIEW DISTRIBUTOR ID (NO COUNTER UPDATE YET) ===== */
-    const counterRef = doc(db, "counters", "distributorCounter");
-    const snap = await getDoc(counterRef);
-
-    let current = snap.exists() ? snap.data().current || 0 : 0;
-    const next = current + 1;
-
-    const distributorId = `FB-DIST-${String(next).padStart(4, "0")}`;
+    /* ===== DISTRIBUTOR ID ===== */
+    // Taken in a transaction up front: it used to be read here and the
+    // counter bumped only after the save, so two admins onboarding at once
+    // could get the same ID.
+    const distributorId = await generateDistributorId();
 
     /* ===== FILE UPLOADS ===== */
     const documents = {
@@ -225,13 +212,6 @@ document.getElementById("distributorForm")
     createdAt: serverTimestamp(),
     createdBy: auth.currentUser.uid,
     documents: documents
-    });
-
-    /* ===== UPDATE COUNTER ONLY AFTER SUCCESS ===== */
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(counterRef);
-      let current = snap.exists() ? snap.data().current || 0 : 0;
-      tx.set(counterRef, { current: current + 1 }, { merge: true });
     });
 
    hideLoader();

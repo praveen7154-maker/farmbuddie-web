@@ -92,7 +92,7 @@ provisionAppRouter.post("/", async (req, res) => {
 
     // Real topic tree (see irrigo-admin's mqtt/Topics.kt) is
     // farm/{farmId}/{nodeId}/motor/.../..., where farmId is controllers.uniqueId
-    // (NOT farmBuddieId's "FARM-2026-xxxx" format). The whole farm subtree for
+    // (NOT farmBuddieId's "FBC26A00001" format). The whole farm subtree for
     // both, except that the app can't publish to a device's ota/* topics -
     // OTA is admin-only (see mqttAuthRules.js).
     const { pubAuthRulePatterns, subAuthRulePatterns } = appAuthRules(farmIds);
