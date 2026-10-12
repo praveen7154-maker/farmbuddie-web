@@ -11,6 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
 import { formatDistributorId, claimNextNumber } from "/js/id-format.js";
+import { prepareUpload } from "/js/upload-prep.js";
 
 import {
   getStorage,
@@ -20,7 +21,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-storage.js";
 
 const storage = getStorage();
-const MAX_SIZE = 2 * 1024 * 1024; // 2MB
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -76,25 +76,39 @@ async function generateDistributorId() {
 }
 
 /* ================= FILE UPLOAD ================= */
-async function uploadFile(distributorId, file, fileName) {
+// The documents, checked and shrunk (photos -> small WebP, PDFs under 2 MB -
+// see upload-prep.js). Done before the distributor ID is taken, so a wrong
+// file doesn't use up a number.
+const DOC_FIELDS = [
+  ["gstUrl", "gstFile", "gst", "GST certificate"],
+  ["panUrl", "panFile", "pan", "PAN"],
+  ["aadhaarUrl", "aadhaarFile", "aadhaar", "Aadhaar"],
+  ["chequeUrl", "chequeFile", "cheque", "Cancelled cheque"],
+  ["msmeUrl", "msmeFile", "msme", "MSME certificate"],
+  ["itrUrl", "itrFile", "itr", "ITR"],
+  ["other1", "otherDoc1", "other1", "Other document 1"],
+  ["other2", "otherDoc2", "other2", "Other document 2"],
+  ["other3", "otherDoc3", "other3", "Other document 3"]
+];
 
-  if (!file) return "";
-
-  if (file.size > MAX_SIZE) {
-    throw new Error(`${fileName} exceeds 2MB`);
+async function prepareDocuments() {
+  const out = [];
+  for (const [key, inputId, name, label] of DOC_FIELDS) {
+    const prepared = await prepareUpload(document.getElementById(inputId).files[0], label);
+    out.push([key, name, prepared]);
   }
+  return out;
+}
 
-  if (!["application/pdf", "image/jpeg"].includes(file.type)) {
-    throw new Error(`${fileName} must be PDF or JPG`);
+async function uploadDocuments(distributorId, prepared) {
+  const urls = {};
+  for (const [key, name, p] of prepared) {
+    if (!p) { urls[key] = ""; continue; }
+    const fileRef = ref(storage, `distributor-documents/${distributorId}/${name}.${p.ext}`);
+    await uploadBytes(fileRef, p.blob, { contentType: p.contentType });
+    urls[key] = await getDownloadURL(fileRef);
   }
-
-  const fileRef = ref(
-    storage,
-    `distributor-documents/${distributorId}/${fileName}`
-  );
-
-  await uploadBytes(fileRef, file);
-  return await getDownloadURL(fileRef);
+  return urls;
 }
 
 /* ================= REQUIRED VALIDATION ONLY ================= */
@@ -175,6 +189,15 @@ document.getElementById("distributorForm")
       return;
     }
 
+    let preparedDocs;
+    try {
+      preparedDocs = await prepareDocuments();
+    } catch (fileErr) {
+      hideLoader();
+      alert(fileErr.message);
+      return;
+    }
+
     /* ===== DISTRIBUTOR ID ===== */
     // Taken in a transaction up front: it used to be read here and the
     // counter bumped only after the save, so two admins onboarding at once
@@ -182,17 +205,7 @@ document.getElementById("distributorForm")
     const distributorId = await generateDistributorId();
 
     /* ===== FILE UPLOADS ===== */
-    const documents = {
-      gstUrl: await uploadFile(distributorId, document.getElementById("gstFile").files[0], "gst.pdf"),
-      panUrl: await uploadFile(distributorId, document.getElementById("panFile").files[0], "pan.pdf"),
-      aadhaarUrl: await uploadFile(distributorId, document.getElementById("aadhaarFile").files[0], "aadhaar.pdf"),
-      chequeUrl: await uploadFile(distributorId, document.getElementById("chequeFile").files[0], "cheque.pdf"),
-      msmeUrl: await uploadFile(distributorId, document.getElementById("msmeFile").files[0], "msme.pdf"),
-      itrUrl: await uploadFile(distributorId, document.getElementById("itrFile").files[0], "itr.pdf"),
-      other1: await uploadFile(distributorId, document.getElementById("otherDoc1").files[0], "other1.pdf"),
-      other2: await uploadFile(distributorId, document.getElementById("otherDoc2").files[0], "other2.pdf"),
-      other3: await uploadFile(distributorId, document.getElementById("otherDoc3").files[0], "other3.pdf")
-    };
+    const documents = await uploadDocuments(distributorId, preparedDocs);
 
     /* ===== SAVE DISTRIBUTOR ===== */
    await addDoc(collection(db, "distributors"), {

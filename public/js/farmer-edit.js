@@ -1,5 +1,6 @@
 import { auth, db } from "/js/firebase-init.js";
 import { renderValveConfigSection, readValveConfig, fillValveConfig } from "/js/valve-config.js";
+import { prepareUpload } from "/js/upload-prep.js";
 
 // Valve Configuration + Additional Features fields (IRRIGO and IRRIGO_PLUS alike)
 renderValveConfigSection();
@@ -32,31 +33,6 @@ import {
   validatePhones
 } from "/js/phone-auth.js";
 import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisioning.js";
-
-/* ================= IMAGE COMPRESSION ================= */
-async function compressImage(file) {
-
-  const bitmap = await createImageBitmap(file);
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-
-  const maxWidth = 800;
-  const scale = maxWidth / bitmap.width;
-
-  canvas.width = maxWidth;
-  canvas.height = bitmap.height * scale;
-
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-
-  return new Promise(resolve => {
-    canvas.toBlob(
-      blob => resolve(blob),
-      "image/webp",
-      0.7
-    );
-  });
-}
 
 /* ================= LOADER FUNCTIONS ================= */
 function showLoader(message = "Processing...") {
@@ -951,124 +927,25 @@ for (let i = 1; i <= motorCount; i++) {
 
     /* ================= DOCUMENT LOGIC (UPDATED) ================= */
 
-const MAX_DOC_SIZE = 2 * 1024 * 1024;   // 2MB
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-
-/* ===== AADHAAR ===== */
-if (aadhaarFileInput?.files.length > 0) {
-
-  const file = aadhaarFileInput.files[0];
-  const type = file.type;
-
-  if (file.size > MAX_DOC_SIZE) {
-    alert("Aadhaar file must be under 2MB");
-    resetUpdateButton(btn);
-    return;
-  }
-
-  if (aadhaarUrl && !confirm("Aadhaar file exists. Replace it?")) {
-    resetUpdateButton(btn);
-    return;
-  }
-
-  let fileRef;
-
-  if (type === "application/pdf") {
-
-    fileRef = ref(storage, `farmer-documents/${currentFarmBuddieId}/aadhaar.pdf`);
-    await uploadBytes(fileRef, file, { contentType: "application/pdf" });
-
-  } else if (type.startsWith("image/")) {
-
-    const compressed = await compressImage(file);
-    fileRef = ref(storage, `farmer-documents/${currentFarmBuddieId}/aadhaar.webp`);
-    await uploadBytes(fileRef, compressed, { contentType: "image/webp" });
-
-  } else {
-    alert("Aadhaar must be PDF or JPG/JPEG/PNG");
-    resetUpdateButton(btn);
-    return;
-  }
-
-  aadhaarUrl = await getDownloadURL(fileRef);
+// Photos become small WebP files, PDFs must be under 2 MB - see upload-prep.js.
+async function replaceFile(input, name, label, existingUrl, opts) {
+  const file = input?.files[0];
+  if (!file) return existingUrl;
+  if (name === "farmer-photo" && !file.type.startsWith("image/")) throw new Error("Photo must be a JPG or PNG photo");
+  const prepared = await prepareUpload(file, label, opts);
+  if (existingUrl && !confirm(`${label} already exists. Replace it?`)) return existingUrl;
+  const fileRef = ref(storage, `farmer-documents/${currentFarmBuddieId}/${name}.${prepared.ext}`);
+  await uploadBytes(fileRef, prepared.blob, { contentType: prepared.contentType });
+  return getDownloadURL(fileRef);
 }
-
-
-/* ===== OTHER DOC ===== */
-if (otherDocInput?.files.length > 0) {
-
-  const file = otherDocInput.files[0];
-  const type = file.type;
-
-  if (file.size > MAX_DOC_SIZE) {
-    alert("Other document must be under 2MB");
-    resetUpdateButton(btn);
-    return;
-  }
-
-  if (otherDocUrl && !confirm("Other document exists. Replace it?")) {
-    resetUpdateButton(btn);
-    return;
-  }
-
-  let fileRef;
-
-  if (type === "application/pdf") {
-
-    fileRef = ref(storage, `farmer-documents/${currentFarmBuddieId}/other.pdf`);
-    await uploadBytes(fileRef, file, { contentType: "application/pdf" });
-
-  } else if (type.startsWith("image/")) {
-
-    const compressed = await compressImage(file);
-    fileRef = ref(storage, `farmer-documents/${currentFarmBuddieId}/other.webp`);
-    await uploadBytes(fileRef, compressed, { contentType: "image/webp" });
-
-  } else {
-    alert("Other document must be PDF or JPG/JPEG/PNG");
-    resetUpdateButton(btn);
-    return;
-  }
-
-  otherDocUrl = await getDownloadURL(fileRef);
-}
-
-
-/* ===== FARMER PHOTO ===== */
-if (farmerPhotoInput?.files.length > 0) {
-
-  const file = farmerPhotoInput.files[0];
-  const type = file.type;
-
-  if (!type.startsWith("image/")) {
-    alert("Photo must be JPG/JPEG/PNG");
-    resetUpdateButton(btn);
-    return;
-  }
-
-  if (file.size > MAX_IMAGE_SIZE) {
-    alert("Photo must be under 5MB");
-    resetUpdateButton(btn);
-    return;
-  }
-
-  if (farmerPhotoUrl && !confirm("Photo exists. Replace it?")) {
-    resetUpdateButton(btn);
-    return;
-  }
-
-  const compressed = await compressImage(file);
-
-  const fileRef = ref(
-    storage,
-    `farmer-documents/${currentFarmBuddieId}/farmer-photo.webp`
-  );
-
-  await uploadBytes(fileRef, compressed, {
-    contentType: "image/webp"
-  });
-
-  farmerPhotoUrl = await getDownloadURL(fileRef);
+try {
+  aadhaarUrl = await replaceFile(aadhaarFileInput, "aadhaar", "Aadhaar file", aadhaarUrl);
+  otherDocUrl = await replaceFile(otherDocInput, "other", "Other document", otherDocUrl);
+  farmerPhotoUrl = await replaceFile(farmerPhotoInput, "farmer-photo", "Photo", farmerPhotoUrl, { maxSide: 800 });
+} catch (fileErr) {
+  alert(fileErr.message);
+  resetUpdateButton(btn);
+  return;
 }
 
 showLoader("Updating Farmer...");

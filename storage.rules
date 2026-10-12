@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Farmer and distributor documents (web admin panel - farmer/distributor
+// onboarding and edit pages). Only admins (an email login - farmers sign in
+// by phone) can read or upload, and only the small files the pages make
+// (public/js/upload-prep.js): PDF, or a photo shrunk to WebP. Deploy with
+//   firebase deploy --only storage --project farmbuddie-cloud
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+    function smallDocument() {
+      return request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/webp|image/jpeg|image/png');
+    }
+
+    match /farmer-documents/{farmBuddieId}/{file} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin() && smallDocument();
+    }
+    match /distributor-documents/{distributorId}/{file} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin() && smallDocument();
+    }
+
+    // Nothing else is stored here.
+    match /{everything=**} {
+      allow read, write: if false;
+    }
+  }
+}

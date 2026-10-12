@@ -18,6 +18,7 @@ import {
   runTransaction,
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { formatFarmBuddieId, claimNextNumber } from "/js/id-format.js";
+import { prepareUpload } from "/js/upload-prep.js";
 
 /* ✅ ADD STORAGE IMPORT */
 import {
@@ -36,31 +37,6 @@ import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisi
 
 /* ✅ INITIALIZE STORAGE */
 const storage = getStorage();
-
-/* ================= IMAGE COMPRESSION ================= */
-async function compressImage(file) {
-
-  const bitmap = await createImageBitmap(file);
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-
-  const maxWidth = 800;
-  const scale = maxWidth / bitmap.width;
-
-  canvas.width = maxWidth;
-  canvas.height = bitmap.height * scale;
-
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-
-  return new Promise(resolve => {
-    canvas.toBlob(
-      blob => resolve(blob),
-      "image/webp",
-      0.7
-    );
-  });
-}
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -765,6 +741,24 @@ if (selectedFarmNumber === "Farm 1") {
   }
 }
 
+/* ===== DOCUMENTS: CHECK AND SHRINK FIRST ===== */
+// Before the Farm Buddie ID is taken, so a wrong file doesn't use up a
+// number. Photos become small WebP files, PDFs must be under 2 MB - see
+// upload-prep.js.
+let preparedAadhaar, preparedOther, preparedPhoto;
+try {
+  preparedAadhaar = await prepareUpload(document.getElementById("aadhaarFile")?.files[0], "Aadhaar");
+  preparedOther = await prepareUpload(document.getElementById("otherDoc")?.files[0], "Other document");
+  const photo = document.getElementById("farmerPhoto")?.files[0];
+  if (photo && !photo.type.startsWith("image/")) throw new Error("Farmer photo must be a JPG or PNG photo");
+  preparedPhoto = await prepareUpload(photo, "Farmer photo", { maxSide: 800 });
+} catch (fileErr) {
+  alert(fileErr.message);
+  hideLoader();
+  resetButton(btn);
+  return;
+}
+
 /* ===== NOW GENERATE ID ===== */
 const farmBuddieId = await claimFarmBuddieId();
 
@@ -794,118 +788,20 @@ if (!identitySnap.empty) {
 
     /* ================= DOCUMENT UPLOAD (OPTIMIZED - NEW VERSION) ================= */
 
-const aadhaarFileInput = document.getElementById("aadhaarFile");
-const otherDocInput = document.getElementById("otherDoc");
-const farmerPhotoInput = document.getElementById("farmerPhoto");
 
 let aadhaarUrl = "";
 let otherDocUrl = "";
 let farmerPhotoUrl = "";
 
-const MAX_DOC_SIZE = 2 * 1024 * 1024;   // 2MB
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-
-/* ===== AADHAAR (PDF OR IMAGE) ===== */
-if (aadhaarFileInput?.files.length > 0) {
-
-  const file = aadhaarFileInput.files[0];
-  const type = file.type;
-
-  if (file.size > MAX_DOC_SIZE) {
-    alert("Aadhaar file must be under 2MB");
-    hideLoader();
-    return resetButton(btn);
-  }
-
-  let fileRef;
-
-  if (type === "application/pdf") {
-
-    fileRef = ref(storage, `farmer-documents/${farmBuddieId}/aadhaar.pdf`);
-    await uploadBytes(fileRef, file, { contentType: "application/pdf" });
-
-  } else if (type.startsWith("image/")) {
-
-    const compressed = await compressImage(file);
-    fileRef = ref(storage, `farmer-documents/${farmBuddieId}/aadhaar.webp`);
-    await uploadBytes(fileRef, compressed, { contentType: "image/webp" });
-
-  } else {
-    alert("Aadhaar must be PDF or JPG/JPEG/PNG");
-    hideLoader();
-    return resetButton(btn);
-  }
-
-  aadhaarUrl = await getDownloadURL(fileRef);
+// Already checked and shrunk above (before the ID was taken).
+async function uploadPrepared(prepared, name) {
+  const fileRef = ref(storage, `farmer-documents/${farmBuddieId}/${name}.${prepared.ext}`);
+  await uploadBytes(fileRef, prepared.blob, { contentType: prepared.contentType });
+  return getDownloadURL(fileRef);
 }
-
-
-/* ===== OTHER DOCUMENT (PDF OR IMAGE) ===== */
-if (otherDocInput?.files.length > 0) {
-
-  const file = otherDocInput.files[0];
-  const type = file.type;
-
-  if (file.size > MAX_DOC_SIZE) {
-    alert("Other Document must be under 2MB");
-    hideLoader();
-    return resetButton(btn);
-  }
-
-  let fileRef;
-
-  if (type === "application/pdf") {
-
-    fileRef = ref(storage, `farmer-documents/${farmBuddieId}/other.pdf`);
-    await uploadBytes(fileRef, file, { contentType: "application/pdf" });
-
-  } else if (type.startsWith("image/")) {
-
-    const compressed = await compressImage(file);
-    fileRef = ref(storage, `farmer-documents/${farmBuddieId}/other.webp`);
-    await uploadBytes(fileRef, compressed, { contentType: "image/webp" });
-
-  } else {
-    alert("Other Document must be PDF or JPG/JPEG/PNG");
-    hideLoader();
-    return resetButton(btn);
-  }
-
-  otherDocUrl = await getDownloadURL(fileRef);
-}
-
-
-/* ===== FARMER PHOTO (JPG/JPEG/PNG ONLY → COMPRESSED) ===== */
-if (farmerPhotoInput?.files.length > 0) {
-
-  const file = farmerPhotoInput.files[0];
-  const type = file.type;
-
-  if (!type.startsWith("image/")) {
-    alert("Farmer photo must be JPG, JPEG or PNG");
-    hideLoader();
-    return resetButton(btn);
-  }
-
-  if (file.size > MAX_IMAGE_SIZE) {
-    alert("Photo must be under 5MB");
-    hideLoader();
-    return resetButton(btn);
-  }
-
-  const compressed = await compressImage(file);
-
-  const fileRef = ref(
-    storage,
-    `farmer-documents/${farmBuddieId}/farmer-photo.webp`
-  );
-
-  await uploadBytes(fileRef, compressed, {
-    contentType: "image/webp"
-  });
-
-  farmerPhotoUrl = await getDownloadURL(fileRef);
-}
+if (preparedAadhaar) aadhaarUrl = await uploadPrepared(preparedAadhaar, "aadhaar");
+if (preparedOther) otherDocUrl = await uploadPrepared(preparedOther, "other");
+if (preparedPhoto) farmerPhotoUrl = await uploadPrepared(preparedPhoto, "farmer-photo");
 
 
 // Motor and valve counts (with safe fallback)

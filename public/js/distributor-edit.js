@@ -1,4 +1,5 @@
 import { auth, db } from "/js/firebase-init.js";
+import { prepareUpload } from "/js/upload-prep.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -17,7 +18,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-storage.js";
 
 const storage = getStorage();
-const MAX_SIZE = 2 * 1024 * 1024;
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -122,24 +122,14 @@ function validateFields(data) {
 }
 
 /* ================= FILE UPLOAD ================= */
+// Photos -> small WebP, PDFs under 2 MB - see upload-prep.js. fileName's own
+// extension is replaced by the real one ("gst.pdf" -> gst.webp for a photo).
 async function uploadFile(distributorId, file, fileName) {
-
   if (!file) return null;
-
-  if (file.size > MAX_SIZE) {
-    throw new Error(`${fileName} exceeds 2MB`);
-  }
-
-  if (!["application/pdf", "image/jpeg"].includes(file.type)) {
-    throw new Error(`${fileName} must be PDF or JPG`);
-  }
-
-  const fileRef = ref(
-    storage,
-    `distributor-documents/${distributorId}/${fileName}`
-  );
-
-  await uploadBytes(fileRef, file);
+  const base = fileName.replace(/\.[^.]+$/, "");
+  const prepared = await prepareUpload(file, base.toUpperCase());
+  const fileRef = ref(storage, `distributor-documents/${distributorId}/${base}.${prepared.ext}`);
+  await uploadBytes(fileRef, prepared.blob, { contentType: prepared.contentType });
   return await getDownloadURL(fileRef);
 }
 
