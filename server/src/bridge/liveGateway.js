@@ -169,6 +169,8 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
       const valves = lastValves.get(farmId);
       if (valves && ws.readyState === ws.OPEN) ws.send(JSON.stringify(valves));
 
+      ws.isAlive = true;
+      ws.on("pong", () => { ws.isAlive = true; });
       ws.on("close", () => unsubscribe(farmId, ws));
       ws.on("error", () => unsubscribe(farmId, ws));
 
@@ -182,6 +184,7 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
 
         const { nodeId, motorNum, cmd, ...params } = msg || {};
         if (!nodeId || !cmd) return;
+        if (!/^[A-Za-z0-9_-]{1,32}$/.test(String(nodeId))) return;   // a topic level - no "/", "+", "#"
 
         try {
           await queueCommand(farmId, () => publishCommand(farmId, nodeId, motorNum, { cmd, ...params }));
@@ -192,6 +195,22 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
       });
     });
   });
+
+  // A phone that drops off the network without closing (signal lost, app
+  // killed) never sends a close - ping every 30 s and drop one that didn't
+  // answer the last ping, so it stops being sent every farm message.
+  // The pings also keep an idle connection from timing out in nginx.
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) {
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      try { ws.ping(); } catch { /* closing anyway */ }
+    }
+  }, 30000);
+  heartbeat.unref();
 
   console.log("[bridge] live WebSocket gateway attached at /live");
 }

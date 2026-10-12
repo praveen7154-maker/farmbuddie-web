@@ -5,8 +5,8 @@
 // Firestore doc per farm: farmValveSequences/<farmId>.
 
 export const MAX_SEQUENCES = 5;      // Irrigo's MAX_VALVE_CYCLIC_PRESETS
-export const MAX_STEPS = 28;         // hub's MAX_VALVE_CYCLIC_STEPS
-export const MAX_VALVE = 50;
+export const MAX_STEPS = 64;         // hub's MAX_VALVE_CYCLIC_STEPS (= MAX_VALVES)
+export const MAX_VALVE = 64;        // hub's MAX_VALVES (config.h)
 export const MAX_STEP_SEC = 24 * 3600;
 
 const intIn = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;

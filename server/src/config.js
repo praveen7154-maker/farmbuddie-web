@@ -6,6 +6,11 @@ function required(name) {
 
 export const config = {
   port: Number(process.env.PORT || 4000),
+  // Admin accounts (web panel / Irrigo Admin), comma-separated - see adminAuth.js.
+  adminEmails: (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   adminOrigins: (process.env.ADMIN_ORIGIN || "")
     .split(",")
     .map((s) => s.trim())

@@ -11,6 +11,7 @@ import { provisionBootstrapRouter } from "./routes/provisionBootstrap.js";
 import { provisionBindRouter } from "./routes/provisionBind.js";
 import { fcmTokenRouter } from "./routes/fcmToken.js";
 import { statusRouter } from "./routes/status.js";
+import { requireAdmin } from "./adminAuth.js";
 
 export const app = express();
 
@@ -25,7 +26,10 @@ export const app = express();
 // picks up. Not a blanket `true` - that would trust X-Forwarded-For from
 // literally any source, a spoofing risk this deployment doesn't need to
 // take since nginx is the only real caller.
-app.set("trust proxy", "loopback");
+// Docker's port forwarding makes nginx appear as the Docker network gateway
+// (a private address), not loopback - same as the bridge (bridge/server.js).
+// With "loopback" alone every caller shared one rate-limit bucket.
+app.set("trust proxy", ["loopback", "uniquelocal"]);
 
 app.use(express.json());
 
@@ -44,6 +48,7 @@ app.use(
   cors({ origin: config.adminOrigins }),
   provisionLimiter,
   verifyFirebaseToken,
+  requireAdmin,   // CORS alone doesn't stop a non-browser caller - any signed-in phone could rotate a hub's password
   provisionDeviceRouter
 );
 
@@ -99,5 +104,6 @@ app.use(
   cors({ origin: config.adminOrigins }),
   statusLimiter,
   verifyFirebaseToken,
+  requireAdmin,
   statusRouter
 );

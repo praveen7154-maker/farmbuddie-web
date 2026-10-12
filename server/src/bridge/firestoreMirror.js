@@ -17,7 +17,12 @@ export async function resolveFarmerDocId(farmId) {
     .limit(1)
     .get();
 
-  if (snap.empty) return null;
+  // Remembered too (until the 5-min clear below): a hub not assigned to a
+  // farmer yet otherwise cost a Firestore query on every message it sent.
+  if (snap.empty) {
+    farmIdToFarmerDoc.set(farmId, null);
+    return null;
+  }
 
   const docId = snap.docs[0].id;
   farmIdToFarmerDoc.set(farmId, docId);

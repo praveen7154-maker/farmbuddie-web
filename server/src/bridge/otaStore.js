@@ -78,8 +78,8 @@ const nodeCols = `farm_id AS "farmId", node, product, state, percent, error, ver
 
 // History filter: product ($p, null = all) and search text ($q, null = none).
 const releaseWhere = (p, q) => `(${p}::text IS NULL OR r.product = ${p})
-  AND (${q}::text IS NULL OR r.id::text = ${q} OR r.version ILIKE '%' || ${q} || '%'
-       OR r.created_by ILIKE '%' || ${q} || '%'
+  AND (${q}::text IS NULL OR r.id::text = ${q} OR strpos(lower(r.version), lower(${q})) > 0
+       OR strpos(lower(COALESCE(r.created_by, '')), lower(${q})) > 0
        OR EXISTS (SELECT 1 FROM ota_release_targets t WHERE t.release_id = r.id AND t.farm_id = ${q}))`;
 
 export const pgOtaStore = {

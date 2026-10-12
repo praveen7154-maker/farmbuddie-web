@@ -105,112 +105,119 @@ export function connectBridge() {
   client.on("reconnect", () => console.log("[bridge] reconnecting..."));
   client.on("error", (err) => console.error("[bridge] MQTT error:", err.message));
 
-  client.on("message", async (topic, messageBuf, packet) => {
-    const parsed = parseTopic(topic);
-    if (!parsed) return;
-
-    const { farmId, nodeId, category, motorNum, leaf } = parsed;
-
-    // Valves topic: retained, so the broker replays every farm's last one
-    // whenever this bridge (re)subscribes. That replay only refreshes the
-    // copy handed to phones on connect - it isn't a new event to store.
-    if (category === "valves") {
-      await handleValvesMessage(farmId, nodeId, topic, messageBuf, isRetainedReplay(packet));
-      return;
-    }
-
-    // The bridge is itself subscribed to farm/+/#, which includes the
-    // cmd topics it publishes to via publishCommand() below — MQTT
-    // delivers a publisher its own message back when it's also a
-    // subscriber to a matching topic. Skip cmd entirely: it's an echo of
-    // our own outgoing publish, not a device-originated event worth a
-    // history row.
-    if (leaf === "cmd") return;
-
-    let payload;
-    try {
-      payload = JSON.parse(messageBuf.toString());
-    } catch {
-      console.warn(`[bridge] non-JSON payload on ${topic}, storing raw`);
-      payload = { raw: messageBuf.toString() };
-    }
-
-    const eventType = motorNum ? `motor${motorNum}_${leaf}` : `${category}_${leaf}`;
-
-    // Fans this message out to every phone with a live WebSocket open on
-    // this farm (see liveGateway.js) - the SAME message this bridge
-    // already received on its one MQTT session, no new MQTT traffic. Never
-    // awaited/guarded like the writes below: broadcastToFarm() is a
-    // synchronous in-process Set iteration, not I/O, so there's nothing
-    // here that can fail the way a Postgres/Firestore call can.
-    broadcastToFarm(farmId, { topic, payload });
-
-    try {
-      await insertEvent({ farmId, nodeId, eventType, payload });
-    } catch (err) {
-      console.error("[bridge] postgres insert failed:", err);
-    }
-
-    if (category === "motor" && leaf === "status") {
-      // An alert shares the status topic but is not a status - mirroring it
-      // would replace deviceStatus.motor1 with the alert's few fields.
-      const isAlert = payload && typeof payload === "object" && payload.event !== undefined;
-      if (!isAlert) {
-        try {
-          await mirrorStatus(farmId, nodeId, motorNum, payload);
-        } catch (err) {
-          console.error("[bridge] firestore mirror failed:", err);
-        }
-      }
-
-      // Alerts share the status topic with plain telemetry (see
-      // connectivity.cpp's publishAlert()) - an "event" key is what
-      // distinguishes the two, same discriminator PumpRepository.kt uses
-      // on the app side.
-      if (payload && typeof payload === "object" && payload.event !== undefined) {
-        await sendAlertPush(farmId, nodeId, motorNum, payload);
-      }
-
-      syncDeviceClockIfNeeded(farmId, nodeId, motorNum, payload);
-    }
-
-    // Config echoes share the response topic with plain command acks (see
-    // PumpRepository.kt's own `type` discriminator) - opportunistically
-    // refreshes farm_config_cache so the next WebSocket subscribe doesn't
-    // have to wait on a live device round trip (see farmConfigCache.js).
-    if (category === "motor" && leaf === "response") {
-      try {
-        await setCachedConfigFromResponse(farmId, motorNum, payload);
-      } catch (err) {
-        console.error("[bridge] config cache write failed:", err);
-      }
-    }
-
-    if (category === "ota" && leaf === "status" && otaStatusHandler) {
-      await otaStatusHandler(farmId, payload);
-    }
-
-    if (category === "health") {
-      try {
-        await mirrorHealth(farmId, nodeId, payload);
-      } catch (err) {
-        console.error("[bridge] firestore health mirror failed:", err);
-      }
-      // Keep the hub's TNEB load-limit configuration in step with the admin panel.
-      try {
-        await tnebSync(farmId, nodeId, payload);
-      } catch (err) {
-        console.error("[bridge] tneb config sync failed:", err);
-      }
-      try {
-        await smsSync(farmId, nodeId, payload);
-      } catch (err) {
-        console.error("[bridge] sms number sync failed:", err);
-      }
-    }
+  // One bad message must never take the bridge down (an unhandled
+  // rejection ends the process) - each step below has its own catch; this
+  // is the net for anything unexpected.
+  client.on("message", (topic, messageBuf, packet) => {
+    handleMessage(topic, messageBuf, packet).catch((err) => console.error(`[bridge] message on ${topic} failed:`, err));
   });
 
   return client;
+}
+
+async function handleMessage(topic, messageBuf, packet) {
+  const parsed = parseTopic(topic);
+  if (!parsed) return;
+
+  const { farmId, nodeId, category, motorNum, leaf } = parsed;
+
+  // Valves topic: retained, so the broker replays every farm's last one
+  // whenever this bridge (re)subscribes. That replay only refreshes the
+  // copy handed to phones on connect - it isn't a new event to store.
+  if (category === "valves") {
+    await handleValvesMessage(farmId, nodeId, topic, messageBuf, isRetainedReplay(packet));
+    return;
+  }
+
+  // The bridge is itself subscribed to farm/+/#, which includes the
+  // cmd topics it publishes to via publishCommand() below — MQTT
+  // delivers a publisher its own message back when it's also a
+  // subscriber to a matching topic. Skip cmd entirely: it's an echo of
+  // our own outgoing publish, not a device-originated event worth a
+  // history row.
+  if (leaf === "cmd") return;
+
+  let payload;
+  try {
+    payload = JSON.parse(messageBuf.toString());
+  } catch {
+    console.warn(`[bridge] non-JSON payload on ${topic}, storing raw`);
+    payload = { raw: messageBuf.toString() };
+  }
+
+  const eventType = motorNum ? `motor${motorNum}_${leaf}` : `${category}_${leaf}`;
+
+  // Fans this message out to every phone with a live WebSocket open on
+  // this farm (see liveGateway.js) - the SAME message this bridge
+  // already received on its one MQTT session, no new MQTT traffic. Never
+  // awaited/guarded like the writes below: broadcastToFarm() is a
+  // synchronous in-process Set iteration, not I/O, so there's nothing
+  // here that can fail the way a Postgres/Firestore call can.
+  broadcastToFarm(farmId, { topic, payload });
+
+  try {
+    await insertEvent({ farmId, nodeId, eventType, payload });
+  } catch (err) {
+    console.error("[bridge] postgres insert failed:", err);
+  }
+
+  if (category === "motor" && leaf === "status") {
+    // An alert shares the status topic but is not a status - mirroring it
+    // would replace deviceStatus.motor1 with the alert's few fields.
+    const isAlert = payload && typeof payload === "object" && payload.event !== undefined;
+    if (!isAlert) {
+      try {
+        await mirrorStatus(farmId, nodeId, motorNum, payload);
+      } catch (err) {
+        console.error("[bridge] firestore mirror failed:", err);
+      }
+    }
+
+    // Alerts share the status topic with plain telemetry (see
+    // connectivity.cpp's publishAlert()) - an "event" key is what
+    // distinguishes the two, same discriminator PumpRepository.kt uses
+    // on the app side.
+    if (payload && typeof payload === "object" && payload.event !== undefined) {
+      await sendAlertPush(farmId, nodeId, motorNum, payload);
+    }
+
+    syncDeviceClockIfNeeded(farmId, nodeId, motorNum, payload);
+  }
+
+  // Config echoes share the response topic with plain command acks (see
+  // PumpRepository.kt's own `type` discriminator) - opportunistically
+  // refreshes farm_config_cache so the next WebSocket subscribe doesn't
+  // have to wait on a live device round trip (see farmConfigCache.js).
+  if (category === "motor" && leaf === "response") {
+    try {
+      await setCachedConfigFromResponse(farmId, motorNum, payload);
+    } catch (err) {
+      console.error("[bridge] config cache write failed:", err);
+    }
+  }
+
+  if (category === "ota" && leaf === "status" && otaStatusHandler) {
+    await otaStatusHandler(farmId, payload);
+  }
+
+  if (category === "health") {
+    try {
+      await mirrorHealth(farmId, nodeId, payload);
+    } catch (err) {
+      console.error("[bridge] firestore health mirror failed:", err);
+    }
+    // Keep the hub's TNEB load-limit configuration in step with the admin panel.
+    try {
+      await tnebSync(farmId, nodeId, payload);
+    } catch (err) {
+      console.error("[bridge] tneb config sync failed:", err);
+    }
+    try {
+      await smsSync(farmId, nodeId, payload);
+    } catch (err) {
+      console.error("[bridge] sms number sync failed:", err);
+    }
+  }
 }
 
 // Firestore mirror of the valves snapshot: a change (open/online/start

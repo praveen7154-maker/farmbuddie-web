@@ -1,4 +1,5 @@
 import express from "express";
+import { isAdmin } from "../adminAuth.js";
 
 // Message Broadcast (admin panel > Message Broadcast): the company's own
 // announcements to farmers - update notices, reminders, offers. The admin
@@ -181,7 +182,7 @@ export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, s
   const adminRouter = express.Router();
   adminRouter.use(express.json({ limit: "64kb" }));
   adminRouter.use((req, res, next) => {
-    if (!req.decodedToken?.email) return res.status(403).json({ error: "Admin identity required" });
+    if (!isAdmin(req.decodedToken)) return res.status(403).json({ error: "Admin identity required" });
     next();
   });
 
@@ -305,7 +306,7 @@ export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, s
 
   // The caller's farms, or null for an admin (sees everything).
   async function callerFarms(req) {
-    if (req.decodedToken?.email) return null;
+    if (isAdmin(req.decodedToken)) return null;
     const phone = normalizePhone(req.decodedToken?.phone_number);
     if (phone.length !== 10) return [];
     return phoneFarmIds(phone);

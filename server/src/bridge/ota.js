@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import express from "express";
 import { OTA_SIGNING_PUBLIC_KEY_PEM } from "./otaSigningKey.js";
 import { unitsForProduct } from "./farmUnits.js";
+import { isAdmin } from "../adminAuth.js";
 
 // Web-panel OTA (admin panel > OTA). The admin uploads a firmware.bin, signs
 // the release IN THE BROWSER with the fleet key (public/js/ota-crypto.js -
@@ -173,7 +174,7 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
   // ---- admin (mounted behind verifyFirebaseToken) ----
   const adminRouter = express.Router();
   adminRouter.use((req, res, next) => {
-    if (!req.decodedToken?.email) return res.status(403).json({ error: "Admin identity required" });
+    if (!isAdmin(req.decodedToken)) return res.status(403).json({ error: "Admin identity required" });
     next();
   });
 

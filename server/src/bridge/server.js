@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import { config } from "../config.js";
 import { verifyFirebaseToken } from "../middleware/verifyFirebaseToken.js";
 import { canAccessFarm } from "./ownership.js";
+import { isAdmin } from "../adminAuth.js";
 import { publishCommand, isBridgeConnected } from "./mqttBridge.js";
 import { queryEvents, queryAlerts, checkPostgresHealth } from "./postgres.js";
 import { getFleetStatus } from "./fleetStatus.js";
@@ -101,6 +102,10 @@ app.post("/command/device", async (req, res) => {
   if (!farmId || !nodeId || !cmd) {
     return res.status(400).json({ error: "farmId, nodeId, and cmd are required" });
   }
+  // They become MQTT topic levels - no "/", "+" or "#" sneaking in.
+  if (!/^\d{1,6}$/.test(String(farmId)) || !/^[A-Za-z0-9_-]{1,32}$/.test(String(nodeId))) {
+    return res.status(400).json({ error: "Invalid farmId or nodeId" });
+  }
 
   try {
     const allowed = await canAccessFarm(req.decodedToken, farmId);
@@ -126,7 +131,7 @@ app.post("/command/device", async (req, res) => {
  * listener open just to show who's online right now.
  */
 app.get("/fleet/status", async (req, res) => {
-  if (!req.decodedToken.email) {
+  if (!isAdmin(req.decodedToken)) {
     return res.status(403).json({ error: "Admin identity required" });
   }
 
@@ -149,7 +154,7 @@ app.get("/fleet/status", async (req, res) => {
  * panel's own credential reveal already makes (see deviceProvisioning.js).
  */
 app.get("/fleet/device/:farmId/credentials", async (req, res) => {
-  if (!req.decodedToken.email) {
+  if (!isAdmin(req.decodedToken)) {
     return res.status(403).json({ error: "Admin identity required" });
   }
 
@@ -176,7 +181,7 @@ app.get("/fleet/device/:farmId/credentials", async (req, res) => {
  * rotate:false - viewing/sharing, never mutates the credential.
  */
 app.get("/fleet/device/:farmId/qr", async (req, res) => {
-  if (!req.decodedToken.email) {
+  if (!isAdmin(req.decodedToken)) {
     return res.status(403).json({ error: "Admin identity required" });
   }
 

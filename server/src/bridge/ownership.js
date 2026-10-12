@@ -1,4 +1,5 @@
 import { db } from "../firebaseAdmin.js";
+import { isAdmin } from "../adminAuth.js";
 
 function normalizePhone(phone) {
   return String(phone || "").replace(/\D/g, "").slice(-10);
@@ -16,7 +17,7 @@ function normalizePhone(phone) {
  * farmers for a matching farmId - phoneIndex now has the answer directly).
  */
 export async function canAccessFarm(decodedToken, farmId) {
-  if (decodedToken.email) return true;
+  if (isAdmin(decodedToken)) return true;
 
   const phone = normalizePhone(decodedToken.phone_number);
   if (!phone || phone.length !== 10) return false;

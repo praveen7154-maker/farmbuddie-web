@@ -3,6 +3,7 @@ import { db } from "../firebaseAdmin.js";
 import { createBasicCredentials, deleteCredentials, findCredentialsByName } from "../tbmqClient.js";
 import { generateMqttPassword } from "../password.js";
 import { config } from "../config.js";
+import { isAdmin } from "../adminAuth.js";
 
 export const provisionMonitorRouter = Router();
 
@@ -29,7 +30,7 @@ provisionMonitorRouter.post("/", async (req, res) => {
   // it otherwise. Mirrors farmbuddie-cloud's own isAdmin() rule
   // (request.auth.token.email != null): a farmer's phone-auth token has no
   // email claim and is rejected here, same as it would be by Firestore.
-  if (!req.decodedToken.email) {
+  if (!isAdmin(req.decodedToken)) {
     return res.status(403).json({ error: "Fleet monitoring credentials require an admin (email-authenticated) account" });
   }
 
