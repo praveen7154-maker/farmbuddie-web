@@ -51,6 +51,9 @@ export async function ensureOtaSchema() {
   // Node images (motor-node / valve / filter-backwash) - see ota.js.
   await pool.query(`ALTER TABLE ota_firmware ADD COLUMN IF NOT EXISTS product TEXT NOT NULL DEFAULT 'hub'`);
   await pool.query(`ALTER TABLE ota_releases ADD COLUMN IF NOT EXISTS product TEXT NOT NULL DEFAULT 'hub'`);
+  // A node release the admin stopped (hubs told to stop handing it out).
+  await pool.query(`ALTER TABLE ota_releases ADD COLUMN IF NOT EXISTS stopped_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE ota_releases ADD COLUMN IF NOT EXISTS stopped_by TEXT`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ota_node_status (
       release_id  BIGINT NOT NULL REFERENCES ota_releases(id) ON DELETE CASCADE,
@@ -69,7 +72,8 @@ export async function ensureOtaSchema() {
 
 const targetCols = `farm_id AS "farmId", node_id AS "nodeId", state, percent, error, transport,
   fw_version AS "fwVersion", attempts, sent_at AS "sentAt", updated_at AS "updatedAt"`;
-const releaseCols = `id, sha256, version, product, url, signature, mode, created_by AS "createdBy", created_at AS "createdAt"`;
+const releaseCols = `id, sha256, version, product, url, signature, mode, created_by AS "createdBy", created_at AS "createdAt",
+  stopped_at AS "stoppedAt", stopped_by AS "stoppedBy"`;
 const nodeCols = `farm_id AS "farmId", node, product, state, percent, error, version, updated_at AS "updatedAt"`;
 
 // History filter: product ($p, null = all) and search text ($q, null = none).
@@ -189,6 +193,20 @@ export const pgOtaStore = {
     } finally {
       client.release();
     }
+  },
+
+  async markStopped(releaseId, by, at) {
+    await pool.query(`UPDATE ota_releases SET stopped_at = $3, stopped_by = $2 WHERE id = $1`, [releaseId, by, at]);
+  },
+
+  // Of these farms, the ones sent a newer node release since this one - the
+  // hub holds one node image at a time, so a stop for this release must not
+  // reach them (it would stop the newer one).
+  async farmsWithNewerNodeRelease(releaseId, farmIds) {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT t.farm_id AS "farmId" FROM ota_release_targets t JOIN ota_releases r ON r.id = t.release_id
+        WHERE r.id > $1 AND r.product <> 'hub' AND t.farm_id = ANY($2::text[])`, [releaseId, farmIds]);
+    return rows.map((r) => r.farmId);
   },
 
   async markSent(releaseId, farmIds, at) {

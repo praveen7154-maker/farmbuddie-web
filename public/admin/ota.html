@@ -169,8 +169,10 @@
     new firmware. Refreshes every 5 seconds.</p>
   <div class="ota-actions">
     <button id="retryBtn" class="fb-btn-primary small">🔁 Resend to hubs not updated</button>
+    <button id="stopBtn" class="ota-delete-btn" hidden>⏹ Stop handing out</button>
     <span id="retryStatus" class="ota-status-text"></span>
   </div>
+  <p class="ota-alert error" id="stoppedNote" hidden></p>
 </section>
 
 <!-- HISTORY -->

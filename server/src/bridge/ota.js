@@ -348,12 +348,42 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     }
   });
 
+  // Stops a node release: each of its hubs is told to stop handing the
+  // image out (node_ota_cancel - Motor firmware, NodeOtaServer::cancel()).
+  // Units already updated stay updated; ones part-way through keep the
+  // firmware they run. A hub offline right now doesn't hear it - pressing
+  // Stop again sends it again. Farms sent a newer node release since are
+  // skipped: the hub holds one node image at a time, and the stop would
+  // end that newer one instead.
+  adminRouter.post("/releases/:id/stop", async (req, res) => {
+    try {
+      const r = await store.getRelease(Number(req.params.id));
+      if (!r) return res.status(404).json({ error: "No such release" });
+      if (!isNodeProduct(r.release.product)) {
+        return res.status(400).json({ error: "A hub update can't be stopped once sent - a bad image is refused or rolled back by the hub itself" });
+      }
+      const farmIds = [...new Set(r.targets.map((t) => t.farmId))];
+      const newer = new Set(await store.farmsWithNewerNodeRelease(r.release.id, farmIds));
+      const targets = r.targets.filter((t) => !newer.has(t.farmId));
+      for (const t of targets) {
+        await publish(`farm/${t.farmId}/${t.nodeId}/ota/cmd`, { cmd: "node_ota_cancel", id: Date.now() });
+      }
+      await store.markStopped(r.release.id, req.decodedToken.email, now());
+      console.log(`[ota] release ${r.release.id} stopped by ${req.decodedToken.email} -> ${targets.map((t) => t.farmId).join(",") || "none"}`);
+      return res.json({ stopped: targets.length, skipped: [...newer] });
+    } catch (err) {
+      console.error("[ota] stop failed:", err);
+      return res.status(500).json({ error: "Failed to stop" });
+    }
+  });
+
   // Re-sends to every hub of the release that isn't updated yet (or just the
   // farmIds given) - busy (motor was running), failed or no reply.
   adminRouter.post("/releases/:id/retry", express.json(), async (req, res) => {
     try {
       const r = await store.getRelease(Number(req.params.id));
       if (!r) return res.status(404).json({ error: "No such release" });
+      if (r.release.stoppedAt) return res.status(409).json({ error: "This release was stopped - send a new one instead" });
       const only = Array.isArray(req.body?.farmIds) ? new Set(req.body.farmIds.map(String)) : null;
       const targets = r.targets.filter((t) =>
         outcomeOf(t) !== "updated" && outcomeOf(t) !== "in_progress" && (!only || only.has(t.farmId)));

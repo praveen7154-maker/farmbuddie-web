@@ -423,7 +423,8 @@ async function refreshRelease() {
     renderRelease(d);
     const ns = d.nodeSummary;
     // A node update keeps going long after the hubs have staged it.
-    const busy = d.summary.in_progress + d.summary.waiting + (ns ? ns.in_progress + (ns.total === 0 ? 1 : 0) : 0);
+    const busy = d.release.stoppedAt ? 0
+      : d.summary.in_progress + d.summary.waiting + (ns ? ns.in_progress + (ns.total === 0 ? 1 : 0) : 0);
     if (busy === 0 || Date.now() - pollStartedAt > POLL_GIVE_UP_MS) clearInterval(pollTimer);
   } catch (err) {
     $("retryStatus").textContent = err.message;
@@ -453,7 +454,7 @@ function renderRelease({ release, summary, targets, nodeSummary, nodes }) {
     const noReply = t.outcome === "waiting" && t.state !== "sent";
     const detail = t.error ? (ERROR_TEXT[t.error] || t.error)
       : noReply ? `No reply from the hub since ${fmtTime(t.updatedAt)} - it gave up or restarted. Use Resend.`
-      : t.outcome === "updated" ? `Running ${esc(t.fwVersion || release.version)}`
+      : t.outcome === "updated" ? (node ? `Hub has ${esc(release.version)} for its units` : `Running ${esc(t.fwVersion || release.version)}`)
       : gsmDownloading ? "Over GSM - usually 3-6 min, no progress until it restarts" : "";
     const stateText = gsmDownloading ? "Downloading" : noReply ? "No reply" : STATE_TEXT[t.state] || t.state;
     return `<tr>
@@ -468,7 +469,16 @@ function renderRelease({ release, summary, targets, nodeSummary, nodes }) {
     </tr>`;
   }).join("");
   const retryable = summary.waiting + summary.busy + summary.failed;
-  $("retryBtn").disabled = retryable === 0;
+  $("retryBtn").disabled = retryable === 0 || Boolean(release.stoppedAt);
+  // Node releases only - a hub update can't be stopped once sent.
+  $("stopBtn").hidden = !node;
+  $("stopBtn").textContent = release.stoppedAt ? "⏹ Send stop again" : "⏹ Stop handing out";
+  $("stoppedNote").hidden = !release.stoppedAt;
+  $("stoppedNote").textContent = release.stoppedAt
+    ? `Stopped ${fmtTime(release.stoppedAt)} by ${release.stoppedBy || "-"}: the hubs were told to stop handing this firmware out. ` +
+      "Units already updated stay updated; the rest keep their current firmware. A hub that was offline then didn't hear it - " +
+      "press \"Send stop again\" once it's back online."
+    : "";
 }
 
 function renderNodes(release, s, nodes) {
@@ -490,6 +500,27 @@ function renderNodes(release, s, nodes) {
     </tr>`;
   }).join("") : `<tr><td colspan="7">No unit has reported yet</td></tr>`;
 }
+
+$("stopBtn").addEventListener("click", async () => {
+  if (!currentReleaseId) return;
+  if (!confirm("Tell this release's hubs to stop handing the firmware out to their units?\n\n" +
+    "Units already updated stay updated. Units not updated yet (or part-way through) keep their current firmware. " +
+    "The release can't be resumed - send a new one instead.")) return;
+  $("stopBtn").disabled = true;
+  try {
+    const r = await api(`/ota/releases/${currentReleaseId}/stop`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}"
+    });
+    $("retryStatus").textContent = `Stop sent to ${r.stopped} hub${r.stopped === 1 ? "" : "s"}` +
+      (r.skipped.length ? ` (skipped ${r.skipped.join(", ")} - a newer unit update was sent there since)` : "") + ".";
+    await refreshRelease();
+    loadHistory().catch(() => {});
+  } catch (err) {
+    $("retryStatus").textContent = err.message;
+  } finally {
+    $("stopBtn").disabled = false;
+  }
+});
 
 $("retryBtn").addEventListener("click", async () => {
   if (!currentReleaseId || !confirm("Resend this update to every hub that isn't updated yet?")) return;
@@ -533,10 +564,11 @@ async function loadHistory() {
         s.failed && `${s.failed} hub(s) failed to stage`].filter(Boolean).join(", ")
       : [`${s.updated}/${s.total} updated`, s.failed && `${s.failed} failed`, s.busy && `${s.busy} busy`,
         (s.waiting + s.in_progress) && `${s.waiting + s.in_progress} pending`].filter(Boolean).join(", ");
+    const shown = r.stoppedAt ? `⏹ Stopped - ${result}` : result;
     return `<tr data-id="${r.id}">
       <td class="ota-check-col"><input type="checkbox" class="historyPick" value="${r.id}" ${historySelected.has(r.id) ? "checked" : ""}></td>
       <td>${r.id}</td><td>${esc(PRODUCT_TEXT[r.product] || "Hub")}</td><td>${esc(r.version)}</td><td>${r.mode === "all" ? "All farms" : `${s.total} farm${s.total > 1 ? "s" : ""}`}</td>
-      <td>${esc(result)}</td><td>${esc(r.createdBy || "-")}</td><td>${fmtTime(r.createdAt)}</td></tr>`;
+      <td>${esc(shown)}</td><td>${esc(r.createdBy || "-")}</td><td>${fmtTime(r.createdAt)}</td></tr>`;
   }).join("") : `<tr><td colspan="8">${q || product ? "No release matches" : "No releases yet"}</td></tr>`;
   updateHistorySelection();
 }

@@ -251,3 +251,39 @@ test("history is paged 10 at a time and filtered by product", async () => {
     server.close();
   }
 });
+
+test("stop: a node release's hubs are told to stop handing it out, except farms with a newer one", async () => {
+  const published = [];
+  const stopped = [];
+  const rel = (id, product) => ({
+    release: { id, product, version: "1.0.2", sha256: "a".repeat(64) },
+    targets: [{ farmId: "0001", nodeId: "MOTOR_1", state: "staged" }, { farmId: "0002", nodeId: "MOTOR_1", state: "staged" }]
+  });
+  const ota = createOtaModule({
+    store: {
+      async getRelease(id) { return id === 8 ? rel(8, "motor-node") : id === 9 ? rel(9, "hub") : null; },
+      async farmsWithNewerNodeRelease() { return ["0002"]; },
+      async markStopped(id, by) { stopped.push({ id, by }); },
+      async getFirmwareMeta() { return { size: 1 }; }
+    },
+    publish: async (topic, payload) => published.push({ topic, payload }),
+    listFleet: async () => [], publicBaseUrl: "https://example.test", publicKeyPem: PUB_PEM
+  });
+  const app = express();
+  app.use((req, _res, next) => { req.decodedToken = { email: "admin@test" }; next(); });
+  app.use("/ota", ota.adminRouter);
+  const server = app.listen(0);
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/ota`;
+    const post = (path) => fetch(`${base}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    assert.equal((await post("/releases/9/stop")).status, 400);    // a hub update can't be stopped
+    assert.equal((await post("/releases/7/stop")).status, 404);
+    const r = await post("/releases/8/stop");
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { stopped: 1, skipped: ["0002"] });
+    assert.deepEqual(published.map((p) => [p.topic, p.payload.cmd]), [["farm/0001/MOTOR_1/ota/cmd", "node_ota_cancel"]]);
+    assert.deepEqual(stopped, [{ id: 8, by: "admin@test" }]);
+  } finally {
+    server.close();
+  }
+});
