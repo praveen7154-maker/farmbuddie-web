@@ -85,6 +85,11 @@ function fakeStore() {
     async count() { return rows.length; },
     async get(id) { return rows.find((r) => r.id === Number(id)) || null; },
     async reads(id) { return readRows.filter((r) => r.id === id).map((r) => ({ phone: r.phone, readAt: r.at })); },
+    async remove(ids) {
+      const before = rows.length;
+      for (let i = rows.length - 1; i >= 0; i--) if (ids.includes(rows[i].id)) rows.splice(i, 1);
+      return before - rows.length;
+    },
     async recall(id) {
       const a = rows.find((r) => r.id === Number(id) && !r.deletedAt);
       if (!a) return false;
@@ -203,5 +208,22 @@ test("a phone with no farm gets an empty feed", async () => {
     await call("/broadcast/announcements", "POST", { category: "update", title: "All", body: "x", audience: "all" });
     as({ phone_number: "+918888888888" });
     assert.deepEqual((await call("/announcements")).body, { announcements: [], unread: 0 });
+  });
+});
+
+test("delete removes messages from the history and the farmers' feeds", async () => {
+  await withServer(async ({ call, store, as }) => {
+    await call("/broadcast/announcements", "POST", { category: "general", title: "A", body: "a", audience: "all" });
+    await call("/broadcast/announcements", "POST", { category: "general", title: "B", body: "b", audience: "all" });
+    assert.equal((await call("/broadcast/announcements/delete", "POST", { ids: [] })).status, 400);
+    assert.equal((await call("/broadcast/announcements/delete", "POST", { ids: ["x"] })).status, 400);
+    const r = await call("/broadcast/announcements/delete", "POST", { ids: [1, 99] });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.deleted, 1);
+    assert.deepEqual(store.rows.map((a) => a.title), ["B"]);
+    as({ phone_number: "+919000000002" });
+    assert.deepEqual((await call("/announcements")).body.announcements.map((a) => a.title), ["B"]);
+    // Only an admin can delete.
+    assert.equal((await call("/broadcast/announcements/delete", "POST", { ids: [2] })).status, 403);
   });
 });

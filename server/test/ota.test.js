@@ -41,6 +41,42 @@ test("node outcomes", () => {
   assert.equal(outcomeOf({ state: "staged" }), "updated");        // hub has it and is handing it out
   assert.equal(outcomeOf({ state: "downloaded" }), "in_progress");
   assert.equal(outcomeOf({ state: "failed", error: "hub_slot_busy" }), "busy");
+  // A GSM download with no word for over 30 min: the hub gave up long ago.
+  const now = Date.parse("2026-10-12T12:00:00Z");
+  assert.equal(outcomeOf({ state: "starting", updatedAt: "2026-10-12T11:40:00Z" }, now), "in_progress");
+  assert.equal(outcomeOf({ state: "starting", updatedAt: "2026-10-12T11:00:00Z" }, now), "waiting");
+});
+
+test("history records can be deleted, and searched", async () => {
+  const seen = [];
+  const ota = createOtaModule({
+    store: {
+      async deleteReleases(ids) { seen.push(ids); return ids.filter((id) => id < 10).length; },
+      async listReleases(limit, offset, product, q) { seen.push({ product, q }); return []; },
+      async countReleases() { return 0; }
+    },
+    publish: async () => {}, listFleet: async () => [], publicBaseUrl: "https://example.test", publicKeyPem: PUB_PEM
+  });
+  const app = express();
+  app.use((req, _res, next) => { req.decodedToken = { email: "admin@test" }; next(); });
+  app.use("/ota", ota.adminRouter);
+  const server = app.listen(0);
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/ota`;
+    const del = (body) => fetch(`${base}/releases/delete`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+    });
+    assert.equal((await del({ ids: [] })).status, 400);
+    assert.equal((await del({ ids: [0] })).status, 400);
+    const ok = await del({ ids: [3, 3, 12] });
+    assert.equal(ok.status, 200);
+    assert.equal((await ok.json()).deleted, 1);
+    assert.deepEqual(seen[0], [3, 12]);
+    await fetch(`${base}/releases?q=%200001%20&product=hub`);
+    assert.deepEqual(seen[1], { product: "hub", q: "0001" });
+  } finally {
+    server.close();
+  }
 });
 
 function fakeStore() {

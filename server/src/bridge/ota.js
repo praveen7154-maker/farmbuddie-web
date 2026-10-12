@@ -83,13 +83,22 @@ export function verifyReleaseSignature(sha256, size, version, signatureB64, publ
   }
 }
 
+// A hub gives up on a download after 20 min (Motor firmware,
+// OTA_GSM_HARD_TIMEOUT_MS) and restarts, so one still "in progress" with no
+// word for this long never got its result through - shown as no reply, so
+// it can be resent.
+export const NO_REPLY_MS = 30 * 60 * 1000;
+
 // How a target row reads on the page / in the summary.
-export function outcomeOf(target) {
+export function outcomeOf(target, nowMs = Date.now()) {
   const { state, error } = target;
   if (state === "validated" || state === "staged") return "updated";
   if (state === "failed" && BUSY_ERRORS.has(error)) return "busy";
   if (state === "failed" || state === "rolled_back") return "failed";
-  if (ACTIVE_STATES.has(state)) return "in_progress";
+  if (ACTIVE_STATES.has(state)) {
+    const at = target.updatedAt ? new Date(target.updatedAt).getTime() : NaN;
+    return Number.isFinite(at) && nowMs - at > NO_REPLY_MS ? "waiting" : "in_progress";
+  }
   return "waiting"; // sent, no reply yet - hub offline, or a GSM download in progress
 }
 
@@ -278,13 +287,14 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
 
   adminRouter.get("/releases", async (req, res) => {
     try {
-      // ?page=1.. (10 per page), ?product=hub|motor-node|valve|filter-backwash
+      // ?page=1.. (10 per page), ?product=hub|motor-node|valve|filter-backwash, ?q=search
       const pageSize = 10;
       const page = Math.max(1, Math.min(10000, parseInt(req.query.page, 10) || 1));
       const product = PRODUCTS.includes(String(req.query.product)) ? String(req.query.product) : null;
+      const q = String(req.query.q || "").trim().slice(0, 64) || null;
       const [releases, total] = await Promise.all([
-        store.listReleases(pageSize, (page - 1) * pageSize, product),
-        store.countReleases ? store.countReleases(product) : null
+        store.listReleases(pageSize, (page - 1) * pageSize, product, q),
+        store.countReleases ? store.countReleases(product, q) : null
       ]);
       return res.json({
         page, pageSize, total,
@@ -316,6 +326,25 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     } catch (err) {
       console.error("[ota] get failed:", err);
       return res.status(500).json({ error: "Failed to load the release" });
+    }
+  });
+
+  // Deletes history records: { ids: [..] } (up to 500 at a time). A hub
+  // still busy with one keeps going; its later reports just have no row to
+  // land on, and a download of a .bin no release uses any more fails
+  // harmlessly (the hub stays on what it runs).
+  adminRouter.post("/releases/delete", express.json(), async (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number))] : [];
+    if (ids.length === 0 || ids.length > 500 || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+      return res.status(400).json({ error: "ids must be 1-500 release numbers" });
+    }
+    try {
+      const deleted = await store.deleteReleases(ids);
+      console.log(`[ota] ${deleted} release(s) deleted by ${req.decodedToken.email}: ${ids.join(",")}`);
+      return res.json({ deleted });
+    } catch (err) {
+      console.error("[ota] delete failed:", err);
+      return res.status(500).json({ error: "Failed to delete" });
     }
   });
 

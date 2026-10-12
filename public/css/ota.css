@@ -89,3 +89,9 @@
 .ota-pager button.active { background: #15803d; border-color: #15803d; color: #fff; }
 .ota-pager button:disabled { opacity: 0.4; cursor: default; }
 .ota-pager .ota-muted { margin-right: auto; font-size: 13px; }
+
+/* History: delete selected records */
+.ota-delete-btn { margin-left: auto; padding: 8px 14px; border: 1px solid #fca5a5; border-radius: 10px; background: #fff;
+  color: #b91c1c; font-weight: 600; font-size: 13px; cursor: pointer; }
+.ota-delete-btn:hover:not(:disabled) { background: #fef2f2; }
+.ota-delete-btn:disabled { opacity: 0.45; cursor: default; }

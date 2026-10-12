@@ -268,6 +268,23 @@ export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, s
     }
   });
 
+  // Delete: { ids: [..] } removed from the history for good - and from the
+  // farmers' feeds (a push already shown can't be taken back).
+  adminRouter.post("/announcements/delete", async (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number))] : [];
+    if (ids.length === 0 || ids.length > 500 || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+      return res.status(400).json({ error: "ids must be 1-500 message numbers" });
+    }
+    try {
+      const deleted = await store.remove(ids);
+      console.log(`[broadcast] ${deleted} message(s) deleted by ${req.decodedToken.email}: ${ids.join(",")}`);
+      res.json({ deleted });
+    } catch (err) {
+      console.error("[broadcast] delete error:", err);
+      res.status(500).json({ error: "Couldn't delete" });
+    }
+  });
+
   // Recall: gone from every phone's feed on its next refresh (a scheduled
   // one is simply never sent). A push already shown can't be taken back.
   adminRouter.delete("/announcements/:id", async (req, res) => {

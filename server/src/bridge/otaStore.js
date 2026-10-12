@@ -72,6 +72,12 @@ const targetCols = `farm_id AS "farmId", node_id AS "nodeId", state, percent, er
 const releaseCols = `id, sha256, version, product, url, signature, mode, created_by AS "createdBy", created_at AS "createdAt"`;
 const nodeCols = `farm_id AS "farmId", node, product, state, percent, error, version, updated_at AS "updatedAt"`;
 
+// History filter: product ($p, null = all) and search text ($q, null = none).
+const releaseWhere = (p, q) => `(${p}::text IS NULL OR r.product = ${p})
+  AND (${q}::text IS NULL OR r.id::text = ${q} OR r.version ILIKE '%' || ${q} || '%'
+       OR r.created_by ILIKE '%' || ${q} || '%'
+       OR EXISTS (SELECT 1 FROM ota_release_targets t WHERE t.release_id = r.id AND t.farm_id = ${q}))`;
+
 export const pgOtaStore = {
   async saveFirmware({ sha256, version, product = "hub", size, data, uploadedBy }) {
     await pool.query(
@@ -128,12 +134,13 @@ export const pgOtaStore = {
     return { release: { ...rows[0], id: Number(rows[0].id) }, targets: t.rows, nodes: n.rows };
   },
 
-  // Newest first, one page at a time; product = null for every kind.
-  async listReleases(limit, offset = 0, product = null) {
+  // Newest first, one page at a time; product = null for every kind; q =
+  // search text (release number, version, who sent it, or a farm ID it went to).
+  async listReleases(limit, offset = 0, product = null, q = null) {
     const { rows } = await pool.query(
-      `SELECT ${releaseCols} FROM ota_releases WHERE ($3::text IS NULL OR product = $3)
+      `SELECT ${releaseCols} FROM ota_releases r WHERE ${releaseWhere("$3", "$4")}
        ORDER BY id DESC LIMIT $1 OFFSET $2`,
-      [limit, offset, product]
+      [limit, offset, product, q || null]
     );
     const out = [];
     for (const r of rows) {
@@ -155,10 +162,33 @@ export const pgOtaStore = {
     return Object.fromEntries(rows.map((r) => [r.product, r.version]));
   },
 
-  async countReleases(product = null) {
+  async countReleases(product = null, q = null) {
     const { rows } = await pool.query(
-      `SELECT count(*)::int AS n FROM ota_releases WHERE ($1::text IS NULL OR product = $1)`, [product]);
+      `SELECT count(*)::int AS n FROM ota_releases r WHERE ${releaseWhere("$1", "$2")}`, [product, q || null]);
     return rows[0].n;
+  },
+
+  // Removes the releases and their progress rows (ON DELETE CASCADE), and
+  // each .bin no release uses any more. Returns how many were deleted.
+  async deleteReleases(ids) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(`DELETE FROM ota_releases WHERE id = ANY($1::bigint[]) RETURNING sha256`, [ids]);
+      const shas = [...new Set(rows.map((r) => r.sha256))];
+      if (shas.length) {
+        await client.query(
+          `DELETE FROM ota_firmware f WHERE f.sha256 = ANY($1::text[])
+             AND NOT EXISTS (SELECT 1 FROM ota_releases r WHERE r.sha256 = f.sha256)`, [shas]);
+      }
+      await client.query("COMMIT");
+      return rows.length;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   async markSent(releaseId, farmIds, at) {

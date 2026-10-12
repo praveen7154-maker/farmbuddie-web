@@ -131,6 +131,13 @@ export const pgAnnouncementStore = {
     return rows;
   },
 
+  // Removes the messages for good (their read receipts go with them, ON
+  // DELETE CASCADE) - gone from the history and from every phone's feed.
+  async remove(ids) {
+    const { rowCount } = await pool.query(`DELETE FROM announcements WHERE id = ANY($1::bigint[])`, [ids]);
+    return rowCount;
+  },
+
   async recall(id, by) {
     if (!toId(id)) return false;
     const { rowCount } = await pool.query(

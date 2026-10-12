@@ -358,17 +358,63 @@ function resetForm() {
 // ---------------- history ----------------
 $("historyFilter").addEventListener("change", () => { historyPage = 1; loadHistory(); });
 
+const historySelected = new Set();   // message ids ticked for deletion, kept across pages
+let historyShownIds = [];
+
 async function loadHistory() {
   try {
     const status = $("historyFilter").value;
     const r = await api(`/broadcast/announcements?page=${historyPage}${status ? `&status=${status}` : ""}`);
+    // Past the last page (its last rows were just deleted): go back one.
+    if (r.items.length === 0 && historyPage > 1 && r.total > 0) {
+      historyPage = Math.max(1, Math.ceil(r.total / r.pageSize));
+      return loadHistory();
+    }
     if (!status) $("totSent").textContent = r.total;
-    $("historyBody").innerHTML = r.items.length ? r.items.map(historyRow).join("") : `<tr><td colspan="9">No messages yet.</td></tr>`;
+    historyShownIds = r.items.map((a) => a.id);
+    $("historyBody").innerHTML = r.items.length ? r.items.map(historyRow).join("") : `<tr><td colspan="10">No messages yet.</td></tr>`;
     renderPager($("historyPager"), r.page, Math.max(1, Math.ceil(r.total / r.pageSize)), r.total, "messages", (p) => { historyPage = p; loadHistory(); });
   } catch (err) {
-    $("historyBody").innerHTML = `<tr><td colspan="9">Couldn't load: ${esc(err.message)}</td></tr>`;
+    $("historyBody").innerHTML = `<tr><td colspan="10">Couldn't load: ${esc(err.message)}</td></tr>`;
   }
+  updateHistorySelection();
 }
+
+function updateHistorySelection() {
+  const n = historySelected.size;
+  $("historyDeleteBtn").disabled = n === 0;
+  $("historyDeleteBtn").textContent = n ? `🗑 Delete selected (${n})` : "🗑 Delete selected";
+  $("historySelectAll").checked = historyShownIds.length > 0 && historyShownIds.every((id) => historySelected.has(id));
+}
+
+$("historySelectAll").addEventListener("change", (e) => {
+  for (const id of historyShownIds) {
+    if (e.target.checked) historySelected.add(id);
+    else historySelected.delete(id);
+  }
+  document.querySelectorAll(".historyPick").forEach((c) => { c.checked = e.target.checked; });
+  updateHistorySelection();
+});
+
+$("historyDeleteBtn").addEventListener("click", async () => {
+  const ids = [...historySelected].sort((a, b) => a - b);
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} message${ids.length > 1 ? "s" : ""} (#${ids.join(", #")}) for good?\n\n` +
+    "They disappear from this list AND from every farmer's app. A notification already shown on a phone " +
+    "can't be taken back. This can't be undone.")) return;
+  $("historyDeleteBtn").disabled = true;
+  try {
+    const r = await api("/broadcast/announcements/delete", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids })
+    });
+    historySelected.clear();
+    showMsg("ok", `Deleted ${r.deleted} message${r.deleted === 1 ? "" : "s"}.`);
+    loadHistory();
+  } catch (err) {
+    showMsg("error", `Couldn't delete: ${err.message}`);
+    updateHistorySelection();
+  }
+});
 
 function historyRow(a) {
   const cat = CAT[a.category] || CAT.general;
@@ -381,6 +427,7 @@ function historyRow(a) {
   const status = a.status === "recalled" ? ' <span class="ota-pill failed">Recalled</span>'
     : a.status === "scheduled" ? ' <span class="ota-pill in_progress">Scheduled</span>' : "";
   return `<tr data-id="${a.id}" class="${a.status === "recalled" ? "inactive-row" : ""}">
+    <td class="ota-check-col"><input type="checkbox" class="historyPick" value="${a.id}" ${historySelected.has(a.id) ? "checked" : ""}></td>
     <td>${a.id}</td>
     <td>${cat.icon} ${cat.label}</td>
     <td class="bc-title-cell">${a.important ? "⭐ " : ""}${esc(a.title)}${status}</td>
@@ -394,6 +441,15 @@ function historyRow(a) {
 }
 
 $("historyBody").addEventListener("click", async (e) => {
+  const pick = e.target.closest(".historyPick");
+  if (pick) {
+    const id = Number(pick.value);
+    if (pick.checked) historySelected.add(id);
+    else historySelected.delete(id);
+    updateHistorySelection();
+    return;   // ticking a row doesn't open it
+  }
+  if (e.target.closest(".ota-check-col")) return;
   const recall = e.target.closest("button[data-recall]");
   if (recall) {
     e.stopPropagation();
@@ -452,7 +508,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("detailM
 
 // One button per page, with "…" gaps for long lists - same as the OTA page.
 function renderPager(el, page, totalPages, totalItems, label, onGo) {
-  if (totalItems <= PAGE_SIZE) { el.innerHTML = totalItems ? `<span class="ota-muted">${totalItems} ${label}</span>` : ""; return; }
+  if (totalItems === 0) { el.innerHTML = ""; return; }
   const pages = [];
   for (let p = 1; p <= totalPages; p++) {
     if (p === 1 || p === totalPages || Math.abs(p - page) <= 1) pages.push(p);

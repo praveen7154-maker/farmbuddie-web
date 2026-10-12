@@ -220,7 +220,7 @@ function renderChecks() {
 // ---------------- 2. targets ----------------
 // One button per page, with "…" gaps for long lists. onGo(page).
 function renderPager(el, page, totalPages, totalItems, label, onGo) {
-  if (totalItems <= PAGE_SIZE) { el.innerHTML = totalItems ? `<span class="ota-muted">${totalItems} ${label}</span>` : ""; return; }
+  if (totalItems === 0) { el.innerHTML = ""; return; }
   const pages = [];
   for (let p = 1; p <= totalPages; p++) {
     if (p === 1 || p === totalPages || Math.abs(p - page) <= 1) pages.push(p);
@@ -449,10 +449,13 @@ function renderRelease({ release, summary, targets, nodeSummary, nodes }) {
       ? `<span class="ota-bar"><span style="width:${Math.max(0, Math.min(100, t.percent))}%"></span></span> ${t.percent}%`
       : gsmDownloading ? `<span class="ota-bar indeterminate"><span></span></span> ${gsmElapsed(t.updatedAt)}`
       : t.outcome === "updated" ? "100%" : "";
+    // In progress by its state, but no word for over 30 min (server: NO_REPLY_MS).
+    const noReply = t.outcome === "waiting" && t.state !== "sent";
     const detail = t.error ? (ERROR_TEXT[t.error] || t.error)
+      : noReply ? `No reply from the hub since ${fmtTime(t.updatedAt)} - it gave up or restarted. Use Resend.`
       : t.outcome === "updated" ? `Running ${esc(t.fwVersion || release.version)}`
       : gsmDownloading ? "Over GSM - usually 3-6 min, no progress until it restarts" : "";
-    const stateText = gsmDownloading ? "Downloading" : STATE_TEXT[t.state] || t.state;
+    const stateText = gsmDownloading ? "Downloading" : noReply ? "No reply" : STATE_TEXT[t.state] || t.state;
     return `<tr>
       <td>${esc(t.farmId)}</td>
       <td>${esc(t.nodeId)}</td>
@@ -502,13 +505,26 @@ $("retryBtn").addEventListener("click", async () => {
 });
 
 // ---------------- history ----------------
+const historySelected = new Set();   // release ids ticked for deletion, kept across pages
+let historyShownIds = [];
+
 async function loadHistory() {
   const product = $("historyProductFilter").value;
-  const d = await api(`/ota/releases?page=${historyPage}${product ? `&product=${encodeURIComponent(product)}` : ""}`);
+  const q = $("historySearch").value.trim();
+  $("historyStatus").textContent = "";
+  const d = await api(`/ota/releases?page=${historyPage}${product ? `&product=${encodeURIComponent(product)}` : ""}` +
+    (q ? `&q=${encodeURIComponent(q)}` : ""));
   const { releases } = d;
   const total = Number.isFinite(d.total) ? d.total : releases.length;
+  // Past the last page (the last rows on it were just deleted): go back one.
+  if (releases.length === 0 && historyPage > 1 && total > 0) {
+    historyPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    return loadHistory();
+  }
+  historyShownIds = releases.map((r) => r.id);
   renderPager($("historyPager"), d.page || 1, Math.max(1, Math.ceil(total / PAGE_SIZE)), total, "releases",
     (p) => { historyPage = p; loadHistory().catch((err) => showPageError(err.message)); });
+  updateHistorySelection();
   $("historyBody").innerHTML = releases.length ? releases.map((r) => {
     const s = r.summary;
     const n = r.nodeSummary;
@@ -518,15 +534,70 @@ async function loadHistory() {
       : [`${s.updated}/${s.total} updated`, s.failed && `${s.failed} failed`, s.busy && `${s.busy} busy`,
         (s.waiting + s.in_progress) && `${s.waiting + s.in_progress} pending`].filter(Boolean).join(", ");
     return `<tr data-id="${r.id}">
+      <td class="ota-check-col"><input type="checkbox" class="historyPick" value="${r.id}" ${historySelected.has(r.id) ? "checked" : ""}></td>
       <td>${r.id}</td><td>${esc(PRODUCT_TEXT[r.product] || "Hub")}</td><td>${esc(r.version)}</td><td>${r.mode === "all" ? "All farms" : `${s.total} farm${s.total > 1 ? "s" : ""}`}</td>
       <td>${esc(result)}</td><td>${esc(r.createdBy || "-")}</td><td>${fmtTime(r.createdAt)}</td></tr>`;
-  }).join("") : `<tr><td colspan="7">No releases yet</td></tr>`;
+  }).join("") : `<tr><td colspan="8">${q || product ? "No release matches" : "No releases yet"}</td></tr>`;
+  updateHistorySelection();
 }
-$("historyProductFilter").addEventListener("change", () => {
-  historyPage = 1;
-  loadHistory().catch((err) => showPageError(err.message));
+
+function updateHistorySelection() {
+  const n = historySelected.size;
+  $("historyDeleteBtn").disabled = n === 0;
+  $("historyDeleteBtn").textContent = n ? `🗑 Delete selected (${n})` : "🗑 Delete selected";
+  $("historySelectAll").checked = historyShownIds.length > 0 && historyShownIds.every((id) => historySelected.has(id));
+}
+
+const reloadHistory = () => { historyPage = 1; loadHistory().catch((err) => showPageError(err.message)); };
+$("historyProductFilter").addEventListener("change", reloadHistory);
+let historySearchTimer = null;
+$("historySearch").addEventListener("input", () => {
+  clearTimeout(historySearchTimer);
+  historySearchTimer = setTimeout(reloadHistory, 350);
+});
+$("historySelectAll").addEventListener("change", (e) => {
+  for (const id of historyShownIds) {
+    if (e.target.checked) historySelected.add(id);
+    else historySelected.delete(id);
+  }
+  document.querySelectorAll(".historyPick").forEach((c) => { c.checked = e.target.checked; });
+  updateHistorySelection();
 });
 $("historyBody").addEventListener("click", (e) => {
+  const pick = e.target.closest(".historyPick");
+  if (pick) {
+    const id = Number(pick.value);
+    if (pick.checked) historySelected.add(id);
+    else historySelected.delete(id);
+    updateHistorySelection();
+    return;   // ticking a row doesn't open it
+  }
+  if (e.target.closest(".ota-check-col")) return;
   const row = e.target.closest("tr[data-id]");
   if (row) openRelease(Number(row.dataset.id));
+});
+$("historyDeleteBtn").addEventListener("click", async () => {
+  const ids = [...historySelected].sort((a, b) => a - b);
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} release record${ids.length > 1 ? "s" : ""} (#${ids.join(", #")})?\n\n` +
+    "Only the records go - hubs and units keep the firmware they run. A hub still downloading one of these " +
+    "will fail the download and stay on its current firmware. This can't be undone.")) return;
+  $("historyDeleteBtn").disabled = true;
+  try {
+    const r = await api("/ota/releases/delete", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids })
+    });
+    if (ids.includes(currentReleaseId)) {
+      clearInterval(pollTimer);
+      currentReleaseId = null;
+      $("progressCard").hidden = true;
+    }
+    historySelected.clear();
+    showPageError("");
+    await loadHistory();
+    $("historyStatus").textContent = `Deleted ${r.deleted} release record${r.deleted === 1 ? "" : "s"}.`;
+  } catch (err) {
+    showPageError(`Couldn't delete: ${err.message}`);
+    updateHistorySelection();
+  }
 });
