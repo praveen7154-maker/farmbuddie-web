@@ -148,7 +148,7 @@ test("send to selected farms: pushed, counted, and only those farmers see it", a
       { category: "reminder", title: "Service visit", body: "Our team visits on Monday", audience: "farms", farmIds: ["0003"] });
     assert.equal(sent.status, 200);
     assert.equal(sent.body.scheduled, false);
-    assert.deepEqual(sent.body.delivery, { targetFarms: 1, targetPhones: 1, targetDevices: 2, pushOk: 1, pushFailed: 1 });
+    assert.deepEqual(sent.body.delivery, { targetFarms: 1, targetPhones: 1, targetDevices: 2, targetDistributors: 0, pushOk: 1, pushFailed: 1 });
     assert.deepEqual(pushes[0].tokens.sort(), ["tok-c", "tok-dead"]);
     assert.deepEqual(removed, ["tok-dead"]);
 
@@ -226,4 +226,44 @@ test("delete removes messages from the history and the farmers' feeds", async ()
     // Only an admin can delete.
     assert.equal((await call("/broadcast/announcements/delete", "POST", { ids: [2] })).status, 403);
   });
+});
+
+test("distributors: who a message reaches", () => {
+  const audience = {
+    ...AUDIENCE,
+    farms: AUDIENCE.farms.map((f) => ({ ...f, distributorId: f.farmId === "0003" ? "D26FBA0001" : null })),
+    distributors: [
+      { distributorId: "D26FBA0001", name: "Ravi", active: true },
+      { distributorId: "D26FBA0002", name: "Kumar", active: true },
+      { distributorId: "D26FBA0009", name: "Old", active: false }
+    ],
+    distributorDevices: [
+      { distributorId: "D26FBA0001", token: "dtok-1" },
+      { distributorId: "D26FBA0002", token: "dtok-2" }
+    ]
+  };
+  // To all distributors: no farmer, every active distributor.
+  let t = resolveTargets({ audience: "distributors", distributorIds: [] }, audience);
+  assert.deepEqual([t.farms.length, t.phones.length, t.devices.length], [0, 0, 0]);
+  assert.deepEqual(t.distributors.sort(), ["D26FBA0001", "D26FBA0002"]);
+  assert.deepEqual(t.distributorDevices.map((d) => d.token).sort(), ["dtok-1", "dtok-2"]);
+  // To one distributor by name.
+  t = resolveTargets({ audience: "distributors", distributorIds: ["D26FBA0002"] }, audience);
+  assert.deepEqual(t.distributorDevices.map((d) => d.token), ["dtok-2"]);
+  // To all farmers: every distributor sees it too.
+  t = resolveTargets({ audience: "all" }, audience);
+  assert.deepEqual(t.distributors.sort(), ["D26FBA0001", "D26FBA0002"]);
+  // To farm 0003: its farmers, and the distributor who onboarded it.
+  t = resolveTargets({ audience: "farms", farmIds: ["0003"] }, audience);
+  assert.deepEqual(t.distributors, ["D26FBA0001"]);
+  assert.deepEqual(t.distributorDevices.map((d) => d.token), ["dtok-1"]);
+  // To farm 0002: nobody's distributor.
+  assert.deepEqual(resolveTargets({ audience: "farms", farmIds: ["0002"] }, audience).distributors, []);
+});
+
+test("distributors: validation", () => {
+  const base = { category: "general", title: "Price list", body: "New prices from 1 Nov", audience: "distributors" };
+  assert.deepEqual(validateAnnouncement(base, NOW).distributorIds, []);
+  assert.deepEqual(validateAnnouncement({ ...base, distributorIds: ["d26fba0001", "D26FBA0001"] }, NOW).distributorIds, ["D26FBA0001"]);
+  assert.throws(() => validateAnnouncement({ ...base, distributorIds: ["bad id!"] }, NOW));
 });

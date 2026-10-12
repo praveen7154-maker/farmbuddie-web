@@ -77,6 +77,7 @@ const TEMPLATES = [
 
 let audience = null;            // { farms, totals, limits }
 const selected = new Set();     // farmIds, kept across pages and filters
+const selectedDistributors = new Set();   // empty = every distributor
 let farmPage = 1;
 let historyPage = 1;
 let previewLang = "en";
@@ -119,6 +120,7 @@ onAuthStateChanged(auth, async (user) => {
     $("totPhones").textContent = audience.totals.phones;
     $("totDevices").textContent = audience.totals.devices;
     renderFarms();
+    renderDistributors();
     renderReach();
   } catch (err) {
     showMsg("error", `Couldn't load the farmer list: ${err.message}`);
@@ -193,6 +195,8 @@ function refreshCompose() {
 // ---------------- 2. recipients ----------------
 document.querySelectorAll('input[name="audience"]').forEach((r) => r.addEventListener("change", () => {
   $("farmPicker").hidden = radio("audience") !== "farms";
+  $("distributorPicker").hidden = radio("audience") !== "distributors";
+  renderDistributors();
   renderReach();
   updateSendButton();
 }));
@@ -245,10 +249,40 @@ $("selectAll").addEventListener("change", (e) => {
   updateSendButton();
 });
 
+// Distributors (Irrigo Admin app logins) - see the server's distributors.js.
+function renderDistributors() {
+  const list = audience?.distributors || [];
+  $("distributorBody").innerHTML = list.length ? list.map((d) => `
+    <tr class="${d.active ? "" : "inactive-row"}">
+      <td><input type="checkbox" data-dist="${esc(d.distributorId)}" ${selectedDistributors.has(d.distributorId) ? "checked" : ""}></td>
+      <td>${esc(d.distributorId)}</td><td>${esc(d.name || "-")}</td>
+      <td>${d.active ? "Active" : "Inactive"}</td><td>${d.devices || 0}</td>
+    </tr>`).join("") : `<tr><td colspan="5">No distributors yet</td></tr>`;
+  $("selectAllDistributors").checked = list.length > 0 && list.every((d) => selectedDistributors.has(d.distributorId));
+}
+$("distributorBody").addEventListener("change", (e) => {
+  const id = e.target.dataset?.dist;
+  if (!id) return;
+  e.target.checked ? selectedDistributors.add(id) : selectedDistributors.delete(id);
+  renderDistributors(); renderReach(); updateSendButton();
+});
+$("selectAllDistributors").addEventListener("change", (e) => {
+  for (const d of audience?.distributors || []) e.target.checked ? selectedDistributors.add(d.distributorId) : selectedDistributors.delete(d.distributorId);
+  renderDistributors(); renderReach(); updateSendButton();
+});
+
 // Phones / installs are counted per farm, so a phone on two chosen farms
 // shows up twice here - the server counts each phone once when it sends.
 function renderReach() {
   if (!audience) return;
+  if (radio("audience") === "distributors") {
+    const list = (audience.distributors || []).filter((d) => d.active);
+    const chosen = selectedDistributors.size ? list.filter((d) => selectedDistributors.has(d.distributorId)) : list;
+    const devices = chosen.reduce((s, d) => s + (d.devices || 0), 0);
+    $("reachLine").innerHTML = `${selectedDistributors.size ? `<b>${chosen.length}</b> distributor${chosen.length === 1 ? "" : "s"} selected`
+      : `Reaches <b>all ${chosen.length} distributors</b>`} · <b>${devices}</b> get a notification now · farmers don't see it`;
+    return;
+  }
   if (radio("audience") === "all") {
     $("reachLine").innerHTML = `Reaches <b>all ${audience.totals.farms} farms</b> · <b>${audience.totals.phones}</b> farmer phones ·
       <b>${audience.totals.devices}</b> get a notification now`;
@@ -307,8 +341,11 @@ function updateSendButton() {
 $("sendBtn").addEventListener("click", async () => {
   if (formProblem()) return;
   const all = radio("audience") === "all";
+  const toDistributors = radio("audience") === "distributors";
   const later = radio("when") === "later";
-  const who = all ? `ALL ${audience?.totals.farms ?? ""} farms` : `${selected.size} selected farm${selected.size > 1 ? "s" : ""}`;
+  const who = toDistributors
+    ? (selectedDistributors.size ? `${selectedDistributors.size} selected distributor${selectedDistributors.size > 1 ? "s" : ""}` : "ALL distributors")
+    : all ? `ALL ${audience?.totals.farms ?? ""} farms` : `${selected.size} selected farm${selected.size > 1 ? "s" : ""}`;
   const when = later ? `at ${new Date($("sendAtInput").value).toLocaleString()}` : "now";
   if (!confirm(`Send "${$("titleInput").value.trim()}" to ${who} ${when}?`)) return;
 
@@ -319,8 +356,9 @@ $("sendBtn").addEventListener("click", async () => {
     titleTa: $("tamilToggle").checked ? $("titleTaInput").value : "",
     bodyTa: $("tamilToggle").checked ? $("bodyTaInput").value : "",
     important: $("importantToggle").checked,
-    audience: all ? "all" : "farms",
-    farmIds: all ? undefined : [...selected],
+    audience: toDistributors ? "distributors" : all ? "all" : "farms",
+    farmIds: all || toDistributors ? undefined : [...selected],
+    distributorIds: toDistributors ? [...selectedDistributors] : undefined,
     sendAt: later ? new Date($("sendAtInput").value).toISOString() : null,
     expiresAt: $("expiresAtInput").value ? new Date($("expiresAtInput").value).toISOString() : null
   };
@@ -333,6 +371,7 @@ $("sendBtn").addEventListener("click", async () => {
     } else {
       const d = r.delivery || {};
       showMsg("ok", `✅ Message #${r.id} sent to ${d.targetFarms ?? "?"} farms · ${d.targetPhones ?? "?"} phones · ` +
+        (d.targetDistributors ? `${d.targetDistributors} distributor${d.targetDistributors === 1 ? "" : "s"} · ` : "") +
         `notification delivered to ${d.pushOk ?? 0} app install${d.pushOk === 1 ? "" : "s"}` +
         (d.pushFailed ? ` (${d.pushFailed} failed - those see it when they open the app)` : "") + ".");
     }
@@ -418,7 +457,10 @@ $("historyDeleteBtn").addEventListener("click", async () => {
 
 function historyRow(a) {
   const cat = CAT[a.category] || CAT.general;
-  const to = a.audience === "all" ? "All farmers" : `${(a.farmIds || []).length} farm${(a.farmIds || []).length === 1 ? "" : "s"}`;
+  const nd = (a.distributorIds || []).length;
+  const to = a.audience === "all" ? "All farmers"
+    : a.audience === "distributors" ? (nd ? `${nd} distributor${nd === 1 ? "" : "s"}` : "All distributors")
+    : `${(a.farmIds || []).length} farm${(a.farmIds || []).length === 1 ? "" : "s"}`;
   const when = a.status === "scheduled" ? `⏰ ${fmtTime(a.sendAt)}` : fmtTime(a.sentAt);
   const notified = a.status === "scheduled" ? "-" : `${a.pushOk ?? 0}${a.pushFailed ? ` <small class="bc-warn">(${a.pushFailed} failed)</small>` : ""}`;
   const pct = a.targetPhones ? Math.round((a.readCount / a.targetPhones) * 100) : 0;
@@ -493,7 +535,12 @@ async function openDetail(id) {
         <div><p>Shown until</p><b>${a.expiresAt ? fmtTime(a.expiresAt) : "Always"}</b></div>
       </div>
       <p class="ota-muted">By ${esc(a.createdBy || "-")}${a.deletedAt ? ` · recalled ${fmtTime(a.deletedAt)} by ${esc(a.deletedBy || "-")}` : ""}</p>
-      <h4>To</h4><div class="bc-selected">${a.audience === "all" ? "<span>All farmers</span>" : farms}</div>
+      <h4>To</h4><div class="bc-selected">${a.audience === "all" ? "<span>All farmers</span>"
+        : a.audience === "distributors" ? ((a.distributorIds || []).length
+          ? a.distributorIds.map((d) => `<span>${esc(d)} ${esc(audience?.distributors?.find((x) => x.distributorId === d)?.name || "")}</span>`).join("")
+          : "<span>All distributors</span>")
+        : farms}</div>
+      ${a.targetDistributors ? `<p class="ota-muted">Also seen by ${a.targetDistributors} distributor${a.targetDistributors === 1 ? "" : "s"}.</p>` : ""}
       <h4>Read by (${a.reads.length})</h4>
       ${a.reads.length ? `<table class="fb-table"><thead><tr><th>Phone</th><th>Farm</th><th>Read</th></tr></thead><tbody>
         ${a.reads.map((r) => `<tr><td>${esc(r.phone)}</td><td>${r.farms.map((f) => `${esc(f.farmId)} ${esc(f.farmerName || "")}`).join(", ") || "-"}</td><td>${fmtTime(r.readAt)}</td></tr>`).join("")}

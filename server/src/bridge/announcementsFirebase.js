@@ -29,10 +29,11 @@ let cachedAt = 0;
  */
 export async function loadAudience() {
   if (cache && Date.now() - cachedAt < AUDIENCE_CACHE_MS) return cache;
-  const [farmerSnap, phoneSnap, tokenSnap] = await Promise.all([
+  const [farmerSnap, phoneSnap, tokenSnap, distributorSnap] = await Promise.all([
     db.collection("farmers").where("controller.uniqueId", "!=", null).get(),
     db.collection("phoneIndex").get(),
-    db.collection("fcmTokens").get()
+    db.collection("fcmTokens").get(),
+    db.collection("distributors").get()
   ]);
   const farms = farmerSnap.docs.map((doc) => {
     const f = doc.data();
@@ -42,6 +43,7 @@ export async function loadAudience() {
       farmerName: f.name || null,
       farmBuddieId: f.farmBuddieId || null,
       location: f.farmDetails?.location || null,
+      distributorId: f.leadSource?.distributorId || null,   // who onboarded this farmer
       active: f.status !== "inactive",
       online: lastSeen != null && Date.now() - lastSeen < ONLINE_THRESHOLD_MS
     };
@@ -52,7 +54,12 @@ export async function loadAudience() {
   const devices = tokenSnap.docs
     .map((doc) => ({ instanceId: doc.id, token: doc.data().token, farmIds: doc.data().farmIds || [] }))
     .filter((d) => d.token);
-  cache = { farms, phones, devices };
+  const distributors = distributorSnap.docs
+    .map((doc) => doc.data())
+    .filter((d) => d.distributorId)
+    .map((d) => ({ distributorId: d.distributorId, name: d.name || null, active: d.status !== "inactive" }))
+    .sort((a, b) => a.distributorId.localeCompare(b.distributorId, undefined, { numeric: true }));
+  cache = { farms, phones, devices, distributors };
   cachedAt = Date.now();
   return cache;
 }

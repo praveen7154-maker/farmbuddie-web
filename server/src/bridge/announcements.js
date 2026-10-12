@@ -3,8 +3,11 @@ import { isAdmin } from "../adminAuth.js";
 
 // Message Broadcast (admin panel > Message Broadcast): the company's own
 // announcements to farmers - update notices, reminders, offers. The admin
-// writes one message (optionally with a Tamil version), picks all farmers
-// or some farms, and sends it now or at a set time. This module:
+// writes one message (optionally with a Tamil version), picks all farmers,
+// some farms, or the distributors (all or some), and sends it now or at a
+// set time. A distributor (Irrigo Admin app - distributors.js) sees what
+// went to all distributors or to them, plus what went to all farmers or to
+// their own farmers. This module:
 //   - stores it (Postgres - announcementStore.js),
 //   - pushes it to every phone of the chosen farms (FCM, same fcmTokens the
 //     device alerts use - pushNotifications.js),
@@ -18,7 +21,7 @@ import { isAdmin } from "../adminAuth.js";
 // without Postgres/Firestore/FCM - see createAnnouncementsModule().
 
 export const CATEGORIES = ["general", "update", "reminder", "offer", "alert"];
-export const LIMITS = { title: 80, body: 1000, farms: 5000 };
+export const LIMITS = { title: 80, body: 1000, farms: 5000, distributors: 1000 };
 // The app's feed: newest first, at most this many, none older than this.
 const FEED_LIMIT = 100;
 const FEED_MAX_AGE_DAYS = 180;
@@ -26,6 +29,7 @@ const MAX_SCHEDULE_DAYS = 60;
 const MAX_EXPIRY_DAYS = 365;
 const PUSH_BODY_CHARS = 240;   // the push only carries a preview - FCM caps a message at 4 KB
 const FARM_RE = /^\d{1,6}$/;
+const DISTRIBUTOR_RE = /^[A-Z0-9-]{3,20}$/;
 const PAGE_SIZE = 10;
 
 export const normalizePhone = (phone) => String(phone || "").replace(/\D/g, "").slice(-10);
@@ -59,13 +63,21 @@ export function validateAnnouncement(input, now = new Date()) {
   const titleTa = text(b.titleTa, LIMITS.title, "Tamil title", false);
   if (titleTa && !bodyTa) throw badRequest("Add the Tamil message too, or clear the Tamil title");
 
-  const audience = b.audience === "all" ? "all" : b.audience === "farms" ? "farms" : null;
-  if (!audience) throw badRequest("Choose all farmers or selected farms");
+  const audience = ["all", "farms", "distributors"].includes(b.audience) ? b.audience : null;
+  if (!audience) throw badRequest("Choose all farmers, selected farms or distributors");
   let farmIds = null;
   if (audience === "farms") {
     if (!Array.isArray(b.farmIds) || b.farmIds.length === 0) throw badRequest("Select at least one farm");
     farmIds = [...new Set(b.farmIds.map(String))];
     if (farmIds.length > LIMITS.farms || farmIds.some((f) => !FARM_RE.test(f))) throw badRequest("Invalid farm list");
+  }
+  // Distributors: the ones listed, or every distributor when the list is empty.
+  let distributorIds = null;
+  if (audience === "distributors") {
+    distributorIds = [...new Set((Array.isArray(b.distributorIds) ? b.distributorIds : []).map((d) => String(d).trim().toUpperCase()))];
+    if (distributorIds.length > LIMITS.distributors || distributorIds.some((d) => !DISTRIBUTOR_RE.test(d))) {
+      throw badRequest("Invalid distributor list");
+    }
   }
 
   let sendAt = optionalDate(b.sendAt, "Send time");
@@ -80,7 +92,7 @@ export function validateAnnouncement(input, now = new Date()) {
     throw badRequest(`'Show until' can be at most ${MAX_EXPIRY_DAYS} days after sending`);
   }
 
-  return { category, title, body, titleTa, bodyTa, important: b.important === true, audience, farmIds, sendAt, expiresAt };
+  return { category, title, body, titleTa, bodyTa, important: b.important === true, audience, farmIds, distributorIds, sendAt, expiresAt };
 }
 
 const intersects = (a, set) => a.some((x) => set.has(x));
@@ -90,15 +102,33 @@ const intersects = (a, set) => a.some((x) => set.has(x));
  * app installs (push tokens) behind them. audience = loadAudience() output.
  */
 export function resolveTargets(announcement, audience) {
-  const farmSet = announcement.audience === "all"
-    ? new Set(audience.farms.map((f) => f.farmId))
+  const toDistributors = announcement.audience === "distributors";
+  const farmSet = toDistributors ? new Set()
+    : announcement.audience === "all" ? new Set(audience.farms.map((f) => f.farmId))
     : new Set(announcement.farmIds);
   // "All" also covers a phone whose farm isn't in the farm list (any enabled access counts).
-  const reaches = (farmIds) => (announcement.audience === "all" ? farmIds.length > 0 : intersects(farmIds, farmSet));
+  const reaches = (farmIds) => !toDistributors &&
+    (announcement.audience === "all" ? farmIds.length > 0 : intersects(farmIds, farmSet));
+
+  // Distributors who see it: the ones it's addressed to (all when none are
+  // named), every one for a message to all farmers, or the ones who
+  // onboarded the chosen farms.
+  const allDistributors = (audience.distributors || []).filter((d) => d.active !== false).map((d) => d.distributorId);
+  let distributorSet;
+  if (toDistributors) {
+    const named = announcement.distributorIds || [];
+    distributorSet = new Set(named.length ? named : allDistributors);
+  } else if (announcement.audience === "all") {
+    distributorSet = new Set(allDistributors);
+  } else {
+    distributorSet = new Set(audience.farms.filter((f) => farmSet.has(f.farmId) && f.distributorId).map((f) => f.distributorId));
+  }
   return {
     farms: [...farmSet],
     phones: audience.phones.filter((p) => reaches(p.farmIds)),
-    devices: audience.devices.filter((d) => d.token && reaches(d.farmIds))
+    devices: audience.devices.filter((d) => d.token && reaches(d.farmIds)),
+    distributors: [...distributorSet],
+    distributorDevices: (audience.distributorDevices || []).filter((d) => d.token && distributorSet.has(d.distributorId))
   };
 }
 
@@ -129,36 +159,54 @@ const maskPhone = (p) => (p && p.length >= 4 ? `••••••${p.slice(-4)}
  *   phoneFarmIds  - async (phone10) => enabled farmIds of that phone ([] if none)
  *   sendPush      - async (tokens[], message) => ({ ok, failed, deadTokens: [] })
  *   removeDevices - async (tokens[]) - drop push tokens FCM says are gone
+ *   distributorFarms  - async (distributorId) => [{ farmId }] (a distributor's own farmers)
+ *   distributorDevices - async () => [{ distributorId, token }] (admin-app installs signed in as a distributor)
+ *   removeDistributorDevices - async (tokens[])
+ * loadAudience() may also return distributors: [{ distributorId, name, active }] and
+ * each farm's distributorId (who onboarded it).
  */
-export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, sendPush, removeDevices = async () => {} }) {
+export function createAnnouncementsModule({
+  store, loadAudience, phoneFarmIds, sendPush, removeDevices = async () => {},
+  distributorFarms = async () => [], distributorDevices = async () => [], removeDistributorDevices = async () => {}
+}) {
+  async function fullAudience() {
+    const [audience, devices] = await Promise.all([loadAudience(), distributorDevices().catch(() => [])]);
+    return { ...audience, distributorDevices: devices };
+  }
+
   // Pushes a claimed (now visible) announcement and records the numbers.
   async function deliver(a) {
-    const audience = await loadAudience();
+    const audience = await fullAudience();
     const targets = resolveTargets(a, audience);
+    const allDevices = [...targets.devices, ...targets.distributorDevices];
     let ok = 0;
     let failed = 0;
     try {
-      const tokens = [...new Set(targets.devices.map((d) => d.token))];
+      const tokens = [...new Set(allDevices.map((d) => d.token))];
       if (tokens.length) {
         const r = await sendPush(tokens, pushMessage(a));
         ok = r.ok;
         failed = r.failed;
-        if (r.deadTokens?.length) await removeDevices(r.deadTokens).catch(() => {});
+        if (r.deadTokens?.length) {
+          await removeDevices(r.deadTokens).catch(() => {});
+          await removeDistributorDevices(r.deadTokens).catch(() => {});
+        }
       }
     } catch (err) {
       // The message is already in every phone's feed - only the doorbell failed.
       console.error(`[broadcast] push for #${a.id} failed:`, err);
-      failed = targets.devices.length;
+      failed = allDevices.length;
     }
     const stats = {
       targetFarms: targets.farms.length,
       targetPhones: targets.phones.length,
-      targetDevices: targets.devices.length,
+      targetDevices: allDevices.length,
+      targetDistributors: targets.distributors.length,
       pushOk: ok,
       pushFailed: failed
     };
     await store.recordDelivery(a.id, stats);
-    console.log(`[broadcast] #${a.id} "${a.title}" -> ${stats.targetFarms} farms, ${stats.targetPhones} phones, push ${ok} ok / ${failed} failed`);
+    console.log(`[broadcast] #${a.id} "${a.title}" -> ${stats.targetFarms} farms, ${stats.targetPhones} phones, ${stats.targetDistributors} distributors, push ${ok} ok / ${failed} failed`);
     return stats;
   }
 
@@ -198,9 +246,14 @@ export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, s
         ...f, phones: phonesPerFarm.get(f.farmId) || 0, devices: devicesPerFarm.get(f.farmId) || 0
       }));
       const all = resolveTargets({ audience: "all" }, audience);
+      const distDevices = await distributorDevices().catch(() => []);
+      const devicesPerDistributor = new Map();
+      for (const d of distDevices) devicesPerDistributor.set(d.distributorId, (devicesPerDistributor.get(d.distributorId) || 0) + 1);
+      const distributors = (audience.distributors || []).map((d) => ({ ...d, devices: devicesPerDistributor.get(d.distributorId) || 0 }));
       res.json({
         farms,
-        totals: { farms: farms.length, phones: all.phones.length, devices: all.devices.length },
+        distributors,
+        totals: { farms: farms.length, phones: all.phones.length, devices: all.devices.length, distributors: distributors.length },
         categories: CATEGORIES,
         limits: LIMITS
       });
@@ -217,6 +270,11 @@ export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, s
         const known = new Set((await loadAudience()).farms.map((f) => f.farmId));
         const unknown = a.farmIds.filter((f) => !known.has(f));
         if (unknown.length) return res.status(400).json({ error: `Unknown farm ID(s): ${unknown.slice(0, 5).join(", ")}` });
+      }
+      if (a.audience === "distributors" && a.distributorIds.length) {
+        const known = new Set(((await loadAudience()).distributors || []).map((d) => d.distributorId));
+        const unknown = a.distributorIds.filter((d) => !known.has(d));
+        if (unknown.length) return res.status(400).json({ error: `Unknown distributor(s): ${unknown.slice(0, 5).join(", ")}` });
       }
       const id = await store.create({ ...a, createdBy: req.decodedToken.email });
       if (a.sendAt) {
@@ -257,7 +315,7 @@ export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, s
       const names = new Map(audience.farms.map((f) => [f.farmId, f.farmerName]));
       res.json({
         ...a,
-        reads: reads.map((r) => ({
+        reads: reads.map((r) => (r.phone.startsWith("dist:") ? { phone: `Distributor ${r.phone.slice(5)}`, farms: [], readAt: r.readAt } : {
           phone: maskPhone(r.phone),
           farms: (farmsOf.get(r.phone) || []).map((f) => ({ farmId: f, farmerName: names.get(f) || null })),
           readAt: r.readAt
@@ -304,20 +362,28 @@ export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, s
   const farmerRouter = express.Router();
   farmerRouter.use(express.json({ limit: "16kb" }));
 
-  // The caller's farms, or null for an admin (sees everything).
+  // The caller's farms, or null for an admin (sees everything). A
+  // distributor's: the farms of the farmers they onboarded.
   async function callerFarms(req) {
     if (isAdmin(req.decodedToken)) return null;
+    if (req.decodedToken?.distributorId) {
+      return (await distributorFarms(req.decodedToken.distributorId)).map((f) => f.farmId).filter(Boolean);
+    }
     const phone = normalizePhone(req.decodedToken?.phone_number);
     if (phone.length !== 10) return [];
     return phoneFarmIds(phone);
   }
 
+  // Who has read what: a phone number, or "dist:<ID>" for a distributor.
+  const readerOf = (req) => (req.decodedToken?.distributorId ? `dist:${req.decodedToken.distributorId}`
+    : normalizePhone(req.decodedToken?.phone_number));
+
   farmerRouter.get("/", async (req, res) => {
     try {
+      const distributorId = req.decodedToken?.distributorId || null;
       const farms = await callerFarms(req);
-      if (farms && farms.length === 0) return res.json({ announcements: [], unread: 0 });
-      const phone = normalizePhone(req.decodedToken?.phone_number);
-      const items = await store.feed(farms, phone, FEED_LIMIT, FEED_MAX_AGE_DAYS);
+      if (farms && farms.length === 0 && !distributorId) return res.json({ announcements: [], unread: 0 });
+      const items = await store.feed(farms, readerOf(req), FEED_LIMIT, FEED_MAX_AGE_DAYS, distributorId);
       res.json({ announcements: items, unread: items.filter((a) => !a.read).length, serverTime: new Date().toISOString() });
     } catch (err) {
       console.error("[broadcast] feed error:", err);
@@ -328,15 +394,16 @@ export function createAnnouncementsModule({ store, loadAudience, phoneFarmIds, s
   // body: { ids: [..] } - marks those of them this phone can see as read.
   farmerRouter.post("/read", async (req, res) => {
     try {
-      const phone = normalizePhone(req.decodedToken?.phone_number);
-      if (phone.length !== 10) return res.json({ ok: true, marked: 0 });   // admins don't count as readers
+      const distributorId = req.decodedToken?.distributorId || null;
+      const reader = readerOf(req);
+      if (!distributorId && reader.length !== 10) return res.json({ ok: true, marked: 0 });   // admins don't count as readers
       const ids = (Array.isArray(req.body?.ids) ? req.body.ids : [])
         .map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x > 0).slice(0, 200);
       if (ids.length === 0) return res.json({ ok: true, marked: 0 });
-      const farms = await phoneFarmIds(phone);
-      if (farms.length === 0) return res.json({ ok: true, marked: 0 });
-      const visible = await store.visibleIds(ids, farms);
-      if (visible.length) await store.markRead(visible, phone);
+      const farms = distributorId ? await callerFarms(req) : await phoneFarmIds(reader);
+      if (farms.length === 0 && !distributorId) return res.json({ ok: true, marked: 0 });
+      const visible = await store.visibleIds(ids, farms, distributorId);
+      if (visible.length) await store.markRead(visible, reader);
       res.json({ ok: true, marked: visible.length });
     } catch (err) {
       console.error("[broadcast] read error:", err);

@@ -172,8 +172,24 @@ export function createDistributorModule({ store, findDistributor, distributorFar
     }
   });
 
+  // This install's push token, for Farm Buddie Official messages.
+  router.post("/device", async (req, res) => {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!token || token.length > 4096) return res.status(400).json({ error: "token required" });
+    try {
+      await store.saveDevice(token, req.decodedToken.distributorId);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[distributor] device save failed:", err);
+      res.status(500).json({ error: "Couldn't save" });
+    }
+  });
+
   router.post("/logout", async (req, res) => {
     try {
+      // This phone stops getting the distributor's notifications.
+      const token = typeof req.body?.fcmToken === "string" ? req.body.fcmToken.trim() : "";
+      if (token) await store.removeDevices([token]);
       await store.deleteSession(req.decodedToken.sessionHash);
     } catch (err) {
       console.error("[distributor] logout failed:", err);
@@ -218,6 +234,7 @@ export function createDistributorModule({ store, findDistributor, distributorFar
     try {
       await store.deleteAccount(id);
       await store.deleteSessions(id);
+      await store.removeDevicesOf(id);   // signed out everywhere - no more pushes to those phones
       failures.delete(id);
       console.log(`[distributor] ${id} password reset by ${req.decodedToken?.email}`);
       res.json({ ok: true });

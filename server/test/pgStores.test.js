@@ -111,6 +111,27 @@ test("postgres stores work against a real database", { skip: url ? false : "set 
     assert.equal(await ann.remove([a1, 12345]), 1);
     assert.equal((await pool.query("SELECT count(*)::int n FROM announcement_reads")).rows[0].n, 0);
     ok("announcements: create / due / claim once / feed / read / recall / delete");
+    // Farm Buddie Official - distributors
+    const mk = (extra) => ann.create({ category: "general", title: extra.title, body: "b", titleTa: null, bodyTa: null, important: false,
+      farmIds: null, sendAt: null, expiresAt: null, createdBy: "a@x", ...extra });
+    const toAllFarmers = await mk({ title: "all farmers", audience: "all" });
+    const toFarm1 = await mk({ title: "farm 0001", audience: "farms", farmIds: ["0001"] });
+    const toFarm9 = await mk({ title: "farm 0009", audience: "farms", farmIds: ["0009"] });
+    const toAllDist = await mk({ title: "all distributors", audience: "distributors", distributorIds: [] });
+    const toDist1 = await mk({ title: "dist 1", audience: "distributors", distributorIds: ["D26FBA0001"] });
+    const toDist2 = await mk({ title: "dist 2", audience: "distributors", distributorIds: ["D26FBA0002"] });
+    for (const id of [toAllFarmers, toFarm1, toFarm9, toAllDist, toDist1, toDist2]) await ann.claim(id);
+    const titles = async (farms, reader, dist) => (await ann.feed(farms, reader, 50, 30, dist)).map((a) => a.title).sort();
+    // Distributor 1, whose farmer is on farm 0001.
+    assert.deepEqual(await titles(["0001"], "dist:D26FBA0001", "D26FBA0001"), ["all distributors", "all farmers", "dist 1", "farm 0001"]);
+    // Distributor 2 with no farmers yet.
+    assert.deepEqual(await titles([], "dist:D26FBA0002", "D26FBA0002"), ["all distributors", "all farmers", "dist 2"]);
+    // A farmer on 0001 never sees distributor messages.
+    assert.deepEqual(await titles(["0001"], "9000000001", null), ["all farmers", "farm 0001"]);
+    assert.deepEqual((await ann.visibleIds([toDist1, toDist2, toFarm9], ["0001"], "D26FBA0001")), [toDist1]);
+    await ann.markRead([toDist1], "dist:D26FBA0001");
+    assert.equal((await ann.feed(["0001"], "dist:D26FBA0001", 50, 30, "D26FBA0001")).find((a) => a.id === toDist1).read, true);
+
     // distributor logins
     await ensureDistributorSchema(); await ensureDistributorSchema();
     assert.equal(await dist.getAccount("FB-DIST-0001"), null);
@@ -127,6 +148,13 @@ test("postgres stores work against a real database", { skip: url ? false : "set 
     assert.ok(await dist.getSession("s1"));
     await dist.deleteSession("s1");
     assert.equal(await dist.getSession("s1"), null);
+    await dist.saveDevice("tokA", "D26FBA0001");
+    await dist.saveDevice("tokA", "D26FBA0002");   // same phone, now another distributor
+    await dist.saveDevice("tokB", "D26FBA0001");
+    assert.deepEqual((await dist.devices()).map((d) => `${d.token}:${d.distributorId}`).sort(), ["tokA:D26FBA0002", "tokB:D26FBA0001"]);
+    await dist.removeDevices(["tokA"]);
+    await dist.removeDevicesOf("D26FBA0001");
+    assert.deepEqual(await dist.devices(), []);
     await dist.deleteAccount("FB-DIST-0001");
     assert.equal(await dist.getAccount("FB-DIST-0001"), null);
   } finally {

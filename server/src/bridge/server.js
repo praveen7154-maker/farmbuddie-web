@@ -117,7 +117,11 @@ app.use("/ota", ota.adminRouter);
 // Message Broadcast (admin panel > Message Broadcast) and each phone's
 // "Farm Buddie Official" feed in the Irrigo app - see announcements.js.
 export const broadcast = createAnnouncementsModule({
-  store: pgAnnouncementStore, loadAudience, phoneFarmIds, sendPush, removeDevices
+  store: pgAnnouncementStore, loadAudience, phoneFarmIds, sendPush, removeDevices,
+  // Distributors (Irrigo Admin app) - see distributors.js.
+  distributorFarms,
+  distributorDevices: () => pgDistributorStore.devices(),
+  removeDistributorDevices: (tokens) => pgDistributorStore.removeDevices(tokens)
 });
 app.use("/broadcast", broadcast.adminRouter);
 app.use("/announcements", broadcast.farmerRouter);

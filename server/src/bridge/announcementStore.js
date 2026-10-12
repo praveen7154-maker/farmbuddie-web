@@ -34,6 +34,9 @@ export async function ensureAnnouncementSchema() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS announcements_sent_idx ON announcements (sent_at DESC)`);
+  // audience 'distributors': these distributor IDs, or every distributor when empty.
+  await pool.query(`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS distributor_ids TEXT[]`);
+  await pool.query(`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_distributors INTEGER`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS announcement_reads (
       announcement_id  BIGINT NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
@@ -46,7 +49,7 @@ export async function ensureAnnouncementSchema() {
 
 const status = `CASE WHEN deleted_at IS NOT NULL THEN 'recalled' WHEN sent_at IS NULL THEN 'scheduled' ELSE 'sent' END`;
 const adminCols = `id, category, title, body, title_ta AS "titleTa", body_ta AS "bodyTa", important, audience,
-  farm_ids AS "farmIds", send_at AS "sendAt", sent_at AS "sentAt", expires_at AS "expiresAt",
+  farm_ids AS "farmIds", distributor_ids AS "distributorIds", target_distributors AS "targetDistributors", send_at AS "sendAt", sent_at AS "sentAt", expires_at AS "expiresAt",
   deleted_at AS "deletedAt", deleted_by AS "deletedBy", target_farms AS "targetFarms",
   target_phones AS "targetPhones", target_devices AS "targetDevices", push_ok AS "pushOk",
   push_failed AS "pushFailed", created_by AS "createdBy", created_at AS "createdAt", ${status} AS status,
@@ -59,19 +62,26 @@ const statusWhere = {
   scheduled: "deleted_at IS NULL AND sent_at IS NULL",
   recalled: "deleted_at IS NOT NULL"
 };
-// Visible in a feed: sent, not recalled, not expired, and for this farm list
-// ($1 text[]) - or everything when $1 is NULL (an admin).
-const visibleWhere = `deleted_at IS NULL AND sent_at IS NOT NULL AND (expires_at IS NULL OR expires_at > now())
-  AND ($1::text[] IS NULL OR audience = 'all' OR farm_ids && $1::text[])`;
+// Visible in a feed: sent, not recalled, not expired, and for this caller -
+// farms = their farm list (text[]), or NULL for an admin (everything);
+// dist = a distributor's ID (text), or NULL. A farmer sees messages to all
+// farmers or to their farms; a distributor also sees messages to all
+// distributors or to them by name.
+const visibleWhere = (farms, dist) => `deleted_at IS NULL AND sent_at IS NOT NULL AND (expires_at IS NULL OR expires_at > now())
+  AND (${farms}::text[] IS NULL
+    OR (audience IN ('all', 'farms') AND (audience = 'all' OR farm_ids && ${farms}::text[]))
+    OR (audience = 'distributors' AND ${dist}::text IS NOT NULL
+        AND (cardinality(COALESCE(distributor_ids, '{}')) = 0 OR ${dist}::text = ANY(distributor_ids))))`;
 
 const toId = (id) => (/^\d{1,18}$/.test(String(id)) ? String(id) : null);
 
 export const pgAnnouncementStore = {
   async create(a) {
     const { rows } = await pool.query(
-      `INSERT INTO announcements (category, title, body, title_ta, body_ta, important, audience, farm_ids, send_at, expires_at, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
-      [a.category, a.title, a.body, a.titleTa, a.bodyTa, a.important, a.audience, a.farmIds, a.sendAt, a.expiresAt, a.createdBy]
+      `INSERT INTO announcements (category, title, body, title_ta, body_ta, important, audience, farm_ids, send_at, expires_at, created_by, distributor_ids)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+      [a.category, a.title, a.body, a.titleTa, a.bodyTa, a.important, a.audience, a.farmIds, a.sendAt, a.expiresAt, a.createdBy,
+        a.distributorIds || null]
     );
     return Number(rows[0].id);
   },
@@ -80,7 +90,7 @@ export const pgAnnouncementStore = {
   async claim(id) {
     const { rows } = await pool.query(
       `UPDATE announcements SET sent_at = now() WHERE id = $1 AND sent_at IS NULL AND deleted_at IS NULL
-       RETURNING id, category, title, body, important, audience, farm_ids AS "farmIds"`,
+       RETURNING id, category, title, body, important, audience, farm_ids AS "farmIds", distributor_ids AS "distributorIds"`,
       [id]
     );
     return rows[0] ? { ...rows[0], id: Number(rows[0].id) } : null;
@@ -88,9 +98,10 @@ export const pgAnnouncementStore = {
 
   async recordDelivery(id, s) {
     await pool.query(
-      `UPDATE announcements SET target_farms = $2, target_phones = $3, target_devices = $4, push_ok = $5, push_failed = $6
+      `UPDATE announcements SET target_farms = $2, target_phones = $3, target_devices = $4, push_ok = $5, push_failed = $6,
+         target_distributors = $7
        WHERE id = $1`,
-      [id, s.targetFarms, s.targetPhones, s.targetDevices, s.pushOk, s.pushFailed]
+      [id, s.targetFarms, s.targetPhones, s.targetDevices, s.pushOk, s.pushFailed, s.targetDistributors ?? null]
     );
   },
 
@@ -147,20 +158,22 @@ export const pgAnnouncementStore = {
     return rowCount > 0;
   },
 
-  // farmIds null = admin (everything). phone = '' for an admin (nothing read).
-  async feed(farmIds, phone, limit, maxAgeDays) {
+  // farmIds null = admin (everything). phone = '' for an admin (nothing read);
+  // a distributor reads as "dist:<ID>". distributorId only for a distributor.
+  async feed(farmIds, phone, limit, maxAgeDays, distributorId = null) {
     const { rows } = await pool.query(
       `SELECT ${feedCols}, EXISTS (SELECT 1 FROM announcement_reads r WHERE r.announcement_id = a.id AND r.phone = $2) AS read
        FROM announcements a
-       WHERE ${visibleWhere} AND sent_at > now() - make_interval(days => $4)
+       WHERE ${visibleWhere("$1", "$5")} AND sent_at > now() - make_interval(days => $4)
        ORDER BY sent_at DESC, id DESC LIMIT $3`,
-      [farmIds, phone || "", limit, maxAgeDays]
+      [farmIds, phone || "", limit, maxAgeDays, distributorId]
     );
     return rows.map((r) => ({ ...r, id: Number(r.id) }));
   },
 
-  async visibleIds(ids, farmIds) {
-    const { rows } = await pool.query(`SELECT id FROM announcements WHERE ${visibleWhere} AND id = ANY($2::bigint[])`, [farmIds, ids]);
+  async visibleIds(ids, farmIds, distributorId = null) {
+    const { rows } = await pool.query(`SELECT id FROM announcements WHERE ${visibleWhere("$1", "$3")} AND id = ANY($2::bigint[])`,
+      [farmIds, ids, distributorId]);
     return rows.map((r) => Number(r.id));
   },
 
