@@ -95,7 +95,9 @@ function queueCommand(farmId, task) {
  * matches the one-shot nature of this handshake (no per-message auth story
  * needed once the connection is open and already scoped to one farmId).
  */
-export function attachLiveGateway(httpServer, { publishCommand }) {
+// authenticate(token) -> the caller (a decoded Firebase token, or a
+// distributor session - see server.js verifyCaller()); throws if invalid.
+export function attachLiveGateway(httpServer, { publishCommand, authenticate = (t) => auth.verifyIdToken(t) }) {
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on("upgrade", async (req, socket, head) => {
@@ -115,7 +117,7 @@ export function attachLiveGateway(httpServer, { publishCommand }) {
 
     let decodedToken;
     try {
-      decodedToken = await auth.verifyIdToken(token);
+      decodedToken = await authenticate(token);
     } catch {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();

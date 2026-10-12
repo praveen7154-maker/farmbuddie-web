@@ -25,6 +25,10 @@ import { createReportService } from "./reportService.js";
 import { pgReportStore } from "./reportStore.js";
 import { MOTOR_NUMBERS } from "./motorNumbers.js";
 import { ALERTS_PAGE, alertsSince, alertPage } from "./alertHistory.js";
+import { createDistributorModule, TOKEN_PREFIX } from "./distributors.js";
+import { pgDistributorStore } from "./distributorStore.js";
+import { findDistributor, distributorFarms, loadReferrals, loadRedemptions } from "./distributorsFirebase.js";
+import { requireAdmin } from "../adminAuth.js";
 
 export const app = express();
 // nginx (on the host) is the only caller - the port is published on
@@ -66,13 +70,47 @@ export const ota = createOtaModule({
 });
 app.use("/ota/firmware", ota.publicRouter);
 
+// Distributor logins for the Irrigo Admin app - see distributors.js. Sign-in
+// sits before the auth below (it's how a distributor gets a token), with its
+// own tight per-address limit on top of the per-ID lockout inside.
+export const distributors = createDistributorModule({
+  store: pgDistributorStore, findDistributor, distributorFarms, loadReferrals, loadRedemptions
+});
+const distributorLoginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false });
+app.use("/distributor/login", distributorLoginLimiter);
+app.use("/distributor", cors({ origin: (origin, cb) => cb(null, true) }), distributors.publicRouter);
+
+// Every route below: a Firebase login (admin web panel / Irrigo Admin, or a
+// farmer's Irrigo app), or a distributor's session token ("fbd_..."). A
+// distributor still on their first password may only set a new one.
+const MUST_CHANGE_ALLOWED = new Set(["/distributor/me", "/distributor/password", "/distributor/logout"]);
+async function verifyCaller(req, res, next) {
+  const m = (req.headers.authorization || "").match(/^Bearer (.+)$/);
+  if (m && m[1].startsWith(TOKEN_PREFIX)) {
+    const who = await distributors.authenticate(m[1]).catch((err) => {
+      console.error("[distributor] session check failed:", err);
+      return null;
+    });
+    if (!who) return res.status(401).json({ error: "Signed out - please sign in again", code: "signed_out" });
+    if (who.mustChange && !MUST_CHANGE_ALLOWED.has(req.path)) {
+      return res.status(403).json({ error: "Set a new password first", code: "password_change_required" });
+    }
+    req.decodedToken = who;
+    return next();
+  }
+  return verifyFirebaseToken(req, res, next);
+}
+
 // Both the admin panel (browser, has an origin to restrict) and the
 // Irrigo app (native, no origin) call these — CORS just narrows what a
 // browser will allow; canAccessFarm() is the real gate either way.
 const corsOptions = { origin: (origin, cb) => cb(null, true) };
 const limiter = rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
 
-app.use(cors(corsOptions), limiter, verifyFirebaseToken);
+app.use(cors(corsOptions), limiter, verifyCaller);
+
+app.use("/distributor", distributors.router);
+app.use("/distributors", requireAdmin, distributors.adminRouter);
 
 app.use("/ota", ota.adminRouter);
 
@@ -131,12 +169,14 @@ app.post("/command/device", async (req, res) => {
  * listener open just to show who's online right now.
  */
 app.get("/fleet/status", async (req, res) => {
-  if (!isAdmin(req.decodedToken)) {
+  const distributorId = req.decodedToken.distributorId || null;
+  if (!isAdmin(req.decodedToken) && !distributorId) {
     return res.status(403).json({ error: "Admin identity required" });
   }
 
   try {
-    const farms = await getFleetStatus();
+    // A distributor sees only the farmers they onboarded.
+    const farms = (await getFleetStatus()).filter((f) => !distributorId || f.distributorId === distributorId);
     return res.json({ farms, checkedAt: new Date().toISOString() });
   } catch (err) {
     console.error("fleet/status error:", err);
@@ -172,6 +212,35 @@ app.get("/fleet/device/:farmId/credentials", async (req, res) => {
 });
 
 /**
+ * GET /fleet/device/:farmId/info
+ * Who/what a farm is - farmerName, farmBuddieId, nodeId - for Irrigo
+ * Admin's Device Detail header (it controls the hub through /live, so it
+ * needs no MQTT credentials). Admins, or the distributor who onboarded
+ * this farmer.
+ */
+app.get("/fleet/device/:farmId/info", async (req, res) => {
+  const { farmId } = req.params;
+  if (!/^\d{1,6}$/.test(farmId)) return res.status(400).json({ error: "Invalid farmId" });
+  try {
+    if (!(isAdmin(req.decodedToken) || (req.decodedToken.distributorId && await canAccessFarm(req.decodedToken, farmId)))) {
+      return res.status(403).json({ error: "Not authorized for this farm" });
+    }
+    const snap = await db.collection("farmers").where("controller.uniqueId", "==", farmId).limit(1).get();
+    if (snap.empty) return res.status(404).json({ error: "No farm record for this farmId" });
+    const f = snap.docs[0].data();
+    return res.json({
+      farmId,
+      nodeId: f.deviceStatus?.nodeId || "MOTOR_1",
+      farmerName: f.name || null,
+      farmBuddieId: f.farmBuddieId || null
+    });
+  } catch (err) {
+    console.error("fleet/device/info error:", err);
+    return res.status(500).json({ error: "Failed to load the farm" });
+  }
+});
+
+/**
  * GET /fleet/device/:farmId/qr
  * Admin-only. Re-renders this farm's already-issued MQTT setup QR as a
  * PNG - the same encrypted payload the web admin panel shows at
@@ -181,7 +250,10 @@ app.get("/fleet/device/:farmId/credentials", async (req, res) => {
  * rotate:false - viewing/sharing, never mutates the credential.
  */
 app.get("/fleet/device/:farmId/qr", async (req, res) => {
-  if (!isAdmin(req.decodedToken)) {
+  // Admins, or the distributor who onboarded this farmer.
+  const allowed = isAdmin(req.decodedToken) ||
+    (req.decodedToken.distributorId && /^\d{1,6}$/.test(req.params.farmId) && await canAccessFarm(req.decodedToken, req.params.farmId).catch(() => false));
+  if (!allowed) {
     return res.status(403).json({ error: "Admin identity required" });
   }
 

@@ -1,5 +1,6 @@
 import { db } from "../firebaseAdmin.js";
 import { isAdmin } from "../adminAuth.js";
+import { distributorOfFarm } from "./distributorsFirebase.js";
 
 function normalizePhone(phone) {
   return String(phone || "").replace(/\D/g, "").slice(-10);
@@ -18,6 +19,12 @@ function normalizePhone(phone) {
  */
 export async function canAccessFarm(decodedToken, farmId) {
   if (isAdmin(decodedToken)) return true;
+  // A distributor (Irrigo Admin app): only the farms of farmers they
+  // onboarded - see distributors.js.
+  if (decodedToken.distributorId) {
+    if (decodedToken.mustChange) return false;
+    return (await distributorOfFarm(farmId)) === decodedToken.distributorId;
+  }
 
   const phone = normalizePhone(decodedToken.phone_number);
   if (!phone || phone.length !== 10) return false;

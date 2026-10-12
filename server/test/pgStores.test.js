@@ -14,6 +14,7 @@ test("postgres stores work against a real database", { skip: url ? false : "set 
   const { ensureAnnouncementSchema, pgAnnouncementStore: ann } = await import(S + "announcementStore.js");
   const { ensureReportSchema, pgReportStore: rep } = await import(S + "reportStore.js");
   const fc = await import(S + "farmConfigCache.js");
+  const { ensureDistributorSchema, pgDistributorStore: dist } = await import(S + "distributorStore.js");
   const ok = () => {};
   try {
 
@@ -110,6 +111,24 @@ test("postgres stores work against a real database", { skip: url ? false : "set 
     assert.equal(await ann.remove([a1, 12345]), 1);
     assert.equal((await pool.query("SELECT count(*)::int n FROM announcement_reads")).rows[0].n, 0);
     ok("announcements: create / due / claim once / feed / read / recall / delete");
+    // distributor logins
+    await ensureDistributorSchema(); await ensureDistributorSchema();
+    assert.equal(await dist.getAccount("FB-DIST-0001"), null);
+    await dist.setPassword("FB-DIST-0001", "h1", true);
+    await dist.setPassword("FB-DIST-0001", "h2", false);
+    assert.deepEqual(await dist.getAccount("FB-DIST-0001"), { passwordHash: "h2", mustChange: false });
+    await dist.createSession("s1", "FB-DIST-0001", new Date(Date.now() + 60000));
+    await dist.createSession("s2", "FB-DIST-0001", new Date(Date.now() + 60000));
+    await dist.createSession("old", "FB-DIST-0001", new Date(Date.now() - 1000));
+    assert.equal((await dist.getSession("s1")).distributorId, "FB-DIST-0001");
+    assert.equal(await dist.getSession("old"), null);
+    await dist.deleteSessions("FB-DIST-0001", "s1");
+    assert.equal(await dist.getSession("s2"), null);
+    assert.ok(await dist.getSession("s1"));
+    await dist.deleteSession("s1");
+    assert.equal(await dist.getSession("s1"), null);
+    await dist.deleteAccount("FB-DIST-0001");
+    assert.equal(await dist.getAccount("FB-DIST-0001"), null);
   } finally {
     await pool.end();
   }

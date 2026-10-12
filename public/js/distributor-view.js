@@ -4,6 +4,7 @@ import { onAuthStateChanged, signOut }
 
 import { doc, getDoc }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+import { BRIDGE_BASE_URL } from "/js/config.js";
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -47,6 +48,7 @@ async function loadDistributor() {
     <div class="info-grid">
       <div class="info-item"><b>Distributor ID:</b> ${d.distributorId || "-"}</div>
       <div class="info-item"><b>Status:</b> ${d.status || "-"}</div>
+      <div class="info-item"><b>Irrigo Admin app login:</b> ${d.distributorId || "-"} (first password = the same ID, changed on first login)</div>
       <div class="info-item"><b>Name:</b> ${d.name || "-"}</div>
       <div class="info-item"><b>Phone:</b> ${d.primaryMobile || "-"}</div>
       <div class="info-item"><b>Email:</b> ${d.email || "-"}</div>
@@ -121,6 +123,26 @@ function renderDoc(label, url) {
 loadDistributor();
 
 /* ================= PRINT ================= */
+// Irrigo Admin app login (bridge distributors.js): back to "the password is
+// the distributor ID, set a new one on first login"; signs out their phones.
+window.resetAppPassword = async function () {
+  if (!currentDistributorId) return;
+  if (!confirm(`Reset the Irrigo Admin app password of ${currentDistributorId}?\n\n` +
+    `Their password becomes ${currentDistributorId} again, they are signed out on every phone, ` +
+    "and the app makes them set a new password at the next login.")) return;
+  try {
+    const idToken = await auth.currentUser.getIdToken();
+    const res = await fetch(`${BRIDGE_BASE_URL}/distributors/${encodeURIComponent(currentDistributorId)}/reset-password`, {
+      method: "POST", headers: { Authorization: `Bearer ${idToken}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    alert(`Done. ${currentDistributorId} can now sign in with ${currentDistributorId} as the password and must set a new one.`);
+  } catch (err) {
+    alert(`Couldn't reset the password: ${err.message}`);
+  }
+};
+
 window.printDistributor = function () {
   window.print();
 };

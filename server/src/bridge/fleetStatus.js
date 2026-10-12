@@ -40,6 +40,7 @@ export async function getFleetStatus() {
       nodeId: deviceStatus?.nodeId || null,
       farmerName: f.name || null,
       farmBuddieId: f.farmBuddieId || null,
+      distributorId: f.leadSource?.distributorId || null,   // who onboarded this farmer (Lead Source)
       online,
       lastSeen: lastSeenMs,
       units: farmUnitCounts(f),   // { motorNodes, valves, backwash } - see farmUnits.js

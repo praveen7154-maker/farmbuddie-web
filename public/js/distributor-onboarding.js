@@ -241,6 +241,7 @@ document.getElementById("distributorForm")
     const successMessage =
       `Distributor Created Successfully ✅\n` +
       `Distributor ID: ${distributorId}\n` +
+      `Irrigo Admin app: sign in with ${distributorId} as both ID and password (they set a new password on first login)\n` +
       `Created At: ${createdTime}`;
 
     sessionStorage.setItem("distSuccess", successMessage);

@@ -5,9 +5,12 @@ import { connectBridge, publishCommand, setOtaStatusHandler } from "./mqttBridge
 import { ensureOtaSchema } from "./otaStore.js";
 import { ensureAnnouncementSchema } from "./announcementStore.js";
 import { ensureReportSchema } from "./reportStore.js";
+import { ensureDistributorSchema } from "./distributorStore.js";
+import { TOKEN_PREFIX } from "./distributors.js";
+import { auth } from "../firebaseAdmin.js";
 import { startFarmerDocCacheRefresh } from "./firestoreMirror.js";
 import { attachLiveGateway } from "./liveGateway.js";
-import { app, ota, broadcast, reports } from "./server.js";
+import { app, ota, broadcast, reports, distributors } from "./server.js";
 
 async function main() {
   await ensureSchema();
@@ -15,6 +18,7 @@ async function main() {
   await ensureOtaSchema();
   await ensureAnnouncementSchema();
   await ensureReportSchema();
+  await ensureDistributorSchema();
   setOtaStatusHandler(ota.handleOtaStatus);
   startRetentionCleanup();
   broadcast.startScheduler();
@@ -28,7 +32,16 @@ async function main() {
   const httpServer = app.listen(config.bridgePort, "0.0.0.0", () => {
     console.log(`farmbuddie bridge API listening on :${config.bridgePort}`);
   });
-  attachLiveGateway(httpServer, { publishCommand });
+  // Live channel: Firebase logins, or a distributor's session token.
+  attachLiveGateway(httpServer, {
+    publishCommand,
+    authenticate: async (token) => {
+      if (!token.startsWith(TOKEN_PREFIX)) return auth.verifyIdToken(token);
+      const who = await distributors.authenticate(token);
+      if (!who || who.mustChange) throw new Error("not a valid distributor session");
+      return who;
+    }
+  });
 }
 
 main().catch((err) => {
