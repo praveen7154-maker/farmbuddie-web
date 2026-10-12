@@ -850,9 +850,6 @@ window.saveFarmer = async function () {
     const mainFarmerId = selectedFarmerData.mainFarmerId || selectedFarmerDocId;
 
 
-    /* ================= GENERATE FARM ID ================= */
-    const farmBuddieId = await generateFarmBuddieId();
-
     /* ================= BUILD MOTOR CONFIG ================= */
 
 const motorCount = parseInt(document.getElementById("motorCount")?.value || 0);
@@ -906,7 +903,7 @@ const valveConfig = readValveConfig().config;
     /* ================= BUILD DATA ================= */
 
     const farmerData = {
-      farmBuddieId,
+      farmBuddieId: "",   // set below, once the phones are checked
       farmNumber: selectedFarmNumber,
        identityId: identityId,
           mainFarmerId: mainFarmerId,
@@ -999,6 +996,11 @@ const valveConfig = readValveConfig().config;
 
     // 🔥 STEP 1: VALIDATE FIRST (NO SAVE)
     await validatePhones(db, farmerData);
+
+    /* ================= GENERATE FARM ID ================= */
+    // Only now, after every check - a refused save doesn't use up a number.
+    const farmBuddieId = await generateFarmBuddieId();
+    farmerData.farmBuddieId = farmBuddieId;
 
     // 🔥 STEP 2: SAVE FARM
     const newFarmRef = await addDoc(collection(db, "farmers"), farmerData);
