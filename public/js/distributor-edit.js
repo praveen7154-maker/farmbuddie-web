@@ -1,5 +1,6 @@
 import { auth, db } from "/js/firebase-init.js";
-import { prepareUpload } from "/js/upload-prep.js";
+import { prepareUpload, applyDocumentUploadSetting } from "/js/upload-prep.js";
+import { DOCUMENT_UPLOADS } from "/js/config.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -85,41 +86,48 @@ async function loadDistributor() {
 }
 
 /* ================= VALIDATION ================= */
-function validateFields(data) {
+/* ================= HARD INPUT RESTRICTION ================= */
+// Set once when the page loads (they used to be added inside
+// validateFields(), i.e. only after the first Save, and again on every Save).
+document.getElementById("primaryMobile")?.addEventListener("input", (e) => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);       // digits only, max 10
+});
+document.getElementById("aadhaarNumber")?.addEventListener("input", (e) => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 12);       // digits only, max 12
+});
+document.getElementById("panNumber")?.addEventListener("input", (e) => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+});
 
+// Same checks as Distributor Onboarding.
+function validateFields(data) {
   if (!data.name) {
     alert("Individual / Company Name is required");
     return false;
   }
-
-  /* ================= HARD INPUT RESTRICTION ================= */
-
-    // Phone – digits only, max 10
-    document.getElementById("primaryMobile")?.addEventListener("input", (e) => {
-      e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
-    });
-
-    // Aadhaar – digits only, max 12
-    document.getElementById("aadhaarNumber")?.addEventListener("input", (e) => {
-      e.target.value = e.target.value.replace(/\D/g, "").slice(0, 12);
-    });
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(data.email)) {
-    alert("Valid Gmail required");
+  if (!/^[6-9]\d{9}$/.test(data.primaryMobile)) {
+    alert("Valid Phone Number required");
     return false;
   }
-
-  /* ================= PAN HARD RESTRICTION ================= */
-  document.getElementById("panNumber")?.addEventListener("input", (e) => {
-    e.target.value = e.target.value
-      .toUpperCase()          // force uppercase
-      .replace(/[^A-Z0-9]/g, "")  // remove special characters
-      .slice(0, 10);          // limit to 10 chars
-  });
-
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+    alert("Valid email ID required");
+    return false;
+  }
+  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(data.panNumber)) {
+    alert("Valid PAN required");
+    return false;
+  }
+  if (!/^\d{12}$/.test(data.aadhaarNumber)) {
+    alert("Aadhaar must be 12 digits");
+    return false;
+  }
   return true;
 }
+
+// Document uploads off until Storage is set up (config.js) - see upload-prep.js.
+applyDocumentUploadSetting(DOCUMENT_UPLOADS,
+  ["gstFile", "panFile", "aadhaarFile", "chequeFile", "msmeFile", "itrFile", "otherDoc1", "otherDoc2", "otherDoc3"],
+  { card: document.getElementById("gstFile")?.closest(".fb-card") });
 
 /* ================= FILE UPLOAD ================= */
 // Photos -> small WebP, PDFs under 2 MB - see upload-prep.js. fileName's own

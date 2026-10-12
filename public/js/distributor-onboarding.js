@@ -11,7 +11,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
 import { formatDistributorId, claimNextNumber } from "/js/id-format.js";
-import { prepareUpload } from "/js/upload-prep.js";
+import { prepareUpload, applyDocumentUploadSetting } from "/js/upload-prep.js";
+import { DOCUMENT_UPLOADS, DOCUMENTS_REQUIRED } from "/js/config.js";
 
 import {
   getStorage,
@@ -91,9 +92,21 @@ const DOC_FIELDS = [
   ["other3", "otherDoc3", "other3", "Other document 3"]
 ];
 
+// Must be attached when DOCUMENTS_REQUIRED (config.js) - the ✱ ones.
+const REQUIRED_DOCS = ["panFile", "aadhaarFile", "chequeFile"];
+
+const uploadsOn = applyDocumentUploadSetting(DOCUMENT_UPLOADS, DOC_FIELDS.map((d) => d[1]), {
+  card: document.getElementById("gstFile")?.closest(".fb-card")
+});
+if (uploadsOn && DOCUMENTS_REQUIRED) document.querySelectorAll(".doc-req").forEach((el) => { el.hidden = false; });
+
 async function prepareDocuments() {
   const out = [];
+  if (!uploadsOn) return out;
   for (const [key, inputId, name, label] of DOC_FIELDS) {
+    if (DOCUMENTS_REQUIRED && REQUIRED_DOCS.includes(inputId) && !document.getElementById(inputId).files[0]) {
+      throw new Error(`${label} is required`);
+    }
     const prepared = await prepareUpload(document.getElementById(inputId).files[0], label);
     out.push([key, name, prepared]);
   }
@@ -119,8 +132,8 @@ function validateFields(data) {
     return false;
   }
 
-  if (!data.aadhaarNumber) {
-    alert("Aadhaar is required");
+  if (!/^\d{12}$/.test(data.aadhaarNumber)) {
+    alert("Aadhaar must be 12 digits");
     return false;
   }
 
@@ -132,7 +145,7 @@ function validateFields(data) {
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(data.email)) {
-    alert("Valid Gmail required");
+    alert("Valid email ID required");
     return false;
   }
 

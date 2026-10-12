@@ -1,9 +1,14 @@
 import { auth, db } from "/js/firebase-init.js";
 import { renderValveConfigSection, readValveConfig, fillValveConfig } from "/js/valve-config.js";
-import { prepareUpload } from "/js/upload-prep.js";
+import { prepareUpload, applyDocumentUploadSetting } from "/js/upload-prep.js";
+import { DOCUMENT_UPLOADS } from "/js/config.js";
 
 // Valve Configuration + Additional Features fields (IRRIGO and IRRIGO_PLUS alike)
 renderValveConfigSection();
+// Aadhaar / other document / photo uploads off until Storage is set up (config.js).
+applyDocumentUploadSetting(DOCUMENT_UPLOADS, ["aadhaarFile", "otherDoc", "farmerPhoto"], {
+  card: document.getElementById("aadhaarFile")?.closest(".fb-card")
+});
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 

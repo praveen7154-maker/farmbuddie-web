@@ -18,7 +18,9 @@ import {
   runTransaction,
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { formatFarmBuddieId, claimNextNumber } from "/js/id-format.js";
-import { prepareUpload } from "/js/upload-prep.js";
+import { prepareUpload, applyDocumentUploadSetting } from "/js/upload-prep.js";
+import { DOCUMENT_UPLOADS } from "/js/config.js";
+
 
 /* ✅ ADD STORAGE IMPORT */
 import {
@@ -37,6 +39,9 @@ import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisi
 
 /* ✅ INITIALIZE STORAGE */
 const storage = getStorage();
+
+// Aadhaar / other document / photo uploads off until Storage is set up (config.js).
+applyDocumentUploadSetting(DOCUMENT_UPLOADS, ["aadhaarFile", "otherDoc", "farmerPhoto"]);
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {

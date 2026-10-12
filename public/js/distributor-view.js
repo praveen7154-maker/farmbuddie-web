@@ -86,6 +86,7 @@ async function loadDistributor() {
       </div>
 
     <div class="section-title">📂 Uploaded Documents</div>
+    ${Object.values(d.documents || {}).some(Boolean) ? "" : `<p style="color:#6b7280;font-size:13px">None uploaded - paper copies are kept.</p>`}
     <div class="info-grid">
 
       ${renderDoc("GST Certificate", d.documents?.gstUrl)}

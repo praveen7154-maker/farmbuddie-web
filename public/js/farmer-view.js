@@ -148,7 +148,7 @@ async function loadFarmer() {
 
     <!-- DOCUMENTS -->
     <div class="section-title">📂 Uploaded Documents</div>
-    <div class="info-grid">~
+    <div class="info-grid">
       <div class="info-item">
         <b>Aadhaar File:</b> 
         ${documentsData?.aadhaarUrl

@@ -8,3 +8,11 @@ export const API_BASE_URL = "https://api.farmbuddie.com";
 // now). Until that's done, fleet control calls from the admin panel will
 // fail with a network error, not a bug in this file.
 export const BRIDGE_BASE_URL = "https://api.farmbuddie.com/bridge";
+
+// Document and photo uploads (farmer / distributor onboarding and edit).
+// Off until a Firebase Storage bucket is set up - paper copies are kept
+// meanwhile, and the upload fields are hidden. Turn on when Storage is
+// ready (then `firebase deploy --only hosting,storage`).
+export const DOCUMENT_UPLOADS = false;
+// With uploads on: the documents marked ✱ must be attached before saving.
+export const DOCUMENTS_REQUIRED = false;

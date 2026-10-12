@@ -62,3 +62,22 @@ export async function prepareUpload(file, label = "File", { maxSide = 1600 } = {
     bitmap.close?.();
   }
 }
+
+// Hides the given file inputs' fields (and `card`, if given) while document
+// uploads are off (config.js DOCUMENT_UPLOADS), leaving a short note
+// instead. Returns whether uploads are on.
+export function applyDocumentUploadSetting(enabled, inputIds, { card = null, note = "Documents: paper copies are kept for now - uploads are off." } = {}) {
+  if (enabled) return true;
+  const fields = inputIds.map((id) => document.getElementById(id)?.closest(".fb-field")).filter(Boolean);
+  const target = card || fields[0];
+  if (target) {
+    const p = document.createElement("p");
+    p.className = "fb-doc-note";
+    p.style.cssText = "color:#6b7280;font-size:13px;margin:6px 0 12px";
+    p.textContent = note;
+    target.insertAdjacentElement("beforebegin", p);
+  }
+  if (card) card.hidden = true;
+  fields.forEach((f) => { f.hidden = true; });
+  return false;
+}
