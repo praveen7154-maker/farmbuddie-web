@@ -74,7 +74,7 @@ function productLabels(bytes) {
   }
   return [...found];
 }
-const PRODUCT_TEXT = { hub: "Hub", "motor-node": "Motor node", valve: "Valve unit", "filter-backwash": "Filter backwash" };
+const PRODUCT_TEXT = { hub: "Hub / Master Motor", "motor-node": "Motor Node", valve: "Valve Node", "filter-backwash": "Filter Backwash Node" };
 const NODE_STATE_TEXT = {
   receiving: "Receiving", installed: "Installed - waiting", validated: "Updated", current: "Already on it",
   failed: "Failed", rolled_back: "Rolled back"
@@ -433,7 +433,7 @@ async function refreshRelease() {
 
 function renderRelease({ release, summary, targets, nodeSummary, nodes }) {
   const node = release.product && release.product !== "hub";
-  $("progressTitle").textContent = `- #${release.id}, ${PRODUCT_TEXT[release.product] || "Hub"} ${release.version}, ${release.mode === "all" ? "all farms" : "selected farms"}, ${fmtTime(release.createdAt)}`;
+  $("progressTitle").textContent = `- #${release.id}, ${PRODUCT_TEXT[release.product] || PRODUCT_TEXT.hub} ${release.version}, ${release.mode === "all" ? "all farms" : "selected farms"}, ${fmtTime(release.createdAt)}`;
   $("nodeSection").hidden = !node;
   if (node) renderNodes(release, nodeSummary, nodes || []);
   $("sumUpdated").textContent = summary.updated;
@@ -567,7 +567,7 @@ async function loadHistory() {
     const shown = r.stoppedAt ? `⏹ Stopped - ${result}` : result;
     return `<tr data-id="${r.id}">
       <td class="ota-check-col"><input type="checkbox" class="historyPick" value="${r.id}" ${historySelected.has(r.id) ? "checked" : ""}></td>
-      <td>${r.id}</td><td>${esc(PRODUCT_TEXT[r.product] || "Hub")}</td><td>${esc(r.version)}</td><td>${r.mode === "all" ? "All farms" : `${s.total} farm${s.total > 1 ? "s" : ""}`}</td>
+      <td>${r.id}</td><td>${esc(PRODUCT_TEXT[r.product] || PRODUCT_TEXT.hub)}</td><td>${esc(r.version)}</td><td>${r.mode === "all" ? "All farms" : `${s.total} farm${s.total > 1 ? "s" : ""}`}</td>
       <td>${esc(shown)}</td><td>${esc(r.createdBy || "-")}</td><td>${fmtTime(r.createdAt)}</td></tr>`;
   }).join("") : `<tr><td colspan="8">${q || product ? "No release matches" : "No releases yet"}</td></tr>`;
   updateHistorySelection();

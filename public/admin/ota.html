@@ -53,12 +53,12 @@
   <h2><span class="ota-step">1</span> Firmware</h2>
   <div class="ota-row">
     <label class="ota-field narrow">
-      <span>For <small>(which repo it was built from)</small></span>
+      <span>Firmware type</span>
       <select id="productInput">
-        <option value="hub">Hub / Motor 1 (Motor repo)</option>
-        <option value="motor-node">Motor node (Motor-Node repo)</option>
-        <option value="valve">Valve unit (Valve repo)</option>
-        <option value="filter-backwash">Filter backwash unit (Filter-Backwash repo)</option>
+        <option value="hub">Hub / Master Motor Firmware</option>
+        <option value="motor-node">Motor Node Firmware</option>
+        <option value="valve">Valve Node Firmware</option>
+        <option value="filter-backwash">Filter Backwash Node Firmware</option>
       </select>
     </label>
     <label class="ota-field">
@@ -182,10 +182,10 @@
     <label class="ota-filter"><span>For</span>
       <select id="historyProductFilter">
         <option value="">All</option>
-        <option value="hub">Hub</option>
-        <option value="motor-node">Motor node</option>
-        <option value="valve">Valve unit</option>
-        <option value="filter-backwash">Filter backwash</option>
+        <option value="hub">Hub / Master Motor</option>
+        <option value="motor-node">Motor Node</option>
+        <option value="valve">Valve Node</option>
+        <option value="filter-backwash">Filter Backwash Node</option>
       </select>
     </label>
     <input type="search" id="historySearch" class="ota-search" placeholder="Search # / version / farm ID / sent by">
