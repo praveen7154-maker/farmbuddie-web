@@ -34,8 +34,19 @@ export const DEFAULT_SETTINGS = {
   expiryWarningDays: 7,
   homeState: HOME_STATE,
   requireSecondApprover: false,
-  disclaimer: DISCLAIMER
+  disclaimer: DISCLAIMER,
+  // Printed on price list PDFs and quotes.
+  companyName: "Farm Buddie",
+  companyAddress: "",
+  companyGstin: "",
+  companyPhone: "",
+  companyEmail: "",
+  companyWebsite: ""
 };
+const companyOf = (s) => ({
+  name: s.companyName, address: s.companyAddress, gstin: s.companyGstin,
+  phone: s.companyPhone, email: s.companyEmail, website: s.companyWebsite
+});
 
 class Bad extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -212,7 +223,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
       next: next ? { id: next.id, name: next.name, effectiveFrom: next.effectiveFrom } : null,
       items,
       accessories,
-      settings: { quoteValidityDays: s.quoteValidityDays, homeState, disclaimer: s.disclaimer },
+      settings: { quoteValidityDays: s.quoteValidityDays, homeState, disclaimer: s.disclaimer, company: companyOf(s) },
       valveTypes: VALVE_TYPES,
       myState,
       role: req.pricingRole,
@@ -713,8 +724,15 @@ export function createPricingModule({ store, findDistributor = async () => null,
       expiryWarningDays: int(b.expiryWarningDays ?? before.expiryWarningDays, "Expiry warning (days)", 1, 90),
       homeState: text(b.homeState ?? before.homeState, "Home state", 40, { required: true }),
       requireSecondApprover: bool(b.requireSecondApprover, before.requireSecondApprover),
-      disclaimer: text(b.disclaimer ?? before.disclaimer, "Disclaimer", 1000, { required: true })
+      disclaimer: text(b.disclaimer ?? before.disclaimer, "Disclaimer", 1000, { required: true }),
+      companyName: text(b.companyName ?? before.companyName, "Company name", 80, { required: true }),
+      companyAddress: text(b.companyAddress ?? before.companyAddress, "Address", 300) || "",
+      companyGstin: (text(b.companyGstin ?? before.companyGstin, "GSTIN", 15) || "").toUpperCase(),
+      companyPhone: text(b.companyPhone ?? before.companyPhone, "Phone", 40) || "",
+      companyEmail: text(b.companyEmail ?? before.companyEmail, "Email", 120) || "",
+      companyWebsite: text(b.companyWebsite ?? before.companyWebsite, "Website", 120) || ""
     };
+    if (next.companyGstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/.test(next.companyGstin)) throw new Bad("GSTIN should be 15 characters, like 33ABCDE1234F1Z5");
     await store.saveSettings(next);
     await audit(req, "update", "settings", null, "Pricing settings", before, next);
     res.json({ ok: true, settings: next });

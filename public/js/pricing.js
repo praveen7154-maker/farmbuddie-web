@@ -414,6 +414,14 @@ $("waEstimate").addEventListener("click", () => shareWhatsApp(draftQuote()));
 // QUOTE DOCUMENT (view, print, WhatsApp)
 // =====================================================================
 
+// The company lines from Settings > Company details (name, address, GSTIN...).
+function companyBlock() {
+  const c = current?.settings?.company || {};
+  const lines = [c.name, c.address, [c.gstin && `GSTIN: ${c.gstin}`, c.phone && `Ph: ${c.phone}`].filter(Boolean).join(" · "),
+    [c.email, c.website].filter(Boolean).join(" · ")].filter(Boolean);
+  return lines.length ? `<div class="pr-doc-co">${lines.map(esc).join("<br>")}</div>` : "";
+}
+
 function quoteDocHtml(q) {
   const lineRows = q.lines.map((l, i) => `<tr>
     <td>${i + 1}</td>
@@ -429,7 +437,7 @@ function quoteDocHtml(q) {
   return `<div class="pr-doc">
     ${expired ? `<div class="pr-expired-banner">⚠️ This quote has expired - prices may have changed. Make a new quote.</div>` : ""}
     <div class="pr-doc-head">
-      <div><img src="/assets/logo.png" alt="Farm Buddie"><h1>${q.quoteNo ? "Quotation" : "Price estimate"}</h1></div>
+      <div><img src="/assets/logo.png" alt="Farm Buddie"><h1>${q.quoteNo ? "Quotation" : "Price estimate"}</h1>${companyBlock()}</div>
       <div class="pr-doc-meta">
         ${q.quoteNo ? `<b>${esc(q.quoteNo)}</b><br>` : ""}
         Date: ${fmtDate(q.createdAt)}<br>
@@ -915,6 +923,106 @@ $("bkApply").addEventListener("click", () => {
   showMsg("ok", `${rows.length} row(s) changed - check the ✘ marks, then Save changes.`);
 });
 
+// ---- PDF (print to PDF) ----
+// kind "internal": everything incl. our cost and profit (Farm Buddie only).
+// kind "distributor": what a distributor needs - no cost, no profit.
+function printPriceList(kind) {
+  const l = editing.list;
+  const internal = kind === "internal";
+  const co = settings || {};
+  const rows = editing.rows.filter((r) => r.active && Number.isInteger(r.basePrice));
+  if (!rows.length) { showMsg("error", "No priced products to print in this list."); return; }
+  const st = listStatus(l);
+  const stamp = st === "draft" || st === "submitted" || st === "approved" ? "DRAFT – NOT YET PUBLISHED" : st === "expired" ? "EXPIRED" : st === "cancelled" ? "CANCELLED" : "";
+  const order = Object.keys(CAT_LABEL);
+  const groups = order.map((c) => [c, rows.filter((r) => r.category === c)]).filter(([, g]) => g.length);
+  const cols = internal
+    ? ["Our cost", "MRP<br><small>incl. GST</small>", "Distributor price", "Farmer selling price", "Max discount", "Lowest price", "Distributor margin", "Our profit<br><small>direct</small>", "Our profit<br><small>via distributor</small>", "GST"]
+    : ["MRP<br><small>incl. GST</small>", "Your buying price", "Farmer selling price", "Max discount", "Lowest selling price", "Your margin", "GST"];
+  let n = 0;
+  const body = groups.map(([cat, g]) => `<tr class="grp"><td colspan="${cols.length + 2}">${esc(CAT_LABEL[cat] || cat)}</td></tr>` + g.map((r) => {
+    n++;
+    const disc = R.maxDiscountPaise(r);
+    const p = R.ourProfit(r);
+    const name = `<b>${esc(r.productName)}</b>${r.variantName && r.variantName !== "Standard" ? ` – ${esc(r.variantName)}` : ""}<br><small>${esc(r.sku)}</small>`;
+    const cells = internal
+      ? [rs(r.costPrice), r.mrp ? rs(r.mrp) : "–", rs(r.distributorPrice), rs(r.basePrice), disc ? rs(disc) : "–", rs(R.floorPrice(r)),
+        rs(r.basePrice - r.distributorPrice), p ? rs(p.direct) : "–", p ? rs(p.viaDistributor) : "–", pct(r.gstBp)]
+      : [r.mrp ? rs(r.mrp) : "–", rs(r.distributorPrice), rs(r.basePrice), disc ? rs(disc) : "–", rs(R.floorPrice(r)), rs(r.basePrice - r.distributorPrice), pct(r.gstBp)];
+    return `<tr><td class="c">${n}</td><td>${name}</td>${cells.map((c) => `<td class="num">${c}</td>`).join("")}</tr>`;
+  }).join("")).join("");
+  const coLines = [co.companyAddress, [co.companyGstin && `GSTIN: ${co.companyGstin}`, co.companyPhone && `Ph: ${co.companyPhone}`].filter(Boolean).join(" · "),
+    [co.companyEmail, co.companyWebsite].filter(Boolean).join(" · ")].filter(Boolean).map(esc).join("<br>");
+  const who = auth.currentUser?.email || "";
+  const notes = internal
+    ? `<p class="conf">INTERNAL &amp; CONFIDENTIAL – contains Farm Buddie's purchase cost and profit. Do not share outside Farm Buddie.</p>`
+    : `<p class="conf">Confidential – for authorised ${esc(co.companyName || "Farm Buddie")} distributors only.</p>`;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(co.companyName || "Farm Buddie")} ${internal ? "Price List (Internal)" : "Distributor Price List"} v${l.versionNo ?? l.id}</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm 10mm 14mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9px; color: #6b7280; } }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #111827; margin: 0; font-size: 11px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #15803d; padding-bottom: 10px; }
+  .brand { display: flex; gap: 14px; align-items: center; }
+  .brand img { height: 58px; }
+  .brand .co { font-size: 11px; color: #374151; line-height: 1.5; }
+  .brand .co b { font-size: 16px; color: #14532d; }
+  .title { text-align: right; }
+  .title h1 { margin: 0 0 4px; font-size: 20px; color: #14532d; letter-spacing: .5px; }
+  .meta { display: grid; grid-template-columns: repeat(4, auto); gap: 4px 18px; margin: 10px 0 12px; font-size: 11px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 12px; }
+  .meta span { color: #6b7280; }
+  .stamp { display: inline-block; border: 2px solid #b91c1c; color: #b91c1c; font-weight: 800; padding: 2px 10px; border-radius: 6px; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  th { background: #15803d; color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; padding: 7px 6px; text-align: right; }
+  th:nth-child(1), th:nth-child(2) { text-align: left; }
+  th small { text-transform: none; font-weight: 400; opacity: .9; }
+  td { padding: 6px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  td small { color: #6b7280; }
+  td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  td.c { text-align: center; color: #6b7280; width: 26px; }
+  tr { page-break-inside: avoid; }
+  tr.grp td { background: #ecfdf5; color: #14532d; font-weight: 800; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; border-bottom: 1px solid #bbf7d0; }
+  tbody tr:nth-child(even):not(.grp) td { background: #fafafa; }
+  .notes { margin-top: 12px; font-size: 10px; color: #374151; line-height: 1.55; }
+  .conf { font-weight: 700; color: #b91c1c; margin: 8px 0 0; }
+  .sign { display: flex; justify-content: flex-end; margin-top: 28px; font-size: 11px; }
+  .sign div { text-align: center; border-top: 1px solid #9ca3af; padding-top: 4px; width: 220px; }
+</style></head><body>
+  <div class="head">
+    <div class="brand"><img src="${location.origin}/assets/logo.png" alt="">
+      <div class="co"><b>${esc(co.companyName || "Farm Buddie")}</b>${coLines ? `<br>${coLines}` : ""}</div></div>
+    <div class="title"><h1>${internal ? "PRICE LIST – INTERNAL" : "DISTRIBUTOR PRICE LIST"}</h1>
+      ${stamp ? `<div class="stamp">${stamp}</div>` : ""}</div>
+  </div>
+  <div class="meta">
+    <div><span>Version</span><br><b>v${l.versionNo ?? l.id} · ${esc(l.name)}</b></div>
+    <div><span>Effective from</span><br><b>${l.effectiveFrom ? fmtDate(l.effectiveFrom) : "–"}</b></div>
+    <div><span>Valid until</span><br><b>${l.effectiveFrom ? fmtUntil(l.effectiveTo) : "–"}</b></div>
+    <div><span>Generated</span><br><b>${fmtDateTime(new Date().toISOString())}</b>${internal && who ? ` by ${esc(who)}` : ""}</div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Product</th>${cols.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+  <div class="notes">
+    All amounts in Indian Rupees (₹). MRP includes GST; all other prices are before GST - GST is charged extra at the rate shown.
+    ${internal ? "Lowest price = the least a distributor may sell at. Our profit: direct = farmer selling price − our cost; via distributor = distributor price − our cost."
+      : "Lowest selling price = the least you may sell at; any discount you give comes from your margin. The customer may never be charged more than the MRP."}
+    Prices are valid for the period shown and may change without notice; this list replaces all earlier price lists.
+    ${notes}
+  </div>
+  <div class="sign"><div>For ${esc(co.companyName || "Farm Buddie")}<br><br>Authorised Signatory</div></div>
+  <script>window.onload = () => setTimeout(() => window.print(), 300);<\/script>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { showMsg("error", "Allow pop-ups for this site to make the PDF"); return; }
+  w.document.write(html);
+  w.document.close();
+}
+$("pdfInternal").addEventListener("click", () => printPriceList("internal"));
+$("pdfDistributor").addEventListener("click", () => printPriceList("distributor"));
+
 // ---- CSV ----
 const CSV_COLS = ["sku", "product", "variant", "on_sale", "mrp", "distributor_price", "selling_price", "min_price", "max_price",
   "max_discount_type", "max_discount", "gst_percent"];
@@ -936,59 +1044,7 @@ $("csvExport").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 
-function parseCsv(text) {
-  const rows = [];
-  let row = [], cell = "", q = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (q) {
-      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c;
-    } else if (c === '"') q = true;
-    else if (c === ",") { row.push(cell); cell = ""; }
-    else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(cell); rows.push(row); row = []; cell = "";
-    } else cell += c;
-  }
-  if (cell || row.length) { row.push(cell); rows.push(row); }
-  return rows.filter((r) => r.some((c) => c.trim()));
-}
 
-$("csvImport").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  e.target.value = "";
-  if (!file) return;
-  const rows = parseCsv(await file.text());
-  const head = (rows.shift() || []).map((h) => h.trim().toLowerCase());
-  const col = (name) => head.indexOf(name);
-  if (col("sku") < 0) { showMsg("error", `The CSV needs a header row with: ${CSV_COLS.join(", ")}`); return; }
-  const bySku = new Map(editing.rows.map((r) => [r.sku, r]));
-  let n = 0;
-  const unknown = [], bad = [];
-  for (const cells of rows) {
-    const get = (name) => (col(name) >= 0 ? (cells[col(name)] ?? "").trim() : undefined);
-    const r = bySku.get((get("sku") || "").toUpperCase());
-    if (!r) { unknown.push(get("sku")); continue; }
-    const upd = { ...r };
-    const money = { mrp: "mrp", distributor_price: "distributorPrice", selling_price: "basePrice", min_price: "minPrice", max_price: "maxPrice",
-      ...(can("editor") ? { our_cost: "costPrice" } : {}) };
-    for (const [c, k] of Object.entries(money)) if (get(c) !== undefined) upd[k] = toPaise(get(c));
-    if (get("on_sale") !== undefined) upd.active = !/^(no|n|0|false)$/i.test(get("on_sale"));
-    if (get("max_discount_type") !== undefined) upd.maxDiscountType = /^(rupees|amt|₹|inr)$/i.test(get("max_discount_type")) ? "amt" : "pct";
-    if (get("max_discount") !== undefined) upd.maxDiscountValue = readDiscount(upd, get("max_discount"));
-    if (get("gst_percent") !== undefined) upd.gstBp = Math.round(Number(get("gst_percent")) * 100);
-    if ([...MONEY, "maxDiscountValue"].some((k) => Number.isNaN(upd[k])) || !R.GST_RATES_BP.includes(upd.gstBp)) { bad.push(r.sku); continue; }
-    Object.assign(r, upd);
-    syncDiscount(r);
-    editing.dirty.set(r.variantId, r);
-    n++;
-  }
-  renderItems();
-  showMsg(bad.length || unknown.length ? "error" : "ok",
-    `${n} row(s) updated from the CSV - check them, then Save changes.` +
-    (unknown.length ? ` Unknown SKU(s): ${unknown.slice(0, 10).join(", ")}.` : "") +
-    (bad.length ? ` Skipped (bad number or GST): ${bad.slice(0, 10).join(", ")}.` : ""));
-});
 
 // =====================================================================
 // PRODUCTS
@@ -1245,8 +1301,10 @@ async function loadSettings() {
     $("stHome").innerHTML = STATES.map((x) => `<option>${esc(x)}</option>`).join("");
     $("stValidity").value = s.quoteValidityDays; $("stWarn").value = s.expiryWarningDays; $("stHome").value = s.homeState;
     $("stTwo").checked = !!s.requireSecondApprover; $("stDisclaimer").value = s.disclaimer;
+    $("stCoName").value = s.companyName || ""; $("stCoGstin").value = s.companyGstin || ""; $("stCoPhone").value = s.companyPhone || "";
+    $("stCoEmail").value = s.companyEmail || ""; $("stCoWeb").value = s.companyWebsite || ""; $("stCoAddress").value = s.companyAddress || "";
     const ro = !can("owner");
-    for (const id of ["stValidity", "stWarn", "stHome", "stTwo", "stDisclaimer"]) $(id).disabled = ro;
+    for (const id of ["stValidity", "stWarn", "stHome", "stTwo", "stDisclaimer", "stCoName", "stCoGstin", "stCoPhone", "stCoEmail", "stCoWeb", "stCoAddress"]) $(id).disabled = ro;
     $("staffBody").innerHTML = r.staff.length ? r.staff.map((x) => `<tr><td>${esc(x.email)}</td><td>${esc(x.role)}</td>
       <td>${esc(x.updatedBy || "")}<br><small class="ota-muted">${fmtDate(x.updatedAt)}</small></td>
       <td>${can("owner") ? `<button class="pr-link danger" data-rm="${esc(x.email)}">Remove</button>` : ""}</td></tr>`).join("")
@@ -1268,6 +1326,17 @@ $("stSave").addEventListener("click", async () => {
     renderCalcSetup();
   } catch (err) { fail(err); }
 });
+$("stCoSave").addEventListener("click", async () => {
+  try {
+    await put("/pricing/admin/settings", {
+      companyName: $("stCoName").value.trim(), companyGstin: $("stCoGstin").value.trim(), companyPhone: $("stCoPhone").value.trim(),
+      companyEmail: $("stCoEmail").value.trim(), companyWebsite: $("stCoWeb").value.trim(), companyAddress: $("stCoAddress").value.trim()
+    });
+    showMsg("ok", "Company details saved.");
+    await Promise.all([loadCurrent(), loadLists()]);
+  } catch (err) { fail(err); }
+});
+
 $("staffAdd").addEventListener("click", async () => {
   try {
     await put("/pricing/admin/staff", { email: $("staffEmail").value.trim(), role: $("staffRole").value });

@@ -200,8 +200,9 @@
         <button class="pr-btn" id="bkApply">Apply to shown rows</button>
       </span>
       <span class="pr-right">
+        <button class="pr-btn pr-cost-col" id="pdfInternal" title="Everything incl. our cost and profit - internal use only">📄 PDF · Farm Buddie</button>
+        <button class="pr-btn" id="pdfDistributor" title="Price list to send to distributors - no cost or profit">📄 PDF · Distributors</button>
         <button class="pr-btn" id="csvExport">⬇ CSV</button>
-        <label class="pr-btn pr-draft-only">⬆ Import CSV<input type="file" id="csvImport" accept=".csv,text/csv" hidden></label>
       </span>
     </div>
     <details class="pr-help" open>
@@ -306,6 +307,18 @@
     </div>
     <label class="ota-field"><span>Disclaimer on every estimate</span><textarea id="stDisclaimer" rows="3" maxlength="1000"></textarea></label>
     <div class="ota-actions"><button class="fb-btn-primary pr-owner-only" id="stSave">Save settings</button></div>
+  </div>
+  <div class="ota-card">
+    <h2>Company details <small class="ota-muted">- printed on price list PDFs and quotes</small></h2>
+    <div class="pr-grid2">
+      <label class="ota-field"><span>Company name</span><input type="text" id="stCoName" maxlength="80"></label>
+      <label class="ota-field"><span>GSTIN</span><input type="text" id="stCoGstin" maxlength="15" placeholder="33ABCDE1234F1Z5"></label>
+      <label class="ota-field"><span>Phone</span><input type="text" id="stCoPhone" maxlength="40"></label>
+      <label class="ota-field"><span>Email</span><input type="text" id="stCoEmail" maxlength="120"></label>
+      <label class="ota-field"><span>Website</span><input type="text" id="stCoWeb" maxlength="120" placeholder="www.farmbuddie.com"></label>
+    </div>
+    <label class="ota-field"><span>Address</span><textarea id="stCoAddress" rows="2" maxlength="300"></textarea></label>
+    <div class="ota-actions"><button class="fb-btn-primary pr-owner-only" id="stCoSave">Save company details</button></div>
   </div>
   <div class="ota-card">
     <h2>Pricing team <small class="ota-muted">- people who aren't full admins</small></h2>
