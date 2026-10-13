@@ -666,8 +666,8 @@ export function createPricingModule({ store, findDistributor = async () => null,
     const r = await store.publish(list.id, actorOf(req), from, to, rangesOverlap);
     if (!r.ok) throw new Bad(r.error, 409);
     await audit(req, "publish", "price_list", list.id,
-      `"${list.name}" published from ${from.toISOString()}${r.endedListId ? `, replacing #${r.endedListId}` : ""}`);
-    res.json({ ok: true, effectiveFrom: from, endedListId: r.endedListId });
+      `"${list.name}" published from ${from.toISOString()}${r.endedListId ? `, replacing v${r.endedVersion}` : ""}`);
+    res.json({ ok: true, effectiveFrom: from, endedListId: r.endedListId, endedVersion: r.endedVersion });
   }));
 
   // Ends a live list now, or cancels one not started yet. With no list in

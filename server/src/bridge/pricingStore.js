@@ -173,6 +173,15 @@ export async function ensurePricingSchema() {
   await pool.query(`ALTER TABLE pricing_quotes DROP CONSTRAINT IF EXISTS pricing_quotes_list_id_fkey`);
   await pool.query(`ALTER TABLE pricing_quotes ADD CONSTRAINT pricing_quotes_list_id_fkey
     FOREIGN KEY (list_id) REFERENCES price_lists(id) ON DELETE SET NULL`);
+  // The number people see (v1, v2...): the next after the highest one left,
+  // so deleting old versions doesn't leave the count running on (the
+  // internal id still does).
+  await pool.query(`ALTER TABLE price_lists ADD COLUMN IF NOT EXISTS version_no INTEGER`);
+  await pool.query(`
+    UPDATE price_lists p SET version_no = r.n + (SELECT COALESCE(MAX(version_no), 0) FROM price_lists)
+    FROM (SELECT id, row_number() OVER (ORDER BY id) AS n FROM price_lists WHERE version_no IS NULL) r
+    WHERE p.id = r.id
+  `);
   await pool.query(`ALTER TABLE price_lists DROP CONSTRAINT IF EXISTS price_lists_based_on_id_fkey`);
   await pool.query(`ALTER TABLE price_lists ADD CONSTRAINT price_lists_based_on_id_fkey
     FOREIGN KEY (based_on_id) REFERENCES price_lists(id) ON DELETE SET NULL`);
@@ -252,7 +261,7 @@ const num = (v) => (v === null || v === undefined ? null : Number(v));
 const productCols = `id, sku, name, category, role, kind, unit, hsn_sac AS "hsnSac", gst_bp AS "gstBp", description, active,
   sort_order AS "sortOrder", updated_by AS "updatedBy", updated_at AS "updatedAt"`;
 const variantCols = `id, product_id AS "productId", sku, name, attributes, active, sort_order AS "sortOrder"`;
-const listCols = `id, name, segment, status, effective_from AS "effectiveFrom", effective_to AS "effectiveTo", notes,
+const listCols = `id, version_no AS "versionNo", name, segment, status, effective_from AS "effectiveFrom", effective_to AS "effectiveTo", notes,
   based_on_id AS "basedOnId", created_by AS "createdBy", created_at AS "createdAt", submitted_by AS "submittedBy",
   submitted_at AS "submittedAt", approved_by AS "approvedBy", approved_at AS "approvedAt", published_by AS "publishedBy",
   published_at AS "publishedAt", reject_reason AS "rejectReason"`;
@@ -404,8 +413,10 @@ export const pgPricingStore = {
    */
   async createDraft({ name, segment, notes, basedOnId }, by) {
     return tx(async (c) => {
+      await c.query(`SELECT pg_advisory_xact_lock(hashtext('price_lists_version'))`);
       const { rows } = await c.query(
-        `INSERT INTO price_lists (name, segment, notes, based_on_id, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        `INSERT INTO price_lists (name, segment, notes, based_on_id, created_by, version_no)
+         VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(version_no), 0) + 1 FROM price_lists)) RETURNING id`,
         [name, segment, notes, basedOnId, by]
       );
       const id = rows[0].id;
@@ -545,7 +556,7 @@ export const pgPricingStore = {
         // A list that started earlier is replaced from the new start date.
         const replaceable = new Date(o.effectiveFrom) < new Date(effectiveFrom);
         if (!replaceable || ended) {
-          return { ok: false, error: `Dates overlap "${o.name}" (#${o.id}) - change the dates or cancel that list first` };
+          return { ok: false, error: `Dates overlap "${o.name}" (v${o.versionNo}) - change the dates or cancel that list first` };
         }
         ended = o;
       }
@@ -554,7 +565,7 @@ export const pgPricingStore = {
         `UPDATE price_lists SET status = 'published', effective_from = $2, effective_to = $3, published_by = $4, published_at = now() WHERE id = $1`,
         [id, effectiveFrom, effectiveTo, by]
       );
-      return { ok: true, endedListId: ended?.id ?? null };
+      return { ok: true, endedListId: ended?.id ?? null, endedVersion: ended?.versionNo ?? null };
     });
   },
 

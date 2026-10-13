@@ -567,7 +567,7 @@ function renderLists() {
   $("listsBody").innerHTML = lists.length ? lists.map((l) => {
     const st = listStatus(l);
     return `<tr class="pr-click ${editing?.list.id === l.id ? "pr-selected" : ""}" data-id="${l.id}">
-      <td>${l.id}</td><td><b>${esc(l.name)}</b>${l.notes ? `<br><small class="ota-muted">${esc(l.notes)}</small>` : ""}</td>
+      <td>v${l.versionNo ?? l.id}</td><td><b>${esc(l.name)}</b>${l.notes ? `<br><small class="ota-muted">${esc(l.notes)}</small>` : ""}</td>
       <td><span class="pr-pill ${st}">${STATUS_LABEL[st] || st}</span>${l.expiresSoon ? " ⚠️" : ""}</td>
       <td>${l.effectiveFrom ? fmtDate(l.effectiveFrom) : "–"}</td><td>${l.effectiveFrom ? fmtUntil(l.effectiveTo) : "–"}</td>
       <td class="num">${l.itemCount}</td><td>${esc(l.createdBy || "")}<br><small class="ota-muted">${fmtDate(l.createdAt)}</small></td>
@@ -610,7 +610,7 @@ function renderEditor() {
   const l = editing.list;
   const st = listStatus(l);
   const draft = isDraft();
-  $("edTitle").innerHTML = `#${l.id} ${esc(l.name)} <span class="pr-pill ${st}">${STATUS_LABEL[st] || st}</span>
+  $("edTitle").innerHTML = `v${l.versionNo ?? l.id} ${esc(l.name)} <span class="pr-pill ${st}">${STATUS_LABEL[st] || st}</span>
     ${editing.compareWith ? `<small class="ota-muted">compared with "${esc(editing.compareWith.name)}" (in force now)</small>` : ""}`;
   $("edName").value = l.name;
   $("edFrom").value = isoFromInput(l.effectiveFrom);
@@ -721,7 +721,7 @@ async function listAction(a, btn) {
       const when = from <= Date.now() ? "right now" : `on ${fmtDateTime(l.effectiveFrom)}`;
       if (!confirm(`Publish "${l.name}"?\n\nThese prices take effect ${when}${current.list && current.list.id !== l.id ? `, replacing "${current.list.name}" from then` : ""}.\nDistributors see them in the Irrigo Admin app.`)) return;
       const r = await post(`/pricing/admin/lists/${l.id}/publish`);
-      showMsg("ok", `"${l.name}" published${r.endedListId ? ` - list #${r.endedListId} ends when it starts` : ""}.`);
+      showMsg("ok", `"${l.name}" published${r.endedListId ? ` - v${r.endedVersion ?? r.endedListId} ends when it starts` : ""}.`);
     } else if (a === "end") {
       const sched = listStatus(l) === "scheduled";
       if (!confirm(sched ? `Cancel the scheduled list "${l.name}"?` : `End "${l.name}" now?\n\nWith no list in force, NO new quotes can be made until another list is published.`)) return;

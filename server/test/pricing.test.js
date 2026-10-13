@@ -416,6 +416,12 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(kept.listId, null);
     assert.equal(kept.lines[0].unitPrice, P(1500));
 
+    // Version numbers: after deleting every list, the next one is v1 again
+    for (const l of (await call(OWNER, "/pricing/admin/lists")).body.lists) await call(OWNER, `/pricing/admin/lists/${l.id}`, "DELETE");
+    const { id: fresh } = (await call(OWNER, "/pricing/admin/lists", "POST", { name: "Fresh start" })).body;
+    assert.equal((await call(OWNER, `/pricing/admin/lists/${fresh}`)).body.list.versionNo, 1);
+    assert.ok(fresh > 1);   // the internal id keeps counting
+
     // Audit log: every step recorded, and the database refuses edits
     const log = (await call(OWNER, "/pricing/admin/audit?search=publish")).body;
     assert.ok(log.total >= 3);
