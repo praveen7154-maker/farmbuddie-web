@@ -551,8 +551,12 @@ export const pgPricingStore = {
       const { rows: others } = await c.query(
         `SELECT ${listCols} FROM price_lists WHERE status = 'published' AND segment = $1 AND id <> $2`, [list.segment, id]);
       let ended = null;
+      const replaced = [];
       for (const o of others) {
         if (!overlaps(effectiveFrom, effectiveTo, o.effectiveFrom, o.effectiveTo)) continue;
+        // "Edit prices" on a list that hasn't started yet: the new version
+        // made from it takes its place (the old one is cancelled).
+        if (o.id === list.basedOnId && new Date(o.effectiveFrom) >= new Date(effectiveFrom)) { replaced.push(o); continue; }
         // A list that started earlier is replaced from the new start date.
         const replaceable = new Date(o.effectiveFrom) < new Date(effectiveFrom);
         if (!replaceable || ended) {
@@ -561,11 +565,12 @@ export const pgPricingStore = {
         ended = o;
       }
       if (ended) await c.query(`UPDATE price_lists SET effective_to = $2 WHERE id = $1`, [ended.id, effectiveFrom]);
+      for (const o of replaced) await c.query(`UPDATE price_lists SET status = 'cancelled' WHERE id = $1`, [o.id]);
       await c.query(
         `UPDATE price_lists SET status = 'published', effective_from = $2, effective_to = $3, published_by = $4, published_at = now() WHERE id = $1`,
         [id, effectiveFrom, effectiveTo, by]
       );
-      return { ok: true, endedListId: ended?.id ?? null, endedVersion: ended?.versionNo ?? null };
+      return { ok: true, endedListId: ended?.id ?? replaced[0]?.id ?? null, endedVersion: ended?.versionNo ?? replaced[0]?.versionNo ?? null };
     });
   },
 

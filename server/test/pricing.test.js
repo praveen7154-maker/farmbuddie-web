@@ -376,6 +376,15 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     r = await call(OWNER, `/pricing/admin/lists/${v6}/publish`, "POST");
     assert.equal(r.status, 409);
     assert.match(r.body.error, /overlap "Own"/);
+    // ...but "Edit prices" on that scheduled list: a copy made from it, same start, replaces it
+    const { id: v7 } = (await call(OWNER, "/pricing/admin/lists", "POST", { name: "Own", basedOnId: v5 })).body;
+    await call(OWNER, `/pricing/admin/lists/${v7}`, "PUT", { name: "Own", effectiveFrom: "2027-02-01T00:00:00+05:30" });
+    await call(OWNER, `/pricing/admin/lists/${v7}/submit`, "POST");
+    await call(OWNER, `/pricing/admin/lists/${v7}/approve`, "POST");
+    r = await call(OWNER, `/pricing/admin/lists/${v7}/publish`, "POST");
+    assert.equal(r.status, 200);
+    assert.equal(r.body.endedListId, v5);
+    assert.equal((await call(OWNER, `/pricing/admin/lists/${v5}`)).body.list.status, "cancelled");
 
     // Catalogue edits
     r = await call(OWNER, "/pricing/admin/products", "POST", { sku: "fb-hub", name: "Dup", category: "controller" });

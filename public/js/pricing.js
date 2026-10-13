@@ -639,8 +639,11 @@ function renderEditorActions() {
   const l = editing.list;
   const st = listStatus(l);
   const b = [];
+  // One click for a quick price update (when a second approver isn't required).
+  const quick = can("approver") && !settings?.requireSecondApprover;
   if (l.status === "draft" && can("editor")) {
-    b.push(`<button class="pr-btn go" data-a="save">💾 Save changes</button>`);
+    if (quick) b.push(`<button class="pr-btn go" data-a="quickPublish">🚀 Save &amp; publish now</button>`);
+    b.push(`<button class="pr-btn ${quick ? "" : "go"}" data-a="save">💾 Save changes</button>`);
     b.push(`<button class="pr-btn" data-a="submit">📨 Submit for approval</button>`);
     b.push(`<button class="pr-btn danger" data-a="delete">Delete draft</button>`);
   }
@@ -651,6 +654,9 @@ function renderEditorActions() {
   if (l.status === "approved" && can("approver")) {
     b.push(`<button class="pr-btn go" data-a="publish">🚀 Publish</button>`);
     b.push(`<button class="pr-btn danger" data-a="reject">↩ Send back to draft</button>`);
+  }
+  if (l.status === "published" && (st === "active" || st === "scheduled") && can("editor")) {
+    b.push(`<button class="pr-btn go" data-a="editLive">✏️ Edit prices</button>`);
   }
   if (l.status === "published" && (st === "active" || st === "scheduled") && can("approver")) {
     b.push(`<button class="pr-btn danger" data-a="end">${st === "scheduled" ? "Cancel this scheduled list" : "⛔ End these prices now"}</button>`);
@@ -698,6 +704,26 @@ async function listAction(a, btn) {
     if (a === "save") {
       await saveDraft();
       showMsg("ok", "Saved.");
+    } else if (a === "editLive") {
+      // Prices are never changed in place: a copy with the same name and
+      // end date, starting today (or when the original starts), opened for editing.
+      const from = new Date(l.effectiveFrom).getTime() > Date.now() ? l.effectiveFrom : fromInputIso(istYmd(Date.now()));
+      const { id } = await post("/pricing/admin/lists", { name: l.name, basedOnId: l.id, notes: l.notes || "" });
+      await put(`/pricing/admin/lists/${id}`, { name: l.name, notes: l.notes || "", effectiveFrom: from, effectiveTo: l.effectiveTo });
+      await Promise.all([loadLists(), loadCurrent()]);
+      renderStatus();
+      await openList(id);
+      showMsg("ok", `Editable copy of "${l.name}" made. Change the prices, then click "🚀 Save & publish now" - the old version is kept as history.`);
+      return;
+    } else if (a === "quickPublish") {
+      const from = readDetails().effectiveFrom;
+      const when = !from || new Date(from).getTime() <= Date.now() ? "right now" : `on ${fmtDateTime(from)}`;
+      if (!confirm(`Save and publish "${l.name}"?\n\nThe new prices take effect ${when}${current.list && current.list.id !== l.id ? `, replacing "${current.list.name}"` : ""}.\nDistributors see them in the Irrigo Admin app.`)) return;
+      await saveDraft();
+      await post(`/pricing/admin/lists/${l.id}/submit`);
+      await post(`/pricing/admin/lists/${l.id}/approve`);
+      const r = await post(`/pricing/admin/lists/${l.id}/publish`);
+      showMsg("ok", `"${l.name}" published${r.endedVersion ? ` - it replaces v${r.endedVersion}` : ""}.`);
     } else if (a === "submit") {
       await saveDraft();
       await post(`/pricing/admin/lists/${l.id}/submit`);
