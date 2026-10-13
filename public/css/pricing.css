@@ -181,3 +181,9 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .pr-modal-box h2#pmTitle { font-size: 24px; font-weight: 800; color: #14532d; margin: 0 40px 18px 0; line-height: 1.25; }
 .pr-modal-box .fb-btn-primary { font-size: 15px; padding: 11px 22px; }
 .pr-modal-box textarea { resize: vertical; min-height: 70px; line-height: 1.45; }
+/* Price list versions table: stays inside its card */
+.pr-lists td, .pr-lists th { padding: 10px 12px; }
+.pr-lists td:nth-child(4), .pr-lists td:nth-child(5) { white-space: nowrap; }
+.pr-lists td:nth-child(7), .pr-lists td:nth-child(8) { font-size: 13px; word-break: break-word; max-width: 190px; }
+.pr-lists td:last-child { width: 1%; white-space: nowrap; }
+.pr-scroll { overflow-x: auto; max-width: 100%; }
