@@ -994,6 +994,14 @@ $("csvImport").addEventListener("change", async (e) => {
 // PRODUCTS
 // =====================================================================
 
+// Sold only when the product AND the variant are active.
+function statusPill(p, vs) {
+  const on = vs.filter((v) => v.active).length;
+  if (!p.active || on === 0) return `<span class="pr-pill expired">Inactive</span>`;
+  if (on < vs.length) return `<span class="pr-pill submitted" title="Some variants are inactive">Active · ${on} of ${vs.length}</span>`;
+  return `<span class="pr-pill active">Active</span>`;
+}
+
 function renderProducts() {
   if (!catalog) return;
   const sel = (el, opts) => { if (el.options.length <= 1) el.insertAdjacentHTML("beforeend", opts); };
@@ -1016,7 +1024,7 @@ function renderProducts() {
       <td>${CAT_LABEL[p.category] || esc(p.category)}${p.role ? `<br><small class="ota-muted">${esc(ROLE_LABEL[p.role] || p.role)}</small>` : ""}</td>
       <td>${variantsOf(p.id).map((v) => `<span class="pr-chip ${v.active ? "" : "off"}">${esc(v.name)}</span>`).join("")}</td>
       <td>${acc || "–"}</td><td>${esc(p.hsnSac || "–")}</td><td>${pct(p.gstBp)}</td>
-      <td><span class="pr-pill ${p.active ? "active" : "expired"}">${p.active ? "Active" : "Inactive"}</span></td>
+      <td>${statusPill(p, variantsOf(p.id))}</td>
       <td><button class="pr-link">${can("editor") ? "Edit" : "View"}</button></td></tr>`;
   }).join("") : `<tr><td colspan="9" class="ota-muted">No products match.</td></tr>`;
   $("prodBody").querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", () => openProduct(Number(tr.dataset.id))));
@@ -1091,7 +1099,8 @@ function renderVariants() {
     <td><input type="number" class="pr-cell" data-f="channels" min="1" max="64" value="${esc(v.attributes?.channels ?? "")}" ${ro}></td>
     <td><select class="pr-cell" data-f="valveType" ${ro}>${typeOpts(v.attributes?.valveType)}</select></td>
     <td><input type="text" class="pr-cell" data-f="size" value="${esc(v.attributes?.size ?? v.attributes?.length ?? "")}" placeholder="2 inch / 5 m" ${ro}></td>
-    <td><input type="checkbox" data-f="active" ${v.active !== false ? "checked" : ""} ${ro}></td>
+    <td>${vs.length > 1 ? `<input type="checkbox" data-f="active" ${v.active !== false ? "checked" : ""} ${ro}>`
+      : `<input type="checkbox" data-f="active" ${pmProduct.active ? "checked" : ""} hidden><small class="ota-muted">as product</small>`}</td>
     <td>${ro ? "" : `<button class="pr-link" data-save>Save</button>`}${can("owner") && v.id && vs.length > 1 ? `<button class="pr-link danger" data-delv="${v.id}">Delete</button>` : ""}<span class="pr-hint" data-st></span></td></tr>`;
   $("pmVariants").innerHTML = vs.map(row).join("");
   wireVariantRows();

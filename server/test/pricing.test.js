@@ -388,6 +388,15 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(r.status, 200);
     assert.equal((await call(OWNER, `/pricing/admin/variants/${r.body.id}`, "PUT", { sku: "FB-VNS-8", name: "x" })).status, 409);
 
+    // One-variant product: the product's Active switch is the variant's too
+    const ant = cat.products.find((p) => p.sku === "FB-ANT");
+    await call(OWNER, `/pricing/admin/products/${ant.id}`, "PUT", { ...ant, active: false });
+    let cat2 = (await call(OWNER, "/pricing/admin/catalog")).body;
+    assert.equal(cat2.variants.find((v) => v.sku === "FB-ANT").active, false);
+    await call(OWNER, `/pricing/admin/products/${ant.id}`, "PUT", { ...ant, active: true });
+    cat2 = (await call(OWNER, "/pricing/admin/catalog")).body;
+    assert.equal(cat2.variants.find((v) => v.sku === "FB-ANT").active, true);
+
     // Deleting: a product (admin only) leaves every list; quotes keep their copy
     const sv = cat.products.find((p) => p.sku === "FB-SV24");
     assert.equal((await call("editor@farmbuddie.com", `/pricing/admin/products/${sv.id}`, "DELETE")).status, 403);

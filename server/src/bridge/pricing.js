@@ -393,7 +393,13 @@ export function createPricingModule({ store, findDistributor = async () => null,
     const p = productInput(req.body);
     if (await store.skuTaken(p.sku, id)) throw new Bad("That SKU is already used", 409);
     await store.updateProduct(id, p, actorOf(req));
-    await audit(req, "update", "product", id, `${p.sku} ${p.name}`, before, p);
+    // A product with one variant: its Active switch is the variant's too
+    // (there's no separate variant switch on screen for it).
+    const own = (await store.catalogue()).variants.filter((v) => v.productId === id);
+    if (own.length === 1 && own[0].active !== p.active) {
+      await store.updateVariant(own[0].id, { ...own[0], active: p.active }, actorOf(req));
+    }
+    await audit(req, "update", "product", id, `${p.sku} ${p.name}${before.active !== p.active ? (p.active ? " - made active" : " - made inactive") : ""}`, before, p);
     res.json({ ok: true });
   }));
 
