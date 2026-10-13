@@ -648,6 +648,7 @@ function renderEditorActions() {
     b.push(`<button class="pr-btn danger" data-a="end">${st === "scheduled" ? "Cancel this scheduled list" : "⛔ End these prices now"}</button>`);
   }
   if (can("editor")) b.push(`<button class="pr-btn" data-a="copy">📄 New version from this list</button>`);
+  if (l.status !== "draft" && can("owner")) b.push(`<button class="pr-btn danger" data-a="delete">🗑 Delete this version</button>`);
   if (l.status === "submitted" && !can("approver")) b.push(`<span class="ota-muted">Waiting for an approver.</span>`);
   $("edActions").innerHTML = b.join("");
   $("edActions").querySelectorAll("[data-a]").forEach((btn) => btn.addEventListener("click", () => listAction(btn.dataset.a, btn)));
@@ -694,13 +695,18 @@ async function listAction(a, btn) {
       await post(`/pricing/admin/lists/${l.id}/submit`);
       showMsg("ok", `"${l.name}" sent for approval.`);
     } else if (a === "delete") {
-      if (!confirm(`Delete the draft "${l.name}"?`)) return;
-      await api(`/pricing/admin/lists/${l.id}`, { method: "DELETE" });
+      const live = listStatus(l);
+      const warn = l.status === "draft" ? "" : live === "active"
+        ? "\n\n⚠️ These are the prices IN FORCE now. After deleting, no new quotes can be made until another list is published."
+        : "\n\nIts price history is lost. Saved quotes keep their own prices.";
+      if (!confirm(`Delete "${l.name}" permanently?${warn}`)) return;
+      const r = await api(`/pricing/admin/lists/${l.id}`, { method: "DELETE" });
       editing = null;
       $("editor").hidden = true;
-      showMsg("ok", "Draft deleted.");
-      await loadLists();
+      showMsg("ok", `"${l.name}" deleted.${r.quotes ? ` ${r.quotes} saved quote(s) keep their prices.` : ""}`);
+      await Promise.all([loadLists(), loadCurrent()]);
       renderStatus();
+      renderCalcSetup();
       return;
     } else if (a === "approve") {
       await post(`/pricing/admin/lists/${l.id}/approve`);
@@ -772,17 +778,14 @@ function renderItems() {
     const money = (k) => (draft
       ? `<input class="pr-money" data-k="${k}" value="${esc(paiseInput(r[k]))}" inputmode="decimal" ${k === "mrp" && r.kind === "service" ? 'placeholder="n/a"' : ""}>${was(k)}`
       : `${rs(r[k])}${was(k)}`);
-    const disc = draft
-      ? `<span class="pr-dt"><input class="pr-money" data-k="maxDiscountValue" value="${esc(r.maxDiscountType === "pct" ? String((r.maxDiscountValue ?? 0) / 100) : paiseInput(r.maxDiscountValue))}" inputmode="decimal">
-         <select data-k="maxDiscountType"><option value="pct" ${r.maxDiscountType === "pct" ? "selected" : ""}>%</option><option value="amt" ${r.maxDiscountType === "amt" ? "selected" : ""}>₹</option></select></span>`
-      : (r.maxDiscountType === "pct" ? pct(r.maxDiscountValue ?? 0) : rs(r.maxDiscountValue));
+    const disc = `<span data-c="disc"></span>`;
     return `<tr data-v="${r.variantId}" class="${r.active ? "" : "off"}">
       <td><input type="checkbox" data-k="active" ${r.active ? "checked" : ""} ${draft ? "" : "disabled"}></td>
       <td class="pr-prod"><b>${esc(r.productName)}</b><small>${r.variantName !== "Standard" ? `${esc(r.variantName)} · ` : ""}${esc(r.sku)}${r.catalogueActive ? "" : " · ⚠️ inactive in catalogue"}</small></td>
       <td class="num pr-cost-col">${money("costPrice")}</td>
       <td class="num">${money("mrp")}</td><td class="num">${money("distributorPrice")}</td><td class="num">${money("basePrice")}</td>
       <td class="num">${money("minPrice")}</td><td class="num">${money("maxPrice")}</td>
-      <td>${disc}</td>
+      <td class="num">${disc}</td>
       <td>${draft ? `<select data-k="gstBp">${gstOpts(r.gstBp)}</select>` : pct(r.gstBp)}</td>
       <td class="num" data-c="floor"></td><td class="num" data-c="margin"></td><td class="num pr-cost-col" data-c="profit"></td><td class="pr-checkcell" data-c="check"></td></tr>`;
   }).join("") : `<tr><td colspan="14" class="ota-muted">No rows match.</td></tr>`;
@@ -820,6 +823,7 @@ function onCell(tr, el) {
     el.classList.toggle("changed", !!r.current && r.current[k] !== r[k]);
   }
   autoFill(tr, r, k);
+  syncDiscount(r);
   editing.dirty.set(r.variantId, r);
   refreshRow(tr);
 }
@@ -842,6 +846,21 @@ function autoFill(tr, r, k) {
   if ((k === "maxPrice" || k === "minPrice") && box(k)) delete box(k).dataset.auto;
 }
 
+// Max discount = farmer selling price - minimum price, always (the server
+// works it out the same way when saving).
+function syncDiscount(r) {
+  if (Number.isInteger(r.basePrice) && Number.isInteger(r.minPrice)) {
+    r.maxDiscountType = "amt";
+    r.maxDiscountValue = Math.max(0, r.basePrice - r.minPrice);
+  }
+}
+function discountHtml(r) {
+  if (!Number.isInteger(r.basePrice) || !Number.isInteger(r.minPrice)) return "–";
+  const d = R.maxDiscountPaise(r);
+  if (d <= 0) return `<span class="ota-muted">No discount</span>`;
+  return `${rs(d)}<span class="pr-hint">${Math.round(d * 1000 / r.basePrice) / 10}%</span>`;
+}
+
 function readDiscount(r, s) {
   const t = String(s ?? "").trim();
   if (t === "") return 0;
@@ -853,6 +872,8 @@ function refreshRow(tr) {
   const r = rowOf(tr);
   const cell = (c) => tr.querySelector(`[data-c="${c}"]`);
   if (!r.active) { cell("floor").textContent = "–"; cell("margin").textContent = "–"; cell("check").innerHTML = `<span class="ota-muted">Not on sale</span>`; return; }
+  const dc = tr.querySelector('[data-c="disc"]');
+  if (dc) dc.innerHTML = discountHtml(r);
   const pc = tr.querySelector('[data-c="profit"]');
   if (pc) pc.innerHTML = r.active ? profitHtml(R.ourProfit(r)) : "–";
   if ([r.mrp, r.distributorPrice, r.basePrice, r.minPrice, r.maxPrice].every((v) => v === null)) {
@@ -887,6 +908,7 @@ $("bkApply").addEventListener("click", () => {
     let v = Math.round(r[k] * (100 + p) / 100);
     if (step) v = Math.round(v / step) * step;
     r[k] = Math.max(0, v);
+    syncDiscount(r);
     editing.dirty.set(r.variantId, r);
   }
   renderItems();
@@ -957,6 +979,7 @@ $("csvImport").addEventListener("change", async (e) => {
     if (get("gst_percent") !== undefined) upd.gstBp = Math.round(Number(get("gst_percent")) * 100);
     if ([...MONEY, "maxDiscountValue"].some((k) => Number.isNaN(upd[k])) || !R.GST_RATES_BP.includes(upd.gstBp)) { bad.push(r.sku); continue; }
     Object.assign(r, upd);
+    syncDiscount(r);
     editing.dirty.set(r.variantId, r);
     n++;
   }
@@ -1020,6 +1043,7 @@ function openProduct(id) {
   $("prodModal").querySelectorAll("input, select").forEach((el) => { el.disabled = ro; });
   $("pmStatus").textContent = pmProduct ? "" : "Save the product first, then add variants and accessories.";
   $("pmMore").hidden = !pmProduct;
+  $("pmDelete").hidden = !pmProduct || !can("owner");
   if (pmProduct) {
     pmAccessories = catalog.accessories.filter((a) => a.productId === pmProduct.id).map((a) => ({ ...a }));
     renderVariants();
@@ -1027,6 +1051,18 @@ function openProduct(id) {
   }
   openModal("prodModal");
 }
+
+$("pmDelete").addEventListener("click", async () => {
+  if (!confirm(`Delete "${pmProduct.name}" and all its variants permanently?\n\nIt is removed from every price list too (saved quotes keep it).\nTo stop selling it for now, untick "Active" instead.`)) return;
+  try {
+    const r = await api(`/pricing/admin/products/${pmProduct.id}`, { method: "DELETE" });
+    closeModal("prodModal");
+    showMsg("ok", `"${pmProduct.name}" deleted${r.lists ? ` - removed from ${r.lists} price list(s)` : ""}.`);
+    await Promise.all([loadCatalog(), loadLists(), loadCurrent()]);
+    renderStatus();
+    renderCalcSetup();
+  } catch (err) { $("pmStatus").textContent = `✘ ${err.message}`; }
+});
 
 $("pmSave").addEventListener("click", async () => {
   const body = {
@@ -1056,11 +1092,20 @@ function renderVariants() {
     <td><select class="pr-cell" data-f="valveType" ${ro}>${typeOpts(v.attributes?.valveType)}</select></td>
     <td><input type="text" class="pr-cell" data-f="size" value="${esc(v.attributes?.size ?? v.attributes?.length ?? "")}" placeholder="2 inch / 5 m" ${ro}></td>
     <td><input type="checkbox" data-f="active" ${v.active !== false ? "checked" : ""} ${ro}></td>
-    <td>${ro ? "" : `<button class="pr-link" data-save>Save</button>`}<span class="pr-hint" data-st></span></td></tr>`;
+    <td>${ro ? "" : `<button class="pr-link" data-save>Save</button>`}${can("owner") && v.id && vs.length > 1 ? `<button class="pr-link danger" data-delv="${v.id}">Delete</button>` : ""}<span class="pr-hint" data-st></span></td></tr>`;
   $("pmVariants").innerHTML = vs.map(row).join("");
   wireVariantRows();
 }
 function wireVariantRows() {
+  $("pmVariants").querySelectorAll("[data-delv]").forEach((b) => b.onclick = async () => {
+    const tr = b.closest("tr");
+    if (!confirm(`Delete the variant "${tr.querySelector('[data-f="name"]').value}" permanently? It is removed from every price list too.`)) return;
+    try {
+      await api(`/pricing/admin/variants/${b.dataset.delv}`, { method: "DELETE" });
+      await loadCatalog();
+      renderVariants();
+    } catch (err) { tr.querySelector("[data-st]").textContent = `✘ ${err.message}`; }
+  });
   $("pmVariants").querySelectorAll("[data-save]").forEach((b) => b.onclick = async () => {
     const tr = b.closest("tr");
     const f = (k) => tr.querySelector(`[data-f="${k}"]`);
@@ -1138,11 +1183,16 @@ async function loadAudit(page) {
   try {
     const r = await api(`/pricing/admin/audit?page=${page}${search ? `&search=${encodeURIComponent(search)}` : ""}`);
     auditEntries = r.entries;
+    const owner = can("owner");
     $("auditBody").innerHTML = r.entries.length ? r.entries.map((e, i) => `<tr>
+      ${owner ? `<td><input type="checkbox" data-aid="${e.id}"></td>` : ""}
       <td>${fmtDateTime(e.at)}</td><td>${esc(e.actor)}</td><td><span class="pr-chip">${esc(e.action)}</span></td>
       <td>${esc(e.entity)}${e.entityId ? ` #${esc(e.entityId)}` : ""}</td><td>${esc(e.summary || "")}</td>
       <td>${e.before || e.after ? `<button class="pr-link" data-i="${i}">Details</button>` : ""}</td></tr>`).join("")
-      : `<tr><td colspan="6" class="ota-muted">Nothing logged${search ? " matches" : " yet"}.</td></tr>`;
+      : `<tr><td colspan="7" class="ota-muted">Nothing logged${search ? " matches" : " yet"}.</td></tr>`;
+    $("auditAll").checked = false;
+    $("auditDelSel").disabled = true;
+    $("auditBody").querySelectorAll("[data-aid]").forEach((c) => c.addEventListener("change", auditSelChanged));
     $("auditBody").querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => {
       const e = auditEntries[Number(b.dataset.i)];
       $("amBody").innerHTML = `<h2>${esc(e.action)} ${esc(e.entity)}</h2><p>${esc(e.summary || "")}<br><small class="ota-muted">${fmtDateTime(e.at)} · ${esc(e.actor)} · ${esc(e.ip || "")}</small></p>
@@ -1154,6 +1204,22 @@ async function loadAudit(page) {
   } catch (err) { fail(err); }
 }
 $("auditSearch").addEventListener("input", debounce(() => loadAudit(1), 350));
+const auditSelected = () => [...$("auditBody").querySelectorAll("[data-aid]:checked")].map((c) => c.dataset.aid);
+function auditSelChanged() { $("auditDelSel").disabled = auditSelected().length === 0; }
+$("auditAll").addEventListener("change", (e) => {
+  $("auditBody").querySelectorAll("[data-aid]").forEach((c) => { c.checked = e.target.checked; });
+  auditSelChanged();
+});
+async function deleteAudit(body, what) {
+  if (!confirm(`Delete ${what} permanently?\n\nA note that you deleted it stays in the log.`)) return;
+  try {
+    const r = await post("/pricing/admin/audit/delete", body);
+    showMsg("ok", `${r.deleted} audit entr${r.deleted === 1 ? "y" : "ies"} deleted.`);
+    loadAudit(1);
+  } catch (err) { fail(err); }
+}
+$("auditDelSel").addEventListener("click", () => { const ids = auditSelected(); deleteAudit({ ids }, `${ids.length} selected entr${ids.length === 1 ? "y" : "ies"}`); });
+$("auditDelAll").addEventListener("click", () => deleteAudit({ all: true }, "the WHOLE audit log"));
 
 // =====================================================================
 // SETTINGS

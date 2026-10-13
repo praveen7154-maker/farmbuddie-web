@@ -117,7 +117,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
     return map;
   }
   async function withProfit(req, q) {
-    if (!q || !seesCost(req)) return q;
+    if (!q || !seesCost(req) || !q.listId) return q;
     const costs = await costsOf(q.listId);
     return { ...q, profit: quoteProfit(q.lines, (v) => costs.get(v), !!q.distributorId) };
   }
@@ -418,6 +418,28 @@ export function createPricingModule({ store, findDistributor = async () => null,
     res.json({ ok: true });
   }));
 
+  // Deleting: admins only. Gone from the catalogue and from every price list;
+  // saved quotes keep their own copy. To stop selling for now, use Inactive.
+  staff.delete("/products/:id", need("owner"), wrap(async (req, res) => {
+    const id = int(req.params.id, "Product", 1, 2_000_000_000);
+    const before = await store.getProduct(id);
+    if (!before) throw new Bad("Product not found", 404);
+    const r = await store.deleteProduct(id);
+    await audit(req, "delete", "product", id, `${before.sku} ${before.name} deleted (was in ${r.lists} price list(s))`, before);
+    res.json({ ok: true, lists: r.lists });
+  }));
+
+  staff.delete("/variants/:id", need("owner"), wrap(async (req, res) => {
+    const id = int(req.params.id, "Variant", 1, 2_000_000_000);
+    const before = await store.getVariant(id);
+    if (!before) throw new Bad("Variant not found", 404);
+    const { variants } = await store.catalogue();
+    if (variants.filter((v) => v.productId === before.productId).length <= 1) throw new Bad("This is the product's only variant - delete the product instead", 409);
+    const r = await store.deleteVariant(id);
+    await audit(req, "delete", "variant", id, `${before.sku} ${before.name} deleted (was in ${r.lists} price list(s))`, before);
+    res.json({ ok: true, lists: r.lists });
+  }));
+
   staff.put("/products/:id/accessories", need("editor"), wrap(async (req, res) => {
     const productId = int(req.params.id, "Product", 1, 2_000_000_000);
     if (!(await store.getProduct(productId))) throw new Bad("Product not found", 404);
@@ -496,6 +518,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
     if (basedOnId && !(await store.getList(basedOnId))) throw new Bad("The list to copy wasn't found");
     if (req.body?.basedOnId === undefined) basedOnId = (await currentLists()).active?.id || null;
     const id = await store.createDraft({ name, segment: SEGMENT, notes, basedOnId }, actorOf(req));
+    await store.normalizeDiscounts(id);   // a copy of an older list may have a % discount
     await audit(req, "create", "price_list", id, `Draft "${name}"${basedOnId ? ` copied from #${basedOnId}` : ""}`);
     res.json({ id });
   }));
@@ -538,7 +561,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
         distributorPrice: money(i.distributorPrice, "Distributor price"),
         // Left out (an older client) = keep what's saved.
         costPrice: i.costPrice === undefined ? (before.get(variantId)?.costPrice ?? null) : money(i.costPrice, "Our cost"),
-        basePrice: money(i.basePrice, "Selling price"),
+        basePrice: money(i.basePrice, "Farmer selling price"),
         minPrice: money(i.minPrice, "Minimum price"),
         maxPrice: money(i.maxPrice, "Maximum price"),
         maxDiscountType: type,
@@ -546,6 +569,13 @@ export function createPricingModule({ store, findDistributor = async () => null,
         gstBp
       };
     });
+    // Max discount is always worked out: farmer selling price - minimum price.
+    for (const i of items) {
+      if (Number.isSafeInteger(i.basePrice) && Number.isSafeInteger(i.minPrice)) {
+        i.maxDiscountType = "amt";
+        i.maxDiscountValue = Math.max(0, i.basePrice - i.minPrice);
+      }
+    }
     const changed = items.filter((i) => {
       const b = before.get(i.variantId);
       return !b || Object.keys(i).some((k) => i[k] !== b[k]);
@@ -557,11 +587,15 @@ export function createPricingModule({ store, findDistributor = async () => null,
     res.json({ ok: true, changed: changed.length });
   }));
 
+  // A draft: any editor. Any other version (even the one in force): an
+  // admin only - with no list in force, new quotes stop until one is published.
   staff.delete("/lists/:id", need("editor"), wrap(async (req, res) => {
     const list = await loadList(req);
-    if (!(await store.deleteDraft(list.id))) throw new Bad("Only a draft can be deleted", 409);
-    await audit(req, "delete", "price_list", list.id, `Draft "${list.name}"`);
-    res.json({ ok: true });
+    if (list.status !== "draft" && req.pricingRole !== "owner") throw new Bad("Only an admin can delete a list that isn't a draft", 403);
+    const r = await store.deleteList(list.id);
+    if (!r) throw new Bad("Price list not found", 404);
+    await audit(req, "delete", "price_list", list.id, `"${list.name}" (${list.status}) deleted${r.quotes ? ` - ${r.quotes} quote(s) keep their prices` : ""}`, list);
+    res.json({ ok: true, quotes: r.quotes });
   }));
 
   // Everything that must hold before a list goes for approval / live.
@@ -585,6 +619,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
   staff.post("/lists/:id/submit", need("editor"), wrap(async (req, res) => {
     const list = await loadList(req);
     if (list.status !== "draft") throw new Bad("Only a draft can be submitted", 409);
+    await store.normalizeDiscounts(list.id);
     const problems = await readinessProblems(list);
     if (problems.length) return res.status(400).json({ error: `Fix ${problems.length} problem(s) first`, problems });
     if (!(await store.setStatus(list.id, "draft", "submitted", actorOf(req), { rejectReason: null }))) throw new Bad("Only a draft can be submitted", 409);
@@ -646,6 +681,18 @@ export function createPricingModule({ store, findDistributor = async () => null,
     const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 60) || null : null;
     const { entries, total } = await store.auditLog(search, PAGE, (page - 1) * PAGE);
     res.json({ entries: seesCost(req) ? entries : noCost(entries), total, page, pageSize: PAGE });
+  }));
+
+  // body: { ids: [..] } or { all: true }. Admins only; the deletion itself
+  // is logged as the first entry of what's left.
+  staff.post("/audit/delete", need("owner"), wrap(async (req, res) => {
+    const all = req.body?.all === true;
+    const ids = all ? null : (Array.isArray(req.body?.ids) ? req.body.ids : [])
+      .map((x) => String(x)).filter((x) => /^\d{1,18}$/.test(x)).slice(0, 500);
+    if (!all && !ids.length) throw new Bad("Choose the entries to delete");
+    const n = await store.deleteAudit(ids);
+    await audit(req, "delete", "audit_log", null, all ? `Whole audit log deleted (${n} entries)` : `${n} audit entr${n === 1 ? "y" : "ies"} deleted`);
+    res.json({ ok: true, deleted: n });
   }));
 
   staff.get("/settings", wrap(async (req, res) => {

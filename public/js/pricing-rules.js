@@ -59,7 +59,7 @@ const withGst = (paise, gstBp) => Math.round(paise * (10000 + gstBp) / 10000);
  */
 export function priceProblems(item) {
   const errors = [];
-  const money = { mrp: "MRP", distributorPrice: "Distributor price", basePrice: "Selling price", minPrice: "Minimum price", maxPrice: "Maximum price" };
+  const money = { mrp: "MRP", distributorPrice: "Distributor price", basePrice: "Farmer selling price", minPrice: "Minimum price", maxPrice: "Maximum price" };
   for (const [k, label] of Object.entries(money)) {
     const v = item[k];
     if (k === "mrp" && item.kind === "service" && (v === null || v === undefined)) continue;
@@ -77,11 +77,11 @@ export function priceProblems(item) {
   if (errors.length) return errors;
 
   const { mrp, distributorPrice: dp, basePrice: base, minPrice: min, maxPrice: max } = item;
-  if (base <= 0) errors.push("Selling price must be more than zero");
+  if (base <= 0) errors.push("Farmer selling price must be more than zero");
   if (dp > min) errors.push(`Minimum price (${rupees(min)}) is below the distributor price (${rupees(dp)}) - the distributor would sell at a loss`);
-  if (min > base) errors.push(`Minimum price (${rupees(min)}) is above the selling price (${rupees(base)})`);
-  if (base > max) errors.push(`Selling price (${rupees(base)}) is above the maximum price (${rupees(max)})`);
-  if (item.maxDiscountType === "amt" && item.maxDiscountValue > base) errors.push("Max discount is more than the selling price");
+  if (min > base) errors.push(`Minimum price (${rupees(min)}) is above the farmer selling price (${rupees(base)})`);
+  if (base > max) errors.push(`Farmer selling price (${rupees(base)}) is above the maximum price (${rupees(max)})`);
+  if (item.maxDiscountType === "amt" && item.maxDiscountValue > base) errors.push("Max discount is more than the farmer selling price");
   if (mrp !== null && mrp !== undefined && withGst(max, item.gstBp) > mrp) {
     errors.push(`Maximum price + GST (${rupees(withGst(max, item.gstBp))}) is more than the MRP (${rupees(mrp)})`);
   }

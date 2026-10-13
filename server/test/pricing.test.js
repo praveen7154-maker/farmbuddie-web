@@ -18,13 +18,13 @@ test("price row rules", () => {
   assert.match(R.priceProblems(row({ basePrice: null }))[0], /missing/);
   assert.match(R.priceProblems(row({ basePrice: 10.5 }))[0], /negative/);   // not whole paise
   assert.match(R.priceProblems(row({ minPrice: P(900) })).join(), /loss/);   // floor below distributor price
-  assert.match(R.priceProblems(row({ minPrice: P(1550) })).join(), /above the selling price/);
+  assert.match(R.priceProblems(row({ minPrice: P(1550) })).join(), /above the farmer selling price/);
   assert.match(R.priceProblems(row({ maxPrice: P(1400) })).join(), /above the maximum/);
   // ₹1,700 + 18% = ₹2,006 > MRP ₹2,000
   assert.match(R.priceProblems(row({ maxPrice: P(1700) })).join(), /more than the MRP/);
   assert.match(R.priceProblems(row({ gstBp: 1500 })).join(), /GST slab/);
   assert.match(R.priceProblems(row({ maxDiscountValue: 10001 })).join(), /over 100%/);
-  assert.match(R.priceProblems(row({ maxDiscountType: "amt", maxDiscountValue: P(1600) })).join(), /more than the selling price/);
+  assert.match(R.priceProblems(row({ maxDiscountType: "amt", maxDiscountValue: P(1600) })).join(), /more than the farmer selling price/);
   // A service has no MRP.
   assert.deepEqual(R.priceProblems(row({ kind: "service", mrp: null })), []);
   assert.match(R.priceProblems(row({ kind: "goods", mrp: null })).join(), /MRP is missing/);
@@ -207,7 +207,7 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.ok(r.body.problems.length >= 16);
 
     const priced = {
-      "FB-HUB": [2000, 1000, 1500, 1200, 1600], "FB-MN": [1200, 600, 900, 700, 1000],
+      "FB-HUB": [2000, 1000, 1500, 1350, 1600], "FB-MN": [1200, 600, 900, 700, 1000],
       "FB-VNS-4": [1200, 500, 800, 600, 1000], "FB-VNS-8": [1800, 800, 1300, 1000, 1500],
       "FB-SV24": [600, 250, 400, 300, 500], "FB-TR2A": [500, 200, 300, 250, 400], "FB-ANT": [300, 100, 200, 150, 250]
     };
@@ -216,7 +216,7 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
       if (!p) return { variantId: i.variantId, active: false, gstBp: i.gstBp };
       const [mrp, dp, b, mn, mx] = p.map(P);
       return { variantId: i.variantId, active: true, mrp, distributorPrice: dp, basePrice: b, minPrice: mn, maxPrice: mx,
-        maxDiscountType: "pct", maxDiscountValue: 1000, gstBp: 1800, costPrice: P(mn * 0.5 / 100) };   // our cost = half the minimum
+        maxDiscountType: "pct", maxDiscountValue: 1000, gstBp: 1800, costPrice: Math.round(dp * 0.6) };   // our cost = 60% of the distributor price
     });
     // Negative and fractional values are refused outright
     assert.equal((await call(OWNER, `/pricing/admin/lists/${listId}/items`, "PUT", { items: [{ ...items[0], mrp: -5 }] })).status, 400);
@@ -244,6 +244,9 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(cur.items.length, 7);
     const hub = cur.items.find((i) => i.sku === "FB-HUB");
     assert.equal(hub.distributorPrice, P(1000));
+    // Max discount is worked out by the server: selling - minimum
+    assert.equal(hub.maxDiscountType, "amt");
+    assert.equal(hub.maxDiscountValue, P(150));
     // Our cost never reaches a distributor; the owner sees it with our profit
     assert.equal(hub.costPrice, undefined);
     assert.ok(!JSON.stringify(cur).includes("costPrice"));
@@ -278,8 +281,8 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(quote.profit, undefined);                      // not for the distributor
     assert.ok(!JSON.stringify(quote).includes("costPrice"));
     // The owner sees our profit on the distributor's quote: they buy at the distributor price
-    // hub 1000 - 600 + 2 x (600 - 350) = 900
-    assert.equal((await call(OWNER, `/pricing/quotes/${quote.id}`)).body.quote.profit.ourProfit, P(900));
+    // hub 1000 - 600 + 2 x (600 - 360) = 880
+    assert.equal((await call(OWNER, `/pricing/quotes/${quote.id}`)).body.quote.profit.ourProfit, P(880));
     // and on a direct preview: hub sold at 1500 -> 900 profit
     assert.equal((await call(OWNER, "/pricing/quote/preview", "POST", { lines: [{ variantId: vid("FB-HUB"), qty: 1 }] })).body.profit.ourProfit, P(900));
     // 15-day validity
@@ -385,11 +388,39 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(r.status, 200);
     assert.equal((await call(OWNER, `/pricing/admin/variants/${r.body.id}`, "PUT", { sku: "FB-VNS-8", name: "x" })).status, 409);
 
+    // Deleting: a product (admin only) leaves every list; quotes keep their copy
+    const sv = cat.products.find((p) => p.sku === "FB-SV24");
+    assert.equal((await call("editor@farmbuddie.com", `/pricing/admin/products/${sv.id}`, "DELETE")).status, 403);
+    r = await call(OWNER, `/pricing/admin/products/${sv.id}`, "DELETE");
+    assert.equal(r.status, 200);
+    assert.ok(r.body.lists >= 1);
+    assert.ok(!(await call(OWNER, "/pricing/admin/catalog")).body.products.some((p) => p.sku === "FB-SV24"));
+    // the only variant can't go alone
+    const mnVariant = cat.variants.find((v) => v.sku === "FB-MN");
+    assert.equal((await call(OWNER, `/pricing/admin/variants/${mnVariant.id}`, "DELETE")).status, 409);
+    // A whole published list (admin only); its quote stays, without the link
+    assert.equal((await call("editor@farmbuddie.com", `/pricing/admin/lists/${listId}`, "DELETE")).status, 403);
+    r = await call(OWNER, `/pricing/admin/lists/${listId}`, "DELETE");
+    assert.equal(r.status, 200);
+    assert.equal(r.body.quotes, 1);
+    const kept = (await call(OWNER, `/pricing/quotes/${quote.id}`)).body.quote;
+    assert.equal(kept.listId, null);
+    assert.equal(kept.lines[0].unitPrice, P(1500));
+
     // Audit log: every step recorded, and the database refuses edits
     const log = (await call(OWNER, "/pricing/admin/audit?search=publish")).body;
     assert.ok(log.total >= 3);
     await assert.rejects(pool.query(`UPDATE pricing_audit SET actor = 'x'`), /append-only/);
     await assert.rejects(pool.query(`DELETE FROM pricing_audit`), /append-only/);
+    // ...except an admin's delete, which is itself logged
+    const someIds = log.entries.slice(0, 2).map((e) => e.id);
+    assert.equal((await call("approver@farmbuddie.com", "/pricing/admin/audit/delete", "POST", { ids: someIds })).status, 403);
+    assert.equal((await call(OWNER, "/pricing/admin/audit/delete", "POST", { ids: someIds })).body.deleted, 2);
+    r = await call(OWNER, "/pricing/admin/audit/delete", "POST", { all: true });
+    assert.ok(r.body.deleted > 10);
+    const left = (await call(OWNER, "/pricing/admin/audit")).body;
+    assert.equal(left.total, 1);
+    assert.match(left.entries[0].summary, /Whole audit log deleted/);
   } finally {
     server.close();
     await pool.end();

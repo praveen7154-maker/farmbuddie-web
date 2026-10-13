@@ -190,7 +190,7 @@
       <span class="pr-bulk-tools pr-draft-only">
         <label class="ota-filter"><span>Bulk change</span>
           <select id="bkField">
-            <option value="distributorPrice">Distributor price</option><option value="basePrice">Selling price</option>
+            <option value="distributorPrice">Distributor price</option><option value="basePrice">Farmer selling price</option>
             <option value="minPrice">Minimum price</option><option value="maxPrice">Maximum price</option><option value="mrp">MRP</option>
             <option value="costPrice" class="pr-cost-col">Our cost</option>
           </select>
@@ -209,16 +209,16 @@
       <ol>
         <li><b>MRP</b> - the printed price <u>including GST</u>, e.g. ₹14,160.</li>
         <li><b>Distributor price</b> - what the distributor pays you, <u>before GST</u>, e.g. ₹10,000.</li>
-        <li><b>Selling price</b> - what the farmer normally pays, <u>before GST</u>, e.g. ₹11,000 (farmer pays ₹11,000 + 18% = ₹12,980).</li>
-        <li><b>Minimum price</b> - the lowest a distributor may sell at. <b>No discount allowed? Make it the same as the selling price</b>
+        <li><b>Farmer selling price</b> - what the farmer normally pays, <u>before GST</u>, e.g. ₹11,000 (farmer pays ₹11,000 + 18% = ₹12,980).</li>
+        <li><b>Minimum price</b> - the lowest a distributor may sell at. <b>No discount allowed? Make it the same as the farmer selling price</b>
           (it fills itself when left empty).</li>
         <li><b>Maximum price</b> - the highest before GST; normally MRP without GST (₹14,160 ÷ 1.18 = ₹12,000). Fills itself from the MRP.</li>
-        <li><b>Max discount</b> - 0 for no discount. Even with a discount, nobody can go below the minimum price.</li>
+        <li><b>Max discount</b> - worked out for you: Farmer selling price − Minimum price (e.g. ₹11,000 − ₹10,500 = ₹500 discount allowed). Same prices = no discount.</li>
         <li class="pr-cost-col"><b>Our cost 🔒</b> (optional) - what Farm Buddie pays to make/buy one unit, before GST, e.g. ₹7,000.
           Then <b>Our profit</b> shows: direct sale ₹11,000 − ₹7,000 = ₹4,000 · via distributor ₹10,000 − ₹7,000 = ₹3,000.
           Only admins see it - never distributors.</li>
       </ol>
-      <p>Must always be: <b>Distributor price ≤ Minimum ≤ Selling ≤ Maximum</b>, and Maximum + GST ≤ MRP.</p>
+      <p>Must always be: <b>Distributor price ≤ Minimum ≤ Farmer selling ≤ Maximum</b>, and Maximum + GST ≤ MRP.</p>
     </details>
     <div class="fb-table-card pr-scroll">
       <table class="fb-table pr-items">
@@ -226,14 +226,14 @@
           <th title="On sale in this list">On</th><th>Product</th>
           <th class="num pr-cost-col pr-internal" title="Farm Buddie's purchase / procurement cost per unit, before GST - admins only">Our cost 🔒<br><small>before GST</small></th>
           <th class="num">MRP<br><small>incl. GST</small></th>
-          <th class="num">Distributor<br>price</th><th class="num">Selling<br>price</th><th class="num">Minimum<br>price</th>
-          <th class="num">Maximum<br>price</th><th>Max discount</th><th>GST</th><th class="num">Floor</th><th class="num">Distributor<br>margin</th><th class="num pr-cost-col pr-internal">Our profit 🔒<br><small>direct · via dist.</small></th><th>Check</th>
+          <th class="num">Distributor<br>price</th><th class="num">Farmer<br>selling price</th><th class="num">Minimum<br>price</th>
+          <th class="num">Maximum<br>price</th><th class="num">Max discount<br><small>auto</small></th><th>GST</th><th class="num">Floor</th><th class="num">Distributor<br>margin</th><th class="num pr-cost-col pr-internal">Our profit 🔒<br><small>direct · via dist.</small></th><th>Check</th>
         </tr></thead>
         <tbody id="itemsBody"></tbody>
       </table>
     </div>
     <p class="ota-note">All prices before GST except MRP. <b>Floor</b> = the lowest price a distributor can sell at = the higher of the minimum price and
-      (selling price − max discount). <b>Margin</b> = selling price − distributor price. Grey text under a price = the price in force now.</p>
+      (farmer selling price − max discount). <b>Margin</b> = farmer selling price − distributor price. Grey text under a price = the price in force now.</p>
   </div>
 </section>
 
@@ -277,12 +277,17 @@
 <!-- ============ AUDIT ============ -->
 <section class="pr-tab" id="tab-audit" hidden>
   <div class="ota-card">
-    <h2>Audit log <small class="ota-muted">- every change, who and when; can't be edited or deleted</small></h2>
-    <div class="ota-row ota-filters"><input type="search" id="auditSearch" class="ota-search" placeholder="Search who, action or detail"></div>
+    <h2>Audit log <small class="ota-muted">- every change, who and when; can't be edited - only an admin can delete entries (and that is logged too)</small></h2>
+    <div class="ota-row ota-filters"><input type="search" id="auditSearch" class="ota-search" placeholder="Search who, action or detail">
+      <span class="pr-right pr-owner-only">
+        <button class="pr-btn danger" id="auditDelSel" disabled>🗑 Delete selected</button>
+        <button class="pr-btn danger" id="auditDelAll">🗑 Delete whole log</button>
+      </span></div>
     <div class="fb-table-card pr-scroll">
       <table class="fb-table">
-        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>What</th><th>Detail</th><th></th></tr></thead>
-        <tbody id="auditBody"><tr><td colspan="6">Loading…</td></tr></tbody>
+        <thead><tr><th class="ota-check-col pr-owner-only"><input type="checkbox" id="auditAll" title="Select all on this page"></th>
+          <th>When</th><th>Who</th><th>Action</th><th>What</th><th>Detail</th><th></th></tr></thead>
+        <tbody id="auditBody"><tr><td colspan="7">Loading…</td></tr></tbody>
       </table>
     </div>
     <div class="ota-pager" id="auditPager"></div>
@@ -337,7 +342,8 @@
     </div>
     <label class="ota-field"><span>Description</span><input type="text" id="pmDesc" maxlength="500"></label>
     <label class="pr-check"><input type="checkbox" id="pmActive"> Active (can be sold)</label>
-    <div class="ota-actions"><button class="fb-btn-primary pr-edit-only" id="pmSave">Save product</button><span class="ota-status-text" id="pmStatus"></span></div>
+    <div class="ota-actions"><button class="fb-btn-primary pr-edit-only" id="pmSave">Save product</button>
+      <button class="pr-btn danger pr-owner-only" id="pmDelete" hidden>🗑 Delete product</button><span class="ota-status-text" id="pmStatus"></span></div>
 
     <div id="pmMore" hidden>
       <h3 class="ota-subhead">Variants</h3>

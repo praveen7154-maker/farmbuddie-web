@@ -137,10 +137,15 @@ export async function ensurePricingSchema() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS pricing_audit_at_idx ON pricing_audit (at DESC)`);
-  // Append-only: the database itself refuses to edit or delete the log.
+  // The database refuses to edit the log, and to delete from it except
+  // through deleteAudit() (an admin's explicit "delete", which itself is
+  // logged) - it sets pricing.audit_purge for its own transaction only.
   await pool.query(`
     CREATE OR REPLACE FUNCTION pricing_audit_readonly() RETURNS trigger AS $$
-    BEGIN RAISE EXCEPTION 'pricing_audit is append-only'; END $$ LANGUAGE plpgsql
+    BEGIN
+      IF TG_OP = 'DELETE' AND current_setting('pricing.audit_purge', true) = 'on' THEN RETURN OLD; END IF;
+      RAISE EXCEPTION 'pricing_audit is append-only';
+    END $$ LANGUAGE plpgsql
   `);
   await pool.query(`DROP TRIGGER IF EXISTS pricing_audit_readonly ON pricing_audit`);
   await pool.query(`
@@ -162,6 +167,15 @@ export async function ensurePricingSchema() {
     )
   `);
   await pool.query(`INSERT INTO pricing_settings (id) VALUES (1) ON CONFLICT DO NOTHING`);
+  // A price list can be deleted outright: quotes keep their own copy of the
+  // prices (list_id becomes NULL), lists copied from it just lose the link.
+  await pool.query(`ALTER TABLE pricing_quotes ALTER COLUMN list_id DROP NOT NULL`);
+  await pool.query(`ALTER TABLE pricing_quotes DROP CONSTRAINT IF EXISTS pricing_quotes_list_id_fkey`);
+  await pool.query(`ALTER TABLE pricing_quotes ADD CONSTRAINT pricing_quotes_list_id_fkey
+    FOREIGN KEY (list_id) REFERENCES price_lists(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE price_lists DROP CONSTRAINT IF EXISTS price_lists_based_on_id_fkey`);
+  await pool.query(`ALTER TABLE price_lists ADD CONSTRAINT price_lists_based_on_id_fkey
+    FOREIGN KEY (based_on_id) REFERENCES price_lists(id) ON DELETE SET NULL`);
   await seedCatalogue();
 }
 
@@ -414,6 +428,16 @@ export const pgPricingStore = {
     });
   },
 
+  /** Max discount = farmer selling price - minimum price, on every priced row of a draft. */
+  async normalizeDiscounts(listId) {
+    await pool.query(
+      `UPDATE price_list_items i SET max_discount_type = 'amt', max_discount_value = GREATEST(0, base_price - min_price)
+       FROM price_lists l WHERE l.id = i.list_id AND l.id = $1 AND l.status = 'draft'
+         AND base_price IS NOT NULL AND min_price IS NOT NULL`,
+      [listId]
+    );
+  },
+
   // Draft-only edits: the WHERE status = 'draft' is the lock.
   async updateDraft(id, { name, notes, effectiveFrom, effectiveTo }) {
     const { rowCount } = await pool.query(
@@ -439,6 +463,48 @@ export const pgPricingStore = {
         );
       }
       return true;
+    });
+  },
+
+  /** Any list, any status. Returns its quote count (they keep their prices). */
+  async deleteList(id) {
+    return tx(async (c) => {
+      const { rows } = await c.query(`SELECT count(*)::int AS n FROM pricing_quotes WHERE list_id = $1`, [id]);
+      const del = await c.query(`DELETE FROM price_lists WHERE id = $1`, [id]);
+      return del.rowCount === 1 ? { quotes: rows[0].n } : null;
+    });
+  },
+
+  /** A product with all its variants - out of the catalogue and every price list. */
+  async deleteProduct(id) {
+    return tx(async (c) => {
+      const { rows: vs } = await c.query(`SELECT id FROM pricing_variants WHERE product_id = $1`, [id]);
+      const ids = vs.map((v) => v.id);
+      const lists = await c.query(`SELECT count(DISTINCT list_id)::int AS n FROM price_list_items WHERE variant_id = ANY($1::int[])`, [ids]);
+      await c.query(`DELETE FROM pricing_accessories WHERE product_id = $1 OR accessory_variant_id = ANY($2::int[])`, [id, ids]);
+      await c.query(`DELETE FROM price_list_items WHERE variant_id = ANY($1::int[])`, [ids]);
+      await c.query(`DELETE FROM pricing_variants WHERE product_id = $1`, [id]);
+      const del = await c.query(`DELETE FROM pricing_products WHERE id = $1`, [id]);
+      return del.rowCount === 1 ? { lists: lists.rows[0].n } : null;
+    });
+  },
+
+  async deleteVariant(id) {
+    return tx(async (c) => {
+      const lists = await c.query(`SELECT count(DISTINCT list_id)::int AS n FROM price_list_items WHERE variant_id = $1`, [id]);
+      await c.query(`DELETE FROM pricing_accessories WHERE accessory_variant_id = $1`, [id]);
+      await c.query(`DELETE FROM price_list_items WHERE variant_id = $1`, [id]);
+      const del = await c.query(`DELETE FROM pricing_variants WHERE id = $1`, [id]);
+      return del.rowCount === 1 ? { lists: lists.rows[0].n } : null;
+    });
+  },
+
+  /** ids: the entries to delete, or null for the whole log. Returns how many went. */
+  async deleteAudit(ids) {
+    return tx(async (c) => {
+      await c.query(`SELECT set_config('pricing.audit_purge', 'on', true)`);
+      const r = ids ? await c.query(`DELETE FROM pricing_audit WHERE id = ANY($1::bigint[])`, [ids]) : await c.query(`DELETE FROM pricing_audit`);
+      return r.rowCount;
     });
   },
 
