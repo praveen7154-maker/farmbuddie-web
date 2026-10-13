@@ -192,6 +192,7 @@
           <select id="bkField">
             <option value="distributorPrice">Distributor price</option><option value="basePrice">Selling price</option>
             <option value="minPrice">Minimum price</option><option value="maxPrice">Maximum price</option><option value="mrp">MRP</option>
+            <option value="costPrice" class="pr-cost-col">Our cost</option>
           </select>
         </label>
         <label class="ota-filter"><span>by %</span><input type="number" id="bkPct" step="0.5" placeholder="+5 / -3"></label>
@@ -213,15 +214,20 @@
           (it fills itself when left empty).</li>
         <li><b>Maximum price</b> - the highest before GST; normally MRP without GST (₹14,160 ÷ 1.18 = ₹12,000). Fills itself from the MRP.</li>
         <li><b>Max discount</b> - 0 for no discount. Even with a discount, nobody can go below the minimum price.</li>
+        <li class="pr-cost-col"><b>Our cost 🔒</b> (optional) - what Farm Buddie pays to make/buy one unit, before GST, e.g. ₹7,000.
+          Then <b>Our profit</b> shows: direct sale ₹11,000 − ₹7,000 = ₹4,000 · via distributor ₹10,000 − ₹7,000 = ₹3,000.
+          Only admins see it - never distributors.</li>
       </ol>
       <p>Must always be: <b>Distributor price ≤ Minimum ≤ Selling ≤ Maximum</b>, and Maximum + GST ≤ MRP.</p>
     </details>
     <div class="fb-table-card pr-scroll">
       <table class="fb-table pr-items">
         <thead><tr>
-          <th title="On sale in this list">On</th><th>Product</th><th class="num">MRP<br><small>incl. GST</small></th>
+          <th title="On sale in this list">On</th><th>Product</th>
+          <th class="num pr-cost-col pr-internal" title="Farm Buddie's purchase / procurement cost per unit, before GST - admins only">Our cost 🔒<br><small>before GST</small></th>
+          <th class="num">MRP<br><small>incl. GST</small></th>
           <th class="num">Distributor<br>price</th><th class="num">Selling<br>price</th><th class="num">Minimum<br>price</th>
-          <th class="num">Maximum<br>price</th><th>Max discount</th><th>GST</th><th class="num">Floor</th><th class="num">Margin</th><th>Check</th>
+          <th class="num">Maximum<br>price</th><th>Max discount</th><th>GST</th><th class="num">Floor</th><th class="num">Distributor<br>margin</th><th class="num pr-cost-col pr-internal">Our profit 🔒<br><small>direct · via dist.</small></th><th>Check</th>
         </tr></thead>
         <tbody id="itemsBody"></tbody>
       </table>
@@ -260,8 +266,8 @@
     </div>
     <div class="fb-table-card pr-scroll">
       <table class="fb-table">
-        <thead><tr><th>Quote</th><th>Date</th><th>Customer</th><th>By</th><th class="num">Payable</th><th>Valid until</th><th>Status</th><th></th></tr></thead>
-        <tbody id="quoteBody"><tr><td colspan="8">Loading…</td></tr></tbody>
+        <thead><tr><th>Quote</th><th>Date</th><th>Customer</th><th>By</th><th class="num">Payable</th><th class="num pr-cost-col pr-internal">Our profit 🔒</th><th>Valid until</th><th>Status</th><th></th></tr></thead>
+        <tbody id="quoteBody"><tr><td colspan="9">Loading…</td></tr></tbody>
       </table>
     </div>
     <div class="ota-pager" id="quotePager"></div>

@@ -90,6 +90,9 @@ export async function ensurePricingSchema() {
       PRIMARY KEY (list_id, variant_id)
     )
   `);
+  // Farm Buddie's own purchase cost per unit (before GST) - for our profit
+  // figures; never sent to distributors (see pricing.js).
+  await pool.query(`ALTER TABLE price_list_items ADD COLUMN IF NOT EXISTS cost_price BIGINT CHECK (cost_price >= 0)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS pricing_quotes (
       id              SERIAL PRIMARY KEY,
@@ -245,6 +248,7 @@ const toItem = (r) => ({
   active: r.active,
   mrp: num(r.mrp),
   distributorPrice: num(r.distributor_price),
+  costPrice: num(r.cost_price),
   basePrice: num(r.base_price),
   minPrice: num(r.min_price),
   maxPrice: num(r.max_price),
@@ -394,8 +398,8 @@ export const pgPricingStore = {
       if (basedOnId) {
         await c.query(
           `INSERT INTO price_list_items (list_id, variant_id, active, mrp, distributor_price, base_price, min_price, max_price,
-             max_discount_type, max_discount_value, gst_bp)
-           SELECT $1, variant_id, active, mrp, distributor_price, base_price, min_price, max_price, max_discount_type, max_discount_value, gst_bp
+             max_discount_type, max_discount_value, gst_bp, cost_price)
+           SELECT $1, variant_id, active, mrp, distributor_price, base_price, min_price, max_price, max_discount_type, max_discount_value, gst_bp, cost_price
            FROM price_list_items WHERE list_id = $2`,
           [id, basedOnId]
         );
@@ -426,11 +430,12 @@ export const pgPricingStore = {
       for (const i of items) {
         await c.query(
           `INSERT INTO price_list_items (list_id, variant_id, active, mrp, distributor_price, base_price, min_price, max_price,
-             max_discount_type, max_discount_value, gst_bp)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             max_discount_type, max_discount_value, gst_bp, cost_price)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
            ON CONFLICT (list_id, variant_id) DO UPDATE SET active = $3, mrp = $4, distributor_price = $5, base_price = $6,
-             min_price = $7, max_price = $8, max_discount_type = $9, max_discount_value = $10, gst_bp = $11`,
-          [id, i.variantId, i.active, i.mrp, i.distributorPrice, i.basePrice, i.minPrice, i.maxPrice, i.maxDiscountType, i.maxDiscountValue, i.gstBp]
+             min_price = $7, max_price = $8, max_discount_type = $9, max_discount_value = $10, gst_bp = $11, cost_price = $12`,
+          [id, i.variantId, i.active, i.mrp, i.distributorPrice, i.basePrice, i.minPrice, i.maxPrice, i.maxDiscountType, i.maxDiscountValue, i.gstBp,
+            i.costPrice ?? null]
         );
       }
       return true;

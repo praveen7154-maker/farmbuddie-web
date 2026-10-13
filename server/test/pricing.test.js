@@ -216,7 +216,7 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
       if (!p) return { variantId: i.variantId, active: false, gstBp: i.gstBp };
       const [mrp, dp, b, mn, mx] = p.map(P);
       return { variantId: i.variantId, active: true, mrp, distributorPrice: dp, basePrice: b, minPrice: mn, maxPrice: mx,
-        maxDiscountType: "pct", maxDiscountValue: 1000, gstBp: 1800 };
+        maxDiscountType: "pct", maxDiscountValue: 1000, gstBp: 1800, costPrice: P(mn * 0.5 / 100) };   // our cost = half the minimum
     });
     // Negative and fractional values are refused outright
     assert.equal((await call(OWNER, `/pricing/admin/lists/${listId}/items`, "PUT", { items: [{ ...items[0], mrp: -5 }] })).status, 400);
@@ -244,6 +244,12 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(cur.items.length, 7);
     const hub = cur.items.find((i) => i.sku === "FB-HUB");
     assert.equal(hub.distributorPrice, P(1000));
+    // Our cost never reaches a distributor; the owner sees it with our profit
+    assert.equal(hub.costPrice, undefined);
+    assert.ok(!JSON.stringify(cur).includes("costPrice"));
+    const ownerHub = (await call(OWNER, "/pricing/current")).body.items.find((i) => i.sku === "FB-HUB");
+    assert.equal(ownerHub.costPrice, P(600));
+    assert.deepEqual(ownerHub.ourProfit, { direct: P(900), viaDistributor: P(400) });
     assert.equal(hub.floorPrice, P(1350));
     assert.equal(cur.myState, "Karnataka");
     assert.equal((await call(DIST, `/pricing/admin/lists/${listId}/items`, "PUT", { items })).status, 403);
@@ -269,6 +275,13 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(quote.lines[0].unitPrice, P(1500));
     assert.equal(quote.totals.interState, false);
     assert.equal(quote.distributorId, "D26FBA0001");
+    assert.equal(quote.profit, undefined);                      // not for the distributor
+    assert.ok(!JSON.stringify(quote).includes("costPrice"));
+    // The owner sees our profit on the distributor's quote: they buy at the distributor price
+    // hub 1000 - 600 + 2 x (600 - 350) = 900
+    assert.equal((await call(OWNER, `/pricing/quotes/${quote.id}`)).body.quote.profit.ourProfit, P(900));
+    // and on a direct preview: hub sold at 1500 -> 900 profit
+    assert.equal((await call(OWNER, "/pricing/quote/preview", "POST", { lines: [{ variantId: vid("FB-HUB"), qty: 1 }] })).body.profit.ourProfit, P(900));
     // 15-day validity
     assert.equal(new Date(quote.validUntil).getTime(), clock + 15 * 24 * 3600 * 1000);
     // Another distributor can't see it; the owner can
@@ -331,6 +344,11 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     await call(OWNER, "/pricing/admin/staff", "PUT", { email: "viewer@farmbuddie.com", role: "viewer" });
     await call(OWNER, "/pricing/admin/staff", "PUT", { email: "editor@farmbuddie.com", role: "editor" });
     assert.equal((await call("viewer@farmbuddie.com", "/pricing/admin/lists")).status, 200);
+    // A viewer sees prices but not our cost - not in the list, not in the audit log
+    assert.ok(!JSON.stringify((await call("viewer@farmbuddie.com", `/pricing/admin/lists/${listId}`)).body).includes("costPrice"));
+    assert.ok(!JSON.stringify((await call("viewer@farmbuddie.com", "/pricing/admin/audit")).body).includes("costPrice"));
+    assert.ok(JSON.stringify((await call(OWNER, "/pricing/admin/audit")).body).includes("costPrice"));
+    assert.ok(!JSON.stringify((await call("viewer@farmbuddie.com", "/pricing/current")).body).includes("costPrice"));
     assert.equal((await call("viewer@farmbuddie.com", "/pricing/admin/lists", "POST", { name: "x" })).status, 403);
     const { id: v4 } = (await call("editor@farmbuddie.com", "/pricing/admin/lists", "POST", { name: "Editor draft", basedOnId: v2 })).body;
     await call("editor@farmbuddie.com", `/pricing/admin/lists/${v4}`, "PUT", { name: "Editor draft", effectiveFrom: "2027-01-01T00:00:00+05:30" });

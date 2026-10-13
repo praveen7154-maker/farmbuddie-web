@@ -67,6 +67,9 @@ export function priceProblems(item) {
     else if (!isInt(v) || v < 0) errors.push(`${label} can't be negative`);
     else if (v > MAX_PAISE) errors.push(`${label} is too large`);
   }
+  // Our purchase cost is optional (admin reference only).
+  const cost = item.costPrice;
+  if (cost !== null && cost !== undefined && (!isInt(cost) || cost < 0)) errors.push("Our cost can't be negative");
   if (!GST_RATES_BP.includes(item.gstBp)) errors.push("GST rate is not a valid GST slab");
   if (!["pct", "amt"].includes(item.maxDiscountType)) errors.push("Choose the discount limit as % or ₹");
   else if (!isInt(item.maxDiscountValue) || item.maxDiscountValue < 0) errors.push("Max discount can't be negative");
@@ -85,6 +88,33 @@ export function priceProblems(item) {
   return errors;
 }
 
+/**
+ * Farm Buddie's own profit per unit (before GST), when our cost is known:
+ * direct = sold by us to the farmer at the selling price; viaDistributor =
+ * sold to a distributor at the distributor price. null when unknown.
+ */
+export function ourProfit(item) {
+  if (!isInt(item.costPrice) || !isInt(item.basePrice) || !isInt(item.distributorPrice)) return null;
+  return { direct: item.basePrice - item.costPrice, viaDistributor: item.distributorPrice - item.costPrice };
+}
+
+/**
+ * Our cost and profit on a priced quote (lines from calculateQuote). A
+ * distributor's quote: they buy from us at the distributor price. Our own
+ * (direct) quote: we get the net price. costOf(variantId) -> paise | null.
+ * Returns null if any line's cost is unknown.
+ */
+export function quoteProfit(lines, costOf, viaDistributor) {
+  let cost = 0, revenue = 0;
+  for (const l of lines) {
+    const c = costOf(l.variantId);
+    if (!isInt(c)) return null;
+    cost += c * l.qty;
+    revenue += (viaDistributor ? l.distributorPrice : l.unitPrice) * l.qty;
+  }
+  return { ourCost: cost, ourRevenue: revenue, ourProfit: revenue - cost, viaDistributor: !!viaDistributor };
+}
+
 /** Things worth a second look that aren't wrong. */
 export function priceWarnings(item) {
   const w = [];
@@ -93,6 +123,10 @@ export function priceWarnings(item) {
     w.push(`The minimum price limits the discount to ${rupees(item.basePrice - item.minPrice)} per unit`);
   }
   if (item.minPrice === item.distributorPrice) w.push("At the minimum price the distributor earns nothing");
+  if (isInt(item.costPrice)) {
+    if (item.distributorPrice < item.costPrice) w.push(`Distributor price is below our cost - we lose ${rupees(item.costPrice - item.distributorPrice)} on each distributor sale`);
+    else if (floorPrice(item) < item.costPrice) w.push(`The lowest price is below our cost - a direct sale at the lowest price loses money`);
+  }
   return w;
 }
 

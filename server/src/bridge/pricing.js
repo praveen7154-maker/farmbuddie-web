@@ -2,7 +2,8 @@ import express from "express";
 import { isAdmin } from "../adminAuth.js";
 import {
   CATEGORIES, ROLES, VALVE_TYPES, GST_RATES_BP, DEFAULT_GST_BP, HOME_STATE, DISCLAIMER, MAX_PAISE,
-  priceProblems, priceWarnings, floorPrice, maxDiscountPaise, calculateQuote, quickBuild, liveStatus, rangesOverlap
+  priceProblems, priceWarnings, floorPrice, maxDiscountPaise, calculateQuote, quickBuild, liveStatus, rangesOverlap,
+  ourProfit, quoteProfit
 } from "./pricingRules.js";
 
 // Module Pricing - web panel "Module Pricing" and the Irrigo Admin app's
@@ -15,6 +16,8 @@ import {
 //   viewer      - see the catalogue, every list and the audit log
 //   distributor - the current prices (incl. their buying price), the
 //                 calculator and their own quotes; never edits a price
+// Our purchase cost (cost_price) and our profit are seen by editors,
+// approvers and owners only - never by a viewer or a distributor.
 // A farmer's login gets nothing here.
 //
 // Prices are never edited in place: a new version is a draft copy, then
@@ -100,6 +103,24 @@ export function createPricingModule({ store, findDistributor = async () => null,
       res.status(500).json({ error: "Something went wrong - try again" });
     }
   };
+  const seesCost = (req) => RANK[req.pricingRole] >= RANK.editor;
+  // Removes costPrice anywhere in a value (rows, audit before/after).
+  const noCost = (v) => (Array.isArray(v) ? v.map(noCost)
+    : v && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== "costPrice").map(([k, x]) => [k, noCost(x)])) : v);
+  // Our cost and profit on a quote, from the cost in the quote's own price list.
+  const costCache = new Map();   // listId -> { at, map }
+  async function costsOf(listId) {
+    const c = costCache.get(listId);
+    if (c && now() - c.at < 60 * 1000) return c.map;
+    const map = new Map((await store.items(listId)).map((i) => [i.variantId, i.costPrice]));
+    costCache.set(listId, { at: now(), map });
+    return map;
+  }
+  async function withProfit(req, q) {
+    if (!q || !seesCost(req)) return q;
+    const costs = await costsOf(q.listId);
+    return { ...q, profit: quoteProfit(q.lines, (v) => costs.get(v), !!q.distributorId) };
+  }
   const audit = (req, action, entity, entityId, summary, before, after) => store.audit({
     actor: actorOf(req), action, entity, entityId, summary, before, after, ip: req.ip
   });
@@ -175,7 +196,8 @@ export function createPricingModule({ store, findDistributor = async () => null,
         maxDiscountValue: r.maxDiscountValue,
         maxDiscount: maxDiscountPaise(r),
         floorPrice: floorPrice(r),
-        margin: r.basePrice - r.distributorPrice
+        margin: r.basePrice - r.distributorPrice,
+        ...(seesCost(req) ? { costPrice: r.costPrice, ourProfit: ourProfit(r) } : {})
       }));
     }
     const homeState = s.homeState;
@@ -212,7 +234,12 @@ export function createPricingModule({ store, findDistributor = async () => null,
 
   router.post("/quote/preview", wrap(async (req, res) => {
     const { active, settings: s, customerState, result } = await priceQuote(req, req.body);
-    res.json({ ...result, listId: active.id, listName: active.name, customerState, homeState: s.homeState });
+    let profit;
+    if (result.ok && seesCost(req)) {
+      const costs = await costsOf(active.id);
+      profit = quoteProfit(result.lines, (v) => costs.get(v), false);
+    }
+    res.json({ ...result, listId: active.id, listName: active.name, customerState, homeState: s.homeState, ...(profit !== undefined ? { profit } : {}) });
   }));
 
   router.post("/quote/build", wrap(async (req, res) => {
@@ -247,7 +274,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
       lines: result.lines, totals: result.totals, validUntil: new Date(validUntil)
     });
     await audit(req, "create", "quote", id, `${quoteNo} for ${customerName}: ${result.totals.payable / 100} INR`);
-    res.json({ id, quoteNo, quote: quoteView(await store.getQuote(id), t) });
+    res.json({ id, quoteNo, quote: await withProfit(req, quoteView(await store.getQuote(id), t)) });
   }));
 
   function quoteView(q, t = now()) {
@@ -261,7 +288,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
     const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 60) || null : null;
     const t = now();
     const { quotes, total } = await store.listQuotes(myQuoteScope(req), search, PAGE, (page - 1) * PAGE);
-    res.json({ quotes: quotes.map((q) => quoteView(q, t)), total, page, pageSize: PAGE });
+    res.json({ quotes: await Promise.all(quotes.map((q) => withProfit(req, quoteView(q, t)))), total, page, pageSize: PAGE });
   }));
 
   async function ownQuote(req) {
@@ -273,7 +300,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
   }
 
   router.get("/quotes/:id", wrap(async (req, res) => {
-    res.json({ quote: quoteView(await ownQuote(req)) });
+    res.json({ quote: await withProfit(req, quoteView(await ownQuote(req))) });
   }));
 
   router.post("/quotes/:id/status", wrap(async (req, res) => {
@@ -459,7 +486,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
         sort: (p?.sortOrder ?? 0) * 100000 + (v?.sortOrder ?? 0)
       };
     }).sort((a, b) => a.sort - b.sort || a.variantId - b.variantId);
-    res.json({ list: listView(list, now(), s.expiryWarningDays), items: rows, compareWith: active && active.id !== list.id ? { id: active.id, name: active.name } : null });
+    res.json({ list: listView(list, now(), s.expiryWarningDays), items: seesCost(req) ? rows : noCost(rows), compareWith: active && active.id !== list.id ? { id: active.id, name: active.name } : null });
   }));
 
   staff.post("/lists", need("editor"), wrap(async (req, res) => {
@@ -497,6 +524,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
     if (raw.length > 1000) throw new Bad("Too many rows at once");
     const cat = await store.catalogue();
     const variantIds = new Set(cat.variants.map((v) => v.id));
+    const before = new Map((await store.items(list.id)).map((i) => [i.variantId, i]));
     const items = raw.map((i) => {
       const variantId = int(i.variantId, "Variant", 1, 2_000_000_000);
       if (!variantIds.has(variantId)) throw new Bad(`Variant ${variantId} doesn't exist`);
@@ -508,6 +536,8 @@ export function createPricingModule({ store, findDistributor = async () => null,
         active: bool(i.active, true),
         mrp: money(i.mrp, "MRP"),
         distributorPrice: money(i.distributorPrice, "Distributor price"),
+        // Left out (an older client) = keep what's saved.
+        costPrice: i.costPrice === undefined ? (before.get(variantId)?.costPrice ?? null) : money(i.costPrice, "Our cost"),
         basePrice: money(i.basePrice, "Selling price"),
         minPrice: money(i.minPrice, "Minimum price"),
         maxPrice: money(i.maxPrice, "Maximum price"),
@@ -516,7 +546,6 @@ export function createPricingModule({ store, findDistributor = async () => null,
         gstBp
       };
     });
-    const before = new Map((await store.items(list.id)).map((i) => [i.variantId, i]));
     const changed = items.filter((i) => {
       const b = before.get(i.variantId);
       return !b || Object.keys(i).some((k) => i[k] !== b[k]);
@@ -616,7 +645,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 60) || null : null;
     const { entries, total } = await store.auditLog(search, PAGE, (page - 1) * PAGE);
-    res.json({ entries, total, page, pageSize: PAGE });
+    res.json({ entries: seesCost(req) ? entries : noCost(entries), total, page, pageSize: PAGE });
   }));
 
   staff.get("/settings", wrap(async (req, res) => {

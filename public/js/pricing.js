@@ -138,6 +138,7 @@ function applyRole() {
   $("roleBadge").textContent = WHO[role] || role;
   document.querySelectorAll(".pr-edit-only").forEach((el) => { el.hidden = !can("editor"); });
   document.querySelectorAll(".pr-owner-only").forEach((el) => { el.hidden = !can("owner"); });
+  showCostCols();
 }
 
 function renderStatus() {
@@ -338,6 +339,15 @@ function renderSummary(calc) {
     return;
   }
   $("sumBody").innerHTML = totalsHtml(calc.totals, true);
+  // Our own profit if WE sell this directly (admins only - the cost comes only to them).
+  const profit = can("editor") ? R.quoteProfit(calc.lines, (v) => prices.get(v)?.costPrice, false) : null;
+  if (profit) {
+    $("sumBody").insertAdjacentHTML("beforeend", `<div class="row internal"><span>🔒 Our cost</span><span>${rs(profit.ourCost)}</span></div>
+      <div class="row internal"><span>🔒 Our profit - direct sale (before GST)</span><span><b>${rs(profit.ourProfit)}</b></span></div>
+      <div class="row internal"><span>🔒 Our profit if a distributor sells it</span><span>${rs(R.quoteProfit(calc.lines, (v) => prices.get(v)?.costPrice, true).ourProfit)}</span></div>`);
+  } else if (can("editor")) {
+    $("sumBody").insertAdjacentHTML("beforeend", `<div class="row internal"><span>🔒 Our profit</span><span class="ota-muted">enter "Our cost" for every product</span></div>`);
+  }
   const days = current.settings.quoteValidityDays;
   let until = Date.now() + days * DAY;
   if (current.list.effectiveTo) until = Math.min(until, new Date(current.list.effectiveTo).getTime());
@@ -465,7 +475,9 @@ function shareWhatsApp(q) {
 function showQuote(q) {
   const expired = q.status === "open" && new Date(q.validUntil).getTime() < Date.now();
   $("qmBody").innerHTML = quoteDocHtml(q) +
-    `<p class="pr-hint">🔒 Internal: distributor margin ${rs(q.totals.margin)} · cost ${rs(q.totals.distributorCost)} · status
+    (q.profit ? `<p class="pr-hint">🔒 Our cost ${rs(q.profit.ourCost)} · our revenue ${rs(q.profit.ourRevenue)} · <b>our profit ${rs(q.profit.ourProfit)}</b>
+      (${q.profit.viaDistributor ? "sold to the distributor at distributor price" : "direct sale"})</p>` : "") +
+    `<p class="pr-hint">🔒 Internal: distributor margin ${rs(q.totals.margin)} · distributor buys at ${rs(q.totals.distributorCost)} · status
       <span class="pr-pill ${expired ? "expired" : q.status}">${expired ? "expired" : q.status}</span>${q.statusBy ? ` by ${esc(q.statusBy)}` : ""}</p>`;
   const a = $("qmActions");
   a.innerHTML = `<button class="pr-btn" data-a="print">🖨️ Print / PDF</button><button class="pr-btn" data-a="wa">🟢 WhatsApp</button>
@@ -531,8 +543,10 @@ async function loadQuotes(page) {
         <td><b>${esc(q.quoteNo)}</b></td><td>${fmtDate(q.createdAt)}</td>
         <td>${esc(q.customerName || "–")}<br><small class="ota-muted">${esc(q.customerPhone || "")} ${esc(q.customerPlace || "")}</small></td>
         <td>${esc(q.distributorId || q.createdBy)}</td><td class="num">${rs(q.totals.payable)}</td>
+        <td class="num pr-cost-col">${q.profit ? rs(q.profit.ourProfit) : "–"}</td>
         <td>${fmtDate(q.validUntil)}</td><td><span class="pr-pill ${st}">${st}</span></td><td><button class="pr-link">View</button></td></tr>`;
-    }).join("") : `<tr><td colspan="8" class="ota-muted">No quotes${search ? " match" : " yet"}.</td></tr>`;
+    }).join("") : `<tr><td colspan="9" class="ota-muted">No quotes${search ? " match" : " yet"}.</td></tr>`;
+    showCostCols();
     $("quoteBody").querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", async () => {
       try { showQuote((await api(`/pricing/quotes/${tr.dataset.id}`)).quote); } catch (err) { fail(err); }
     }));
@@ -656,10 +670,11 @@ async function saveDraft() {
     editing.detailsDirty = false;
   }
   if (editing.dirty.size) {
-    const bad = [...editing.dirty.values()].filter((r) => [r.mrp, r.distributorPrice, r.basePrice, r.minPrice, r.maxPrice, r.maxDiscountValue].some((v) => Number.isNaN(v)));
+    const bad = [...editing.dirty.values()].filter((r) => [r.mrp, r.distributorPrice, r.basePrice, r.minPrice, r.maxPrice, r.costPrice, r.maxDiscountValue].some((v) => Number.isNaN(v)));
     if (bad.length) throw new Error(`${bad.length} row(s) have an amount that isn't a number - fix the red boxes first`);
     const items = [...editing.dirty.values()].map((r) => ({
       variantId: r.variantId, active: r.active, mrp: r.mrp, distributorPrice: r.distributorPrice, basePrice: r.basePrice,
+      ...(can("editor") ? { costPrice: r.costPrice ?? null } : {}),
       minPrice: r.minPrice, maxPrice: r.maxPrice, maxDiscountType: r.maxDiscountType, maxDiscountValue: r.maxDiscountValue ?? 0, gstBp: r.gstBp
     }));
     await put(`/pricing/admin/lists/${id}/items`, { items });
@@ -740,7 +755,7 @@ function shownRows() {
     && (show !== "problems" || (r.active && R.priceProblems(r).length))
     && (show !== "changed" || changedVsCurrent(r)));
 }
-const MONEY = ["mrp", "distributorPrice", "basePrice", "minPrice", "maxPrice"];
+const MONEY = ["mrp", "distributorPrice", "basePrice", "minPrice", "maxPrice", "costPrice"];
 const changedVsCurrent = (r) => !r.current || MONEY.some((k) => r[k] !== r.current[k]) || r.active !== r.current.active;
 
 function renderItems() {
@@ -764,17 +779,27 @@ function renderItems() {
     return `<tr data-v="${r.variantId}" class="${r.active ? "" : "off"}">
       <td><input type="checkbox" data-k="active" ${r.active ? "checked" : ""} ${draft ? "" : "disabled"}></td>
       <td class="pr-prod"><b>${esc(r.productName)}</b><small>${r.variantName !== "Standard" ? `${esc(r.variantName)} · ` : ""}${esc(r.sku)}${r.catalogueActive ? "" : " · ⚠️ inactive in catalogue"}</small></td>
+      <td class="num pr-cost-col">${money("costPrice")}</td>
       <td class="num">${money("mrp")}</td><td class="num">${money("distributorPrice")}</td><td class="num">${money("basePrice")}</td>
       <td class="num">${money("minPrice")}</td><td class="num">${money("maxPrice")}</td>
       <td>${disc}</td>
       <td>${draft ? `<select data-k="gstBp">${gstOpts(r.gstBp)}</select>` : pct(r.gstBp)}</td>
-      <td class="num" data-c="floor"></td><td class="num" data-c="margin"></td><td class="pr-checkcell" data-c="check"></td></tr>`;
-  }).join("") : `<tr><td colspan="12" class="ota-muted">No rows match.</td></tr>`;
+      <td class="num" data-c="floor"></td><td class="num" data-c="margin"></td><td class="num pr-cost-col" data-c="profit"></td><td class="pr-checkcell" data-c="check"></td></tr>`;
+  }).join("") : `<tr><td colspan="14" class="ota-muted">No rows match.</td></tr>`;
+  showCostCols();
   $("itemsBody").querySelectorAll("tr[data-v]").forEach((tr) => {
     refreshRow(tr);
     tr.querySelectorAll("[data-k]").forEach((el) => el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", () => onCell(tr, el)));
   });
 }
+
+// Our cost / profit - editors, approvers and admins only (the server leaves it out for anyone else).
+function showCostCols() { document.querySelectorAll(".pr-cost-col").forEach((el) => { el.hidden = !can("editor"); }); }
+const profitHtml = (p) => {
+  if (!p) return `<span class="ota-muted" title="Enter our cost to see our profit">–</span>`;
+  const c = (v) => `<span style="color:${v < 0 ? "#b91c1c" : "#15803d"}">${rs(v)}</span>`;
+  return `${c(p.direct)}<span class="pr-hint">via dist. ${c(p.viaDistributor)}</span>`;
+};
 
 function rowOf(tr) { return editing.rows.find((r) => r.variantId === Number(tr.dataset.v)); }
 
@@ -828,6 +853,8 @@ function refreshRow(tr) {
   const r = rowOf(tr);
   const cell = (c) => tr.querySelector(`[data-c="${c}"]`);
   if (!r.active) { cell("floor").textContent = "–"; cell("margin").textContent = "–"; cell("check").innerHTML = `<span class="ota-muted">Not on sale</span>`; return; }
+  const pc = tr.querySelector('[data-c="profit"]');
+  if (pc) pc.innerHTML = r.active ? profitHtml(R.ourProfit(r)) : "–";
   if ([r.mrp, r.distributorPrice, r.basePrice, r.minPrice, r.maxPrice].every((v) => v === null)) {
     tr.classList.add("has-err");
     cell("floor").textContent = "–"; cell("margin").textContent = "–";
@@ -875,7 +902,11 @@ $("csvExport").addEventListener("click", () => {
   const rows = editing.rows.map((r) => [r.sku, r.productName, r.variantName, r.active ? "yes" : "no", paiseInput(r.mrp), paiseInput(r.distributorPrice),
     paiseInput(r.basePrice), paiseInput(r.minPrice), paiseInput(r.maxPrice), r.maxDiscountType === "amt" ? "rupees" : "percent",
     r.maxDiscountType === "amt" ? paiseInput(r.maxDiscountValue) : String((r.maxDiscountValue ?? 0) / 100), String(r.gstBp / 100)]);
-  const csv = [CSV_COLS, ...rows].map((r) => r.map(csvCell).join(",")).join("\n");
+  // Our cost only for those who may see it.
+  const withCost = can("editor");
+  const head = withCost ? [...CSV_COLS, "our_cost"] : CSV_COLS;
+  if (withCost) editing.rows.forEach((r, i) => rows[i].push(paiseInput(r.costPrice)));
+  const csv = [head, ...rows].map((r) => r.map(csvCell).join(",")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   a.download = `price-list-${editing.list.id}-${editing.list.name.replace(/[^\w-]+/g, "_")}.csv`;
@@ -917,7 +948,8 @@ $("csvImport").addEventListener("change", async (e) => {
     const r = bySku.get((get("sku") || "").toUpperCase());
     if (!r) { unknown.push(get("sku")); continue; }
     const upd = { ...r };
-    const money = { mrp: "mrp", distributor_price: "distributorPrice", selling_price: "basePrice", min_price: "minPrice", max_price: "maxPrice" };
+    const money = { mrp: "mrp", distributor_price: "distributorPrice", selling_price: "basePrice", min_price: "minPrice", max_price: "maxPrice",
+      ...(can("editor") ? { our_cost: "costPrice" } : {}) };
     for (const [c, k] of Object.entries(money)) if (get(c) !== undefined) upd[k] = toPaise(get(c));
     if (get("on_sale") !== undefined) upd.active = !/^(no|n|0|false)$/i.test(get("on_sale"));
     if (get("max_discount_type") !== undefined) upd.maxDiscountType = /^(rupees|amt|₹|inr)$/i.test(get("max_discount_type")) ? "amt" : "pct";
