@@ -1047,6 +1047,7 @@ function openProduct(id) {
   $("pmSku").value = p.sku; $("pmName").value = p.name; $("pmCategory").value = p.category; $("pmRole").value = p.role || "";
   $("pmKind").value = p.kind; $("pmUnit").value = p.unit; $("pmHsn").value = p.hsnSac || ""; $("pmGst").value = String(p.gstBp);
   $("pmOrder").value = p.sortOrder; $("pmDesc").value = p.description || ""; $("pmActive").checked = p.active;
+  pmDescCount();
   const ro = !can("editor");
   $("prodModal").querySelectorAll("input, select").forEach((el) => { el.disabled = ro; });
   $("pmStatus").textContent = pmProduct ? "" : "Save the product first, then add variants and accessories.";
@@ -1059,6 +1060,9 @@ function openProduct(id) {
   }
   openModal("prodModal");
 }
+
+const pmDescCount = () => { $("pmDescCount").textContent = `${$("pmDesc").value.length} / 500`; };
+$("pmDesc").addEventListener("input", pmDescCount);
 
 $("pmDelete").addEventListener("click", async () => {
   if (!confirm(`Delete "${pmProduct.name}" and all its variants permanently?\n\nIt is removed from every price list too (saved quotes keep it).\nTo stop selling it for now, untick "Active" instead.`)) return;

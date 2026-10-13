@@ -252,7 +252,7 @@
         <tbody id="prodBody"><tr><td colspan="9">Loading…</td></tr></tbody>
       </table>
     </div>
-    <p class="ota-note">Products are never deleted (old quotes and price lists refer to them) - switch them to Inactive instead.
+    <p class="ota-note">To stop selling a product for now, switch it to Inactive. Delete (admins only) removes it from the catalogue and every price list; saved quotes keep it.
       A new product or variant gets its price in the next price list version.</p>
   </div>
 </section>
@@ -340,7 +340,7 @@
       <label class="ota-field"><span>GST rate <small>(confirm with your auditor)</small></span><select id="pmGst"></select></label>
       <label class="ota-field"><span>Display order</span><input type="number" id="pmOrder" min="0"></label>
     </div>
-    <label class="ota-field"><span>Description</span><input type="text" id="pmDesc" maxlength="500"></label>
+    <label class="ota-field"><span>Description <small class="bc-count" id="pmDescCount"></small></span><textarea id="pmDesc" maxlength="500" rows="3"></textarea></label>
     <label class="pr-check"><input type="checkbox" id="pmActive"> Active (can be sold)</label>
     <div class="ota-actions"><button class="fb-btn-primary pr-edit-only" id="pmSave">Save product</button>
       <button class="pr-btn danger pr-owner-only" id="pmDelete" hidden>🗑 Delete product</button><span class="ota-status-text" id="pmStatus"></span></div>

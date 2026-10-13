@@ -177,3 +177,7 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .pr-help summary { cursor: pointer; font-weight: 700; }
 .pr-help ol { margin: 8px 0 4px 18px; padding: 0; line-height: 1.6; }
 .pr-help p { margin: 4px 0 0; }
+/* Product window: a proper heading, readable buttons, room for the description */
+.pr-modal-box h2#pmTitle { font-size: 24px; font-weight: 800; color: #14532d; margin: 0 40px 18px 0; line-height: 1.25; }
+.pr-modal-box .fb-btn-primary { font-size: 15px; padding: 11px 22px; }
+.pr-modal-box textarea { resize: vertical; min-height: 70px; line-height: 1.45; }
