@@ -112,7 +112,7 @@ h2 .pr-right { float: right; margin-top: -4px; }
 .pr-items tr.has-err td { background: #fff7f7; }
 .pr-items .pr-dt { display: inline-flex; gap: 4px; }
 .pr-items .pr-dt input { width: 56px; }
-.pr-checkcell { font-size: 12px; max-width: 260px; }
+.pr-checkcell { font-size: 12px; min-width: 240px; max-width: 320px; }
 .pr-checkcell .e { color: #b91c1c; display: block; }
 .pr-checkcell .w { color: #b45309; display: block; }
 .pr-checkcell .ok { color: #15803d; }
@@ -173,3 +173,7 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .fb-table td.pr-prod, .fb-table th:first-child { text-align: left; }
 .pr-lines td.pr-prod, .pr-items td.pr-prod { min-width: 200px; }
 .pr-summary .fb-btn-primary, .pr-calc-bottom .fb-btn-primary { font-size: 14px; padding: 10px 16px; }
+.pr-help { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 10px 14px; margin: 6px 0 12px; font-size: 13.5px; color: #14532d; }
+.pr-help summary { cursor: pointer; font-weight: 700; }
+.pr-help ol { margin: 8px 0 4px 18px; padding: 0; line-height: 1.6; }
+.pr-help p { margin: 4px 0 0; }

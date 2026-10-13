@@ -203,6 +203,19 @@
         <label class="pr-btn pr-draft-only">⬆ Import CSV<input type="file" id="csvImport" accept=".csv,text/csv" hidden></label>
       </span>
     </div>
+    <details class="pr-help" open>
+      <summary>📘 How to fill a row (example: Motor Master Hub)</summary>
+      <ol>
+        <li><b>MRP</b> - the printed price <u>including GST</u>, e.g. ₹14,160.</li>
+        <li><b>Distributor price</b> - what the distributor pays you, <u>before GST</u>, e.g. ₹10,000.</li>
+        <li><b>Selling price</b> - what the farmer normally pays, <u>before GST</u>, e.g. ₹11,000 (farmer pays ₹11,000 + 18% = ₹12,980).</li>
+        <li><b>Minimum price</b> - the lowest a distributor may sell at. <b>No discount allowed? Make it the same as the selling price</b>
+          (it fills itself when left empty).</li>
+        <li><b>Maximum price</b> - the highest before GST; normally MRP without GST (₹14,160 ÷ 1.18 = ₹12,000). Fills itself from the MRP.</li>
+        <li><b>Max discount</b> - 0 for no discount. Even with a discount, nobody can go below the minimum price.</li>
+      </ol>
+      <p>Must always be: <b>Distributor price ≤ Minimum ≤ Selling ≤ Maximum</b>, and Maximum + GST ≤ MRP.</p>
+    </details>
     <div class="fb-table-card pr-scroll">
       <table class="fb-table pr-items">
         <thead><tr>

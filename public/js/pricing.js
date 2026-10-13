@@ -794,9 +794,29 @@ function onCell(tr, el) {
     el.classList.toggle("bad", Number.isNaN(r[k]));
     el.classList.toggle("changed", !!r.current && r.current[k] !== r[k]);
   }
+  autoFill(tr, r, k);
   editing.dirty.set(r.variantId, r);
   refreshRow(tr);
 }
+// Fills an EMPTY box from the others, so a simple "no discount" row needs
+// only MRP, distributor price and selling price:
+//   maximum price = MRP without GST (rounded down to the rupee)
+//   minimum price = selling price (no discount allowed)
+// A box the user typed in is never overwritten.
+function autoFill(tr, r, k) {
+  const box = (key) => tr.querySelector(`[data-k="${key}"]`);
+  if ((k === "mrp" || k === "gstBp") && Number.isInteger(r.mrp) && r.mrp > 0 && (r.maxPrice === null || box("maxPrice")?.dataset.auto)) {
+    r.maxPrice = Math.floor(r.mrp * 10000 / (10000 + r.gstBp) / 100) * 100;
+    if (box("maxPrice")) { box("maxPrice").value = paiseInput(r.maxPrice); box("maxPrice").dataset.auto = "1"; }
+  }
+  if (k === "basePrice" && Number.isInteger(r.basePrice) && (r.minPrice === null || box("minPrice")?.dataset.auto)) {
+    r.minPrice = r.basePrice;
+    if (box("minPrice")) { box("minPrice").value = paiseInput(r.minPrice); box("minPrice").dataset.auto = "1"; }
+  }
+  // Typing in a box yourself makes it yours.
+  if ((k === "maxPrice" || k === "minPrice") && box(k)) delete box(k).dataset.auto;
+}
+
 function readDiscount(r, s) {
   const t = String(s ?? "").trim();
   if (t === "") return 0;
@@ -808,7 +828,13 @@ function refreshRow(tr) {
   const r = rowOf(tr);
   const cell = (c) => tr.querySelector(`[data-c="${c}"]`);
   if (!r.active) { cell("floor").textContent = "–"; cell("margin").textContent = "–"; cell("check").innerHTML = `<span class="ota-muted">Not on sale</span>`; return; }
-  const errs = R.priceProblems(r);
+  if ([r.mrp, r.distributorPrice, r.basePrice, r.minPrice, r.maxPrice].every((v) => v === null)) {
+    tr.classList.add("has-err");
+    cell("floor").textContent = "–"; cell("margin").textContent = "–";
+    cell("check").innerHTML = `<span class="e">Enter the prices, or untick “On” if you don't sell it yet</span>`;
+    return;
+  }
+  const errs = R.priceProblems(r).slice(0, 1);   // one at a time - fix it and the next shows
   const warns = R.priceWarnings(r);
   tr.classList.toggle("has-err", errs.length > 0);
   cell("floor").textContent = errs.length ? "–" : rs(R.floorPrice(r));
