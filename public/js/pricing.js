@@ -971,10 +971,14 @@ function printPriceList(kind) {
     const disc = R.maxDiscountPaise(r);
     const p = R.ourProfit(r);
     const name = `<b>${esc(r.productName)}</b>${r.variantName && r.variantName !== "Standard" ? ` – ${esc(r.variantName)}` : ""}<br><small>${esc(r.sku)}</small>`;
+    // An amount with its % underneath: "of" = what the % is taken of.
+    const withPct = (v, of) => (v === null || v === undefined || !of ? (v === null || v === undefined ? "–" : rs(v))
+      : `${rs(v)}<br><small class="pc ${v < 0 ? "neg" : ""}">${(Math.round(v * 1000 / of) / 10).toFixed(1)}%</small>`);
+    const dm = r.basePrice - r.distributorPrice;
     const cells = internal
-      ? [rs(r.costPrice), r.mrp ? rs(r.mrp) : "–", rs(r.distributorPrice), rs(r.basePrice), disc ? rs(disc) : "–", rs(R.floorPrice(r)),
-        rs(r.basePrice - r.distributorPrice), p ? rs(p.direct) : "–", p ? rs(p.viaDistributor) : "–", pct(r.gstBp)]
-      : [r.mrp ? rs(r.mrp) : "–", rs(r.distributorPrice), rs(r.basePrice), disc ? rs(disc) : "–", rs(R.floorPrice(r)), rs(r.basePrice - r.distributorPrice), pct(r.gstBp)];
+      ? [rs(r.costPrice), r.mrp ? rs(r.mrp) : "–", rs(r.distributorPrice), rs(r.basePrice), disc ? withPct(disc, r.basePrice) : "–", rs(R.floorPrice(r)),
+        withPct(dm, r.basePrice), p ? withPct(p.direct, r.basePrice) : "–", p ? withPct(p.viaDistributor, r.distributorPrice) : "–", pct(r.gstBp)]
+      : [r.mrp ? rs(r.mrp) : "–", rs(r.distributorPrice), rs(r.basePrice), disc ? withPct(disc, r.basePrice) : "–", rs(R.floorPrice(r)), withPct(dm, r.basePrice), pct(r.gstBp)];
     return `<tr><td class="c">${n}</td><td>${name}</td>${cells.map((c) => `<td class="num">${c}</td>`).join("")}</tr>`;
   }).join("")).join("");
   const coLines = [co.companyAddress, [co.companyGstin && `GSTIN: ${co.companyGstin}`, co.companyPhone && `Ph: ${co.companyPhone}`].filter(Boolean).join(" · "),
@@ -1005,6 +1009,8 @@ function printPriceList(kind) {
   th small { text-transform: none; font-weight: 400; opacity: .9; }
   td { padding: 6px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
   td small { color: #6b7280; }
+  td small.pc { color: #15803d; font-weight: 700; font-size: 10px; }
+  td small.pc.neg { color: #b91c1c; }
   td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.c { text-align: center; color: #6b7280; width: 26px; }
   tr { page-break-inside: avoid; }
@@ -1033,8 +1039,8 @@ function printPriceList(kind) {
   </table>
   <div class="notes">
     All amounts in Indian Rupees (₹). MRP includes GST; all other prices are before GST - GST is charged extra at the rate shown.
-    ${internal ? "Lowest price = the least a distributor may sell at. Our profit: direct = farmer selling price − our cost; via distributor = distributor price − our cost."
-      : "Lowest selling price = the least you may sell at; any discount you give comes from your margin. The customer may never be charged more than the MRP."}
+    ${internal ? "Lowest price = the least a distributor may sell at. Our profit: direct = farmer selling price − our cost; via distributor = distributor price − our cost. Green % : discount, distributor margin and direct profit as % of the farmer selling price; profit via distributor as % of the distributor price."
+      : "Lowest selling price = the least you may sell at; any discount you give comes from your margin. The customer may never be charged more than the MRP. Green % = as a share of the farmer selling price."}
     Prices are valid for the period shown and may change without notice; this list replaces all earlier price lists.
     ${notes}
   </div>
