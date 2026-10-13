@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Module Pricing | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  <link rel="stylesheet" href="/css/ota.css">
+  <link rel="stylesheet" href="/css/pricing.css">
+  <link rel="stylesheet" href="/css/admin-mobile.css">
+</head>
+
+<body class="fb-layout">
+
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/vps-status.html">🖥️ VPS & TBMQ</a>
+    <a href="/admin/ota.html">🚀 Firmware OTA</a>
+    <a href="/admin/broadcast.html">📢 Message Broadcast</a>
+    <a class="active" href="/admin/pricing.html">💰 Module Pricing</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>💰 Module Pricing</h1>
+  <span class="fb-user" id="roleBadge">…</span>
+</header>
+
+<div id="pageError" class="ota-alert error" hidden></div>
+<div id="pageOk" class="ota-alert ok" hidden></div>
+
+<!-- STATUS -->
+<section class="pr-status">
+  <div class="pr-status-card" id="curCard">
+    <span class="pr-status-icon">🏷️</span>
+    <div><p>Prices in force</p><h2 id="curName">–</h2><small id="curWhen"></small></div>
+  </div>
+  <div class="pr-status-card">
+    <span class="pr-status-icon">📅</span>
+    <div><p>Next price change</p><h2 id="nextName">–</h2><small id="nextWhen"></small></div>
+  </div>
+  <div class="pr-status-card">
+    <span class="pr-status-icon">📦</span>
+    <div><p>Products on sale</p><h2 id="itemCount">–</h2><small>in the current list</small></div>
+  </div>
+  <div class="pr-status-card">
+    <span class="pr-status-icon">✍️</span>
+    <div><p>Waiting for you</p><h2 id="pendingCount">–</h2><small id="pendingWhat">drafts / approvals</small></div>
+  </div>
+</section>
+
+<nav class="pr-tabs" id="tabs">
+  <button data-tab="calc" class="active">🧮 Calculator</button>
+  <button data-tab="lists">📋 Price Lists</button>
+  <button data-tab="products">📦 Products</button>
+  <button data-tab="quotes">🧾 Quotes</button>
+  <button data-tab="audit">🕑 Audit Log</button>
+  <button data-tab="settings">⚙️ Settings</button>
+</nav>
+
+<!-- ============ CALCULATOR ============ -->
+<section class="pr-tab" id="tab-calc">
+  <div class="ota-card" id="calcBlocked" hidden>
+    <h2>⛔ No valid prices</h2>
+    <p>No price list is in force right now, so new estimates can't be made. Publish a price list under <b>Price Lists</b>.</p>
+  </div>
+  <div id="calcBody">
+    <div class="ota-card">
+      <h2><span class="ota-step">1</span> Quick builder <small class="ota-muted">- fills in a complete system; change anything after</small></h2>
+      <div class="pr-builder">
+        <label class="ota-filter"><span>Motors</span>
+          <select id="qbMotors"><option>1</option><option>2</option><option selected>3</option><option>4</option></select>
+        </label>
+        <label class="ota-filter"><span>Valves</span>
+          <input type="number" id="qbValves" min="0" max="64" value="6">
+        </label>
+        <label class="ota-filter"><span>Valve type</span><select id="qbType"></select></label>
+        <label class="pr-check"><input type="checkbox" id="qbInstall" checked> Installation</label>
+        <label class="pr-check"><input type="checkbox" id="qbBackwash"> Filter backwash</label>
+        <button class="fb-btn-primary small" id="qbBuild">⚡ Build estimate</button>
+      </div>
+      <div class="ota-note" id="qbNotes"></div>
+    </div>
+
+    <div class="ota-card">
+      <h2><span class="ota-step">2</span> Products</h2>
+      <div class="ota-row ota-filters">
+        <input type="search" id="addSearch" class="ota-search" list="addList" placeholder="Type to add a product (name or SKU)…">
+        <datalist id="addList"></datalist>
+        <button class="fb-btn-primary small" id="addBtn">+ Add</button>
+        <label class="ota-filter pr-inline"><span>Same discount on all</span>
+          <span class="pr-disc"><input type="number" id="allDisc" min="0" max="100" step="0.5" placeholder="%"><button class="pr-link" id="allDiscBtn">Apply</button></span>
+        </label>
+        <button class="pr-link" id="clearLines">Clear all</button>
+      </div>
+      <div class="pr-suggest" id="suggestions"></div>
+      <div class="fb-table-card pr-scroll">
+        <table class="fb-table pr-lines">
+          <thead><tr>
+            <th>Product</th><th class="num">MRP</th><th class="num">Price</th><th class="num">Qty</th><th>Discount</th>
+            <th class="num">Net / unit</th><th class="num">Before GST</th><th class="num">GST</th><th class="num">Total</th>
+            <th class="num pr-internal" title="Not shown on the customer's quote">Margin 🔒</th><th></th>
+          </tr></thead>
+          <tbody id="lineBody"><tr><td colspan="11" class="ota-muted">Use the Quick builder or add products.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="pr-calc-bottom">
+      <div class="ota-card">
+        <h2><span class="ota-step">3</span> Customer <small class="ota-muted">(for a saved quote)</small></h2>
+        <div class="pr-grid2">
+          <label class="ota-field"><span>Customer name</span><input type="text" id="cuName" maxlength="80"></label>
+          <label class="ota-field"><span>Phone</span><input type="text" id="cuPhone" maxlength="20" inputmode="tel"></label>
+          <label class="ota-field"><span>Place</span><input type="text" id="cuPlace" maxlength="80"></label>
+          <label class="ota-field"><span>State <small>(decides CGST+SGST or IGST)</small></span><select id="cuState"></select></label>
+        </div>
+        <label class="ota-field"><span>Notes <small>(printed on the quote)</small></span><input type="text" id="cuNotes" maxlength="500"></label>
+      </div>
+      <div class="ota-card pr-summary">
+        <h2>Estimate</h2>
+        <div id="sumBody" class="pr-sum"></div>
+        <p class="pr-validity" id="sumValidity"></p>
+        <p class="pr-disclaimer" id="sumDisclaimer"></p>
+        <div class="ota-actions">
+          <button class="fb-btn-primary" id="saveQuote" disabled>💾 Save quote</button>
+          <button class="pr-btn" id="printEstimate" disabled>🖨️ Print</button>
+          <button class="pr-btn" id="waEstimate" disabled>🟢 WhatsApp</button>
+        </div>
+        <span class="ota-status-text" id="calcStatus"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRICE LISTS ============ -->
+<section class="pr-tab" id="tab-lists" hidden>
+  <div class="ota-card">
+    <h2>Price list versions
+      <button class="fb-btn-primary small pr-right pr-edit-only" id="newListBtn">+ New version</button></h2>
+    <p class="ota-note">Prices are never changed in place. <b>New version</b> copies the current prices into a draft → edit → <b>Submit</b> →
+      <b>Approve</b> → <b>Publish</b> with a start date. Approved lists are locked forever, which is your price history.</p>
+    <div class="fb-table-card">
+      <table class="fb-table">
+        <thead><tr><th>#</th><th>Name</th><th>Status</th><th>From</th><th>Until</th><th class="num">Products</th><th>Created</th><th>Approved</th><th></th></tr></thead>
+        <tbody id="listsBody"><tr><td colspan="9">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ota-card" id="editor" hidden>
+    <h2 id="edTitle">Price list</h2>
+    <div class="pr-ed-head">
+      <label class="ota-field"><span>Name</span><input type="text" id="edName" maxlength="80"></label>
+      <label class="ota-field narrow"><span>Effective from <small>(00:00 IST)</small></span><input type="date" id="edFrom"></label>
+      <label class="ota-field narrow"><span>Valid until <small>(optional, last day)</small></span><input type="date" id="edTo"></label>
+      <label class="ota-field"><span>Notes</span><input type="text" id="edNotes" maxlength="1000"></label>
+    </div>
+    <div class="ota-alert" id="edReject" hidden></div>
+    <div class="ota-alert error" id="edProblems" hidden></div>
+    <div class="pr-ed-actions" id="edActions"></div>
+
+    <div class="ota-row ota-filters pr-bulk" id="edBulk">
+      <input type="search" id="edSearch" class="ota-search" placeholder="Search product or SKU">
+      <label class="ota-filter"><span>Category</span><select id="edCat"><option value="">All</option></select></label>
+      <label class="ota-filter"><span>Show</span>
+        <select id="edShow"><option value="">All rows</option><option value="problems">Problems only</option><option value="changed">Changed vs current</option></select>
+      </label>
+      <span class="pr-bulk-tools pr-draft-only">
+        <label class="ota-filter"><span>Bulk change</span>
+          <select id="bkField">
+            <option value="distributorPrice">Distributor price</option><option value="basePrice">Selling price</option>
+            <option value="minPrice">Minimum price</option><option value="maxPrice">Maximum price</option><option value="mrp">MRP</option>
+          </select>
+        </label>
+        <label class="ota-filter"><span>by %</span><input type="number" id="bkPct" step="0.5" placeholder="+5 / -3"></label>
+        <label class="ota-filter"><span>Round to</span><select id="bkRound"><option value="100">₹1</option><option value="1000" selected>₹10</option><option value="0">no rounding</option></select></label>
+        <button class="pr-btn" id="bkApply">Apply to shown rows</button>
+      </span>
+      <span class="pr-right">
+        <button class="pr-btn" id="csvExport">⬇ CSV</button>
+        <label class="pr-btn pr-draft-only">⬆ Import CSV<input type="file" id="csvImport" accept=".csv,text/csv" hidden></label>
+      </span>
+    </div>
+    <div class="fb-table-card pr-scroll">
+      <table class="fb-table pr-items">
+        <thead><tr>
+          <th title="On sale in this list">On</th><th>Product</th><th class="num">MRP<br><small>incl. GST</small></th>
+          <th class="num">Distributor<br>price</th><th class="num">Selling<br>price</th><th class="num">Minimum<br>price</th>
+          <th class="num">Maximum<br>price</th><th>Max discount</th><th>GST</th><th class="num">Floor</th><th class="num">Margin</th><th>Check</th>
+        </tr></thead>
+        <tbody id="itemsBody"></tbody>
+      </table>
+    </div>
+    <p class="ota-note">All prices before GST except MRP. <b>Floor</b> = the lowest price a distributor can sell at = the higher of the minimum price and
+      (selling price − max discount). <b>Margin</b> = selling price − distributor price. Grey text under a price = the price in force now.</p>
+  </div>
+</section>
+
+<!-- ============ PRODUCTS ============ -->
+<section class="pr-tab" id="tab-products" hidden>
+  <div class="ota-card">
+    <h2>Product catalogue <button class="fb-btn-primary small pr-right pr-edit-only" id="newProductBtn">+ Add product</button></h2>
+    <div class="ota-row ota-filters">
+      <input type="search" id="prodSearch" class="ota-search" placeholder="Search name or SKU">
+      <label class="ota-filter"><span>Category</span><select id="prodCat"><option value="">All</option></select></label>
+      <label class="ota-filter"><span>Status</span><select id="prodActive"><option value="">All</option><option value="1">Active</option><option value="0">Inactive</option></select></label>
+    </div>
+    <div class="fb-table-card pr-scroll">
+      <table class="fb-table">
+        <thead><tr><th>SKU</th><th>Product</th><th>Category</th><th>Variants</th><th>Accessories</th><th>HSN/SAC</th><th>GST</th><th>Status</th><th></th></tr></thead>
+        <tbody id="prodBody"><tr><td colspan="9">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="ota-note">Products are never deleted (old quotes and price lists refer to them) - switch them to Inactive instead.
+      A new product or variant gets its price in the next price list version.</p>
+  </div>
+</section>
+
+<!-- ============ QUOTES ============ -->
+<section class="pr-tab" id="tab-quotes" hidden>
+  <div class="ota-card">
+    <h2>Saved quotes</h2>
+    <div class="ota-row ota-filters">
+      <input type="search" id="quoteSearch" class="ota-search" placeholder="Quote number, customer, phone or distributor ID">
+    </div>
+    <div class="fb-table-card pr-scroll">
+      <table class="fb-table">
+        <thead><tr><th>Quote</th><th>Date</th><th>Customer</th><th>By</th><th class="num">Payable</th><th>Valid until</th><th>Status</th><th></th></tr></thead>
+        <tbody id="quoteBody"><tr><td colspan="8">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="ota-pager" id="quotePager"></div>
+  </div>
+</section>
+
+<!-- ============ AUDIT ============ -->
+<section class="pr-tab" id="tab-audit" hidden>
+  <div class="ota-card">
+    <h2>Audit log <small class="ota-muted">- every change, who and when; can't be edited or deleted</small></h2>
+    <div class="ota-row ota-filters"><input type="search" id="auditSearch" class="ota-search" placeholder="Search who, action or detail"></div>
+    <div class="fb-table-card pr-scroll">
+      <table class="fb-table">
+        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>What</th><th>Detail</th><th></th></tr></thead>
+        <tbody id="auditBody"><tr><td colspan="6">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="ota-pager" id="auditPager"></div>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section class="pr-tab" id="tab-settings" hidden>
+  <div class="ota-card">
+    <h2>Quote and approval settings</h2>
+    <div class="pr-grid2">
+      <label class="ota-field"><span>Quote valid for (days)</span><input type="number" id="stValidity" min="1" max="365"></label>
+      <label class="ota-field"><span>Warn before prices expire (days)</span><input type="number" id="stWarn" min="1" max="90"></label>
+      <label class="ota-field"><span>Farm Buddie's state <small>(same state = CGST + SGST, other = IGST)</small></span><select id="stHome"></select></label>
+      <label class="pr-check pr-tall"><input type="checkbox" id="stTwo"> Two-person approval <small>(the person who submits a list can't approve it)</small></label>
+    </div>
+    <label class="ota-field"><span>Disclaimer on every estimate</span><textarea id="stDisclaimer" rows="3" maxlength="1000"></textarea></label>
+    <div class="ota-actions"><button class="fb-btn-primary pr-owner-only" id="stSave">Save settings</button></div>
+  </div>
+  <div class="ota-card">
+    <h2>Pricing team <small class="ota-muted">- people who aren't full admins</small></h2>
+    <p class="ota-note">Full admins (the ADMIN_EMAILS accounts) can do everything. Give other Farm Buddie staff a pricing role here:
+      <b>Viewer</b> sees prices and quotes · <b>Editor</b> also edits products and draft lists · <b>Approver</b> also approves and publishes.</p>
+    <div class="ota-row pr-owner-only">
+      <label class="ota-field"><span>Email (their web panel login)</span><input type="text" id="staffEmail" maxlength="120"></label>
+      <label class="ota-filter"><span>Role</span><select id="staffRole"><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="approver">Approver</option></select></label>
+      <button class="fb-btn-primary small" id="staffAdd">Save</button>
+    </div>
+    <div class="fb-table-card">
+      <table class="fb-table"><thead><tr><th>Email</th><th>Role</th><th>Changed by</th><th></th></tr></thead><tbody id="staffBody"></tbody></table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- PRODUCT EDITOR -->
+<div class="pr-modal" id="prodModal" hidden>
+  <div class="pr-modal-box">
+    <button class="pr-modal-close" data-close="prodModal" aria-label="Close">✕</button>
+    <h2 id="pmTitle">Product</h2>
+    <div class="pr-grid3">
+      <label class="ota-field"><span>SKU</span><input type="text" id="pmSku" maxlength="32"></label>
+      <label class="ota-field"><span>Name</span><input type="text" id="pmName" maxlength="80"></label>
+      <label class="ota-field"><span>Category</span><select id="pmCategory"></select></label>
+      <label class="ota-field"><span>Type</span><select id="pmKind"><option value="goods">Goods</option><option value="service">Service</option></select></label>
+      <label class="ota-field"><span>Role in a system <small>(Quick builder)</small></span><select id="pmRole"></select></label>
+      <label class="ota-field"><span>Unit</span><input type="text" id="pmUnit" maxlength="12" placeholder="pcs"></label>
+      <label class="ota-field"><span>HSN / SAC code</span><input type="text" id="pmHsn" maxlength="8" inputmode="numeric"></label>
+      <label class="ota-field"><span>GST rate <small>(confirm with your auditor)</small></span><select id="pmGst"></select></label>
+      <label class="ota-field"><span>Display order</span><input type="number" id="pmOrder" min="0"></label>
+    </div>
+    <label class="ota-field"><span>Description</span><input type="text" id="pmDesc" maxlength="500"></label>
+    <label class="pr-check"><input type="checkbox" id="pmActive"> Active (can be sold)</label>
+    <div class="ota-actions"><button class="fb-btn-primary pr-edit-only" id="pmSave">Save product</button><span class="ota-status-text" id="pmStatus"></span></div>
+
+    <div id="pmMore" hidden>
+      <h3 class="ota-subhead">Variants</h3>
+      <div class="fb-table-card pr-scroll">
+        <table class="fb-table"><thead><tr><th>SKU</th><th>Name</th><th>Channels</th><th>Valve type</th><th>Size / length</th><th>Active</th><th></th></tr></thead>
+          <tbody id="pmVariants"></tbody></table>
+      </div>
+      <button class="pr-link pr-edit-only" id="pmAddVariant">+ Add variant</button>
+
+      <h3 class="ota-subhead">Accessories <small class="ota-muted">- Required ones are added by the Quick builder; optional ones are suggested</small></h3>
+      <div class="fb-table-card pr-scroll">
+        <table class="fb-table"><thead><tr><th>Accessory</th><th>Required?</th><th>Qty</th><th>for every</th><th></th></tr></thead>
+          <tbody id="pmAccessories"></tbody></table>
+      </div>
+      <div class="ota-row pr-edit-only">
+        <select id="pmAccPick" class="pr-grow"></select>
+        <button class="pr-link" id="pmAccAdd">+ Add accessory</button>
+        <button class="fb-btn-primary small" id="pmAccSave">Save accessories</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- QUOTE VIEW -->
+<div class="pr-modal" id="quoteModal" hidden>
+  <div class="pr-modal-box wide">
+    <button class="pr-modal-close" data-close="quoteModal" aria-label="Close">✕</button>
+    <div id="qmBody"></div>
+    <div class="ota-actions" id="qmActions"></div>
+  </div>
+</div>
+
+<!-- AUDIT DETAIL -->
+<div class="pr-modal" id="auditModal" hidden>
+  <div class="pr-modal-box wide">
+    <button class="pr-modal-close" data-close="auditModal" aria-label="Close">✕</button>
+    <div id="amBody"></div>
+  </div>
+</div>
+
+<script type="module" src="/js/pricing.js"></script>
+<script src="/js/admin-mobile.js" defer></script>
+</body>
+</html>

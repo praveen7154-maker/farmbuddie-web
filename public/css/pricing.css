@@ -1,0 +1,175 @@
+/* Module Pricing page (admin/pricing.html) - builds on ota.css's cards, fields and pager. */
+.ota-alert.ok { background: #ecfdf5; color: #166534; }
+.ota-alert.warn { background: #fffbeb; color: #92400e; }
+[hidden] { display: none !important; }
+
+/* Status strip */
+.pr-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.pr-status-card {
+  display: flex; align-items: center; gap: 14px; background: #fff; border-radius: 14px; padding: 16px 18px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); border: 1px solid transparent;
+}
+.pr-status-card p { margin: 0; font-size: 12.5px; color: #6b7280; }
+.pr-status-card h2 { margin: 2px 0; font-size: 19px; color: #14532d; }
+.pr-status-card small { font-size: 12px; color: #6b7280; }
+.pr-status-card.warn { border-color: #f59e0b; background: #fffbeb; }
+.pr-status-card.bad { border-color: #ef4444; background: #fef2f2; }
+.pr-status-card.bad h2 { color: #b91c1c; }
+.pr-status-icon {
+  width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 22px; background: linear-gradient(135deg, #fef9c3, #dcfce7); flex: none;
+}
+
+/* Tabs */
+.pr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+.pr-tabs button {
+  padding: 10px 16px; border: none; background: none; font-size: 14px; font-weight: 600; color: #4b5563; cursor: pointer;
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+}
+.pr-tabs button.active { color: #15803d; border-bottom-color: #15803d; }
+.pr-tabs button:hover { color: #15803d; }
+
+/* Buttons */
+.pr-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid #d1d5db; border-radius: 10px;
+  background: #fff; cursor: pointer; font-size: 13.5px; font-weight: 600; color: #374151; white-space: nowrap;
+}
+.pr-btn:hover:not(:disabled) { border-color: #15803d; color: #15803d; }
+.pr-btn:disabled { opacity: 0.45; cursor: default; }
+.pr-btn.danger { border-color: #fca5a5; color: #b91c1c; }
+.pr-btn.danger:hover:not(:disabled) { background: #fef2f2; color: #991b1b; border-color: #ef4444; }
+.pr-btn.go { background: #15803d; border-color: #15803d; color: #fff; }
+.pr-btn.go:hover:not(:disabled) { background: #166534; color: #fff; }
+.pr-link { background: none; border: none; color: #15803d; font-weight: 600; cursor: pointer; font-size: 13.5px; padding: 6px 4px; }
+.pr-link:hover { text-decoration: underline; }
+.pr-link.danger { color: #b91c1c; }
+.pr-right { margin-left: auto; float: right; display: inline-flex; gap: 8px; align-items: center; }
+h2 .pr-right { float: right; margin-top: -4px; }
+
+/* Calculator */
+.pr-builder { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.pr-builder input[type="number"], .pr-builder select { width: 110px; }
+.ota-filter input[type="number"], .ota-filter input[type="text"] {
+  padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; background: #fff;
+}
+.pr-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: #374151; padding-bottom: 8px; cursor: pointer; }
+.pr-check small { color: #6b7280; }
+.pr-tall { align-self: flex-end; }
+.pr-inline { flex-direction: column; }
+.pr-disc { display: inline-flex; gap: 4px; align-items: center; }
+.pr-disc input { width: 80px; }
+.pr-suggest { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.pr-suggest button {
+  border: 1px dashed #16a34a; background: #f0fdf4; color: #166534; border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer;
+}
+.pr-scroll { overflow-x: auto; }
+.fb-table th.num, .fb-table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pr-lines td { vertical-align: top; }
+.pr-lines input[type="number"] { width: 72px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; text-align: right; }
+.pr-lines select { padding: 6px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; }
+.pr-lines .pr-qty { width: 64px; }
+.pr-prod b { display: block; color: #111827; font-size: 14px; }
+.pr-prod small { color: #6b7280; font-size: 12px; }
+.pr-strike { color: #9ca3af; text-decoration: line-through; font-size: 12px; display: block; }
+.pr-line-err td { background: #fef2f2; }
+.pr-err { color: #b91c1c; font-size: 12.5px; margin-top: 4px; }
+.pr-hint { color: #6b7280; font-size: 11.5px; display: block; margin-top: 2px; }
+.pr-internal { color: #92400e; }
+.pr-calc-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: 16px; align-items: start; }
+.pr-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 16px; }
+.pr-grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 16px; }
+.pr-grid2 .ota-field, .pr-grid3 .ota-field { margin-bottom: 12px; }
+.ota-field input[type="number"], .ota-field input[type="date"], .ota-field textarea {
+  padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; font-family: inherit;
+}
+
+/* Estimate summary */
+.pr-summary { position: sticky; top: 12px; }
+.pr-sum { font-size: 14px; }
+.pr-sum .row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed #e5e7eb; font-variant-numeric: tabular-nums; }
+.pr-sum .row.sub { color: #6b7280; font-size: 13px; padding-left: 12px; }
+.pr-sum .row.disc span:last-child { color: #15803d; }
+.pr-sum .row.total { border: none; border-top: 2px solid #111827; margin-top: 6px; padding-top: 10px; font-size: 20px; font-weight: 800; color: #14532d; }
+.pr-sum .row.internal { color: #92400e; font-size: 13px; border-bottom: none; }
+.pr-validity { font-size: 13px; color: #374151; margin: 10px 0 4px; }
+.pr-disclaimer { font-size: 12px; color: #6b7280; margin: 4px 0 10px; line-height: 1.4; }
+
+/* Price list editor */
+.pr-ed-head { display: grid; grid-template-columns: 1.3fr 0.8fr 0.8fr 1.5fr; gap: 14px; margin-bottom: 8px; }
+.pr-ed-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }
+.pr-bulk { gap: 10px; }
+.pr-bulk-tools { display: inline-flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding-left: 10px; border-left: 2px solid #e5e7eb; }
+.pr-bulk-tools input[type="number"] { width: 90px; }
+.pr-items td { vertical-align: top; padding: 6px 8px; }
+.pr-items input.pr-money { width: 78px; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13.5px; text-align: right; }
+.pr-items input.pr-money.bad { border-color: #ef4444; background: #fef2f2; }
+.pr-items input.pr-money.changed { border-color: #f59e0b; }
+.pr-items select { padding: 5px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; }
+.pr-items .pr-was { display: block; color: #9ca3af; font-size: 11.5px; text-align: right; margin-top: 2px; }
+.pr-items .pr-was.up { color: #b45309; }
+.pr-items .pr-was.down { color: #15803d; }
+.pr-items tr.off td { opacity: 0.5; }
+.pr-items tr.has-err td { background: #fff7f7; }
+.pr-items .pr-dt { display: inline-flex; gap: 4px; }
+.pr-items .pr-dt input { width: 56px; }
+.pr-checkcell { font-size: 12px; max-width: 260px; }
+.pr-checkcell .e { color: #b91c1c; display: block; }
+.pr-checkcell .w { color: #b45309; display: block; }
+.pr-checkcell .ok { color: #15803d; }
+
+/* Status pills */
+.pr-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pr-pill.draft { background: #f3f4f6; color: #374151; }
+.pr-pill.submitted { background: #fef3c7; color: #92400e; }
+.pr-pill.approved { background: #dbeafe; color: #1e40af; }
+.pr-pill.scheduled { background: #ede9fe; color: #5b21b6; }
+.pr-pill.active { background: #dcfce7; color: #166534; }
+.pr-pill.expired, .pr-pill.cancelled { background: #fee2e2; color: #991b1b; }
+.pr-pill.open { background: #dbeafe; color: #1e40af; }
+.pr-pill.accepted { background: #dcfce7; color: #166534; }
+.pr-chip { display: inline-block; background: #f3f4f6; border-radius: 6px; padding: 2px 7px; margin: 1px 3px 1px 0; font-size: 12px; }
+.pr-chip.off { text-decoration: line-through; color: #9ca3af; }
+tr.pr-click { cursor: pointer; }
+tr.pr-click:hover td { background: #f9fafb; }
+tr.pr-selected td { background: #f0fdf4 !important; }
+
+/* Modals */
+.pr-modal { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); display: flex; align-items: flex-start; justify-content: center;
+  z-index: 1000; overflow-y: auto; padding: 30px 12px; }
+.pr-modal-box { position: relative; background: #fff; border-radius: 16px; padding: 24px; width: min(860px, 100%); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2); }
+.pr-modal-box.wide { width: min(980px, 100%); }
+.pr-modal-box h2 { margin-top: 0; }
+.pr-modal-close { position: absolute; top: 12px; right: 14px; border: none; background: none; font-size: 20px; cursor: pointer; color: #6b7280; }
+.pr-modal input[type="text"].pr-cell, .pr-modal select.pr-cell { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; width: 100%; min-width: 80px; }
+.pr-modal input[type="number"].pr-cell { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; width: 70px; }
+.pr-grow { flex: 1 1 260px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; }
+.pr-audit-json { background: #f9fafb; border-radius: 10px; padding: 12px; font-size: 12px; overflow-x: auto; max-height: 420px; }
+
+/* Quote document (modal + print) */
+.pr-doc { font-size: 13.5px; color: #111827; }
+.pr-doc-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; border-bottom: 2px solid #15803d; padding-bottom: 12px; margin-bottom: 14px; }
+.pr-doc-head img { height: 52px; }
+.pr-doc-head h1 { margin: 0; font-size: 22px; color: #14532d; }
+.pr-doc-meta { text-align: right; font-size: 13px; line-height: 1.6; }
+.pr-doc table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+.pr-doc th, .pr-doc td { border-bottom: 1px solid #e5e7eb; padding: 7px 6px; text-align: left; }
+.pr-doc th { background: #f0fdf4; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: #374151; }
+.pr-doc td.num, .pr-doc th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pr-doc-totals { margin-left: auto; width: min(360px, 100%); }
+.pr-doc-note { font-size: 12px; color: #4b5563; margin-top: 14px; line-height: 1.5; }
+.pr-expired-banner { background: #fef2f2; color: #991b1b; padding: 8px 12px; border-radius: 8px; font-weight: 700; margin-bottom: 10px; }
+
+@media (max-width: 1100px) {
+  .pr-calc-bottom { grid-template-columns: 1fr; }
+  .pr-summary { position: static; }
+  .pr-ed-head { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .pr-ed-head { grid-template-columns: 1fr; }
+  .pr-tabs button { padding: 8px 10px; font-size: 13px; }
+  .pr-bulk-tools { border-left: none; padding-left: 0; }
+  .pr-right, h2 .pr-right { float: none; margin: 8px 0 0; }
+}
+.fb-table td.pr-prod, .fb-table th:first-child { text-align: left; }
+.pr-lines td.pr-prod, .pr-items td.pr-prod { min-width: 200px; }
+.pr-summary .fb-btn-primary, .pr-calc-bottom .fb-btn-primary { font-size: 14px; padding: 10px 16px; }

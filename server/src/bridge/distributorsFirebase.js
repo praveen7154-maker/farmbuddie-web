@@ -7,7 +7,7 @@ export async function findDistributor(id) {
   const snap = await db.collection("distributors").where("distributorId", "==", id).limit(1).get();
   if (snap.empty) return null;
   const d = snap.docs[0].data();
-  return { distributorId: id, name: d.name || null, status: d.status || "active" };
+  return { distributorId: id, name: d.name || null, status: d.status || "active", state: d.state || null };
 }
 
 const farmPhones = (f) => [f.primaryMobile, f.secondaryMobile, ...(Array.isArray(f.appUsers) ? f.appUsers.map((u) => u?.mobile) : [])]

@@ -6,6 +6,7 @@ import { ensureOtaSchema } from "./otaStore.js";
 import { ensureAnnouncementSchema } from "./announcementStore.js";
 import { ensureReportSchema } from "./reportStore.js";
 import { ensureDistributorSchema } from "./distributorStore.js";
+import { ensurePricingSchema } from "./pricingStore.js";
 import { TOKEN_PREFIX } from "./distributors.js";
 import { auth } from "../firebaseAdmin.js";
 import { startFarmerDocCacheRefresh } from "./firestoreMirror.js";
@@ -19,6 +20,7 @@ async function main() {
   await ensureAnnouncementSchema();
   await ensureReportSchema();
   await ensureDistributorSchema();
+  await ensurePricingSchema();
   setOtaStatusHandler(ota.handleOtaStatus);
   startRetentionCleanup();
   broadcast.startScheduler();

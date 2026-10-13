@@ -29,6 +29,8 @@ import { createDistributorModule, TOKEN_PREFIX } from "./distributors.js";
 import { pgDistributorStore } from "./distributorStore.js";
 import { findDistributor, distributorFarms, loadReferrals, loadRedemptions } from "./distributorsFirebase.js";
 import { requireAdmin } from "../adminAuth.js";
+import { createPricingModule } from "./pricing.js";
+import { pgPricingStore } from "./pricingStore.js";
 
 export const app = express();
 // nginx (on the host) is the only caller - the port is published on
@@ -111,6 +113,11 @@ app.use(cors(corsOptions), limiter, verifyCaller);
 
 app.use("/distributor", distributors.router);
 app.use("/distributors", requireAdmin, distributors.adminRouter);
+
+// Module Pricing (web panel > Module Pricing, Irrigo Admin > Price List /
+// Price Calculator) - see pricing.js. Its own role checks inside.
+export const pricing = createPricingModule({ store: pgPricingStore, findDistributor });
+app.use("/pricing", pricing.router);
 
 app.use("/ota", ota.adminRouter);
 
