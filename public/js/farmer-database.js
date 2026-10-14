@@ -1,5 +1,6 @@
 import { auth, db } from "/js/firebase-init.js";
 import { valveConfigExportColumns } from "/js/valve-config.js";
+import { isDeviceOnline } from "/js/device-status-render.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -563,17 +564,8 @@ window.openPhoneAuth = async function(id){
 
 let isOnline = false;
 
-if (f.deviceStatus?.lastSeen) {
-
-  const lastSeen =
-    f.deviceStatus.lastSeen.toDate?.() ||
-    new Date(f.deviceStatus.lastSeen);
-
-  const diffSeconds =
-    (Date.now() - lastSeen.getTime()) / 1000;
-
-  isOnline = diffSeconds <= 90;
-}
+// Same rule as everywhere else - see isDeviceOnline() (device-status-render.js).
+isOnline = isDeviceOnline(f.deviceStatus);
 
 /*const mcuStatus = `
 <span class="${isOnline ? "status-online" : "status-offline"}">

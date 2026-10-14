@@ -9,7 +9,7 @@ import { ensureDistributorSchema } from "./distributorStore.js";
 import { ensurePricingSchema } from "./pricingStore.js";
 import { TOKEN_PREFIX } from "./distributors.js";
 import { auth } from "../firebaseAdmin.js";
-import { startFarmerDocCacheRefresh } from "./firestoreMirror.js";
+import { startFarmerDocCacheRefresh, startOfflineSweep } from "./firestoreMirror.js";
 import { attachLiveGateway } from "./liveGateway.js";
 import { app, ota, broadcast, reports, distributors } from "./server.js";
 
@@ -26,6 +26,7 @@ async function main() {
   broadcast.startScheduler();
   reports.startRollUp();
   startFarmerDocCacheRefresh();
+  startOfflineSweep();
   connectBridge();
 
   // publishCommand is passed in rather than imported by liveGateway.js

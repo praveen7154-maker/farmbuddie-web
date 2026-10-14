@@ -1,6 +1,7 @@
 import { db } from "../firebaseAdmin.js";
 import { MOTOR_NUMBERS } from "./motorNumbers.js";
 import { farmUnitCounts } from "./farmUnits.js";
+import { liveSnapshot } from "./firestoreMirror.js";
 
 // Same "still talking to the broker" threshold as the web admin panel's
 // own isDeviceOnline() (public/js/device-status-render.js) and device-view.js
@@ -8,7 +9,9 @@ import { farmUnitCounts } from "./farmUnits.js";
 // An idle hub with no app open sends status only every 10 min (see the Motor
 // firmware's STATUS_INTERVAL_SLEEP_MS) but health every 5 min, so 11 min
 // rides out one lost health report.
-const ONLINE_THRESHOLD_MS = 660 * 1000;
+// Firestore's lastSeen is refreshed at least every 20 min while a hub is
+// online (statusThrottle.js HEARTBEAT_MS); going quiet writes offlineAt.
+const ONLINE_THRESHOLD_MS = 25 * 60 * 1000;
 
 function toMillis(lastSeen) {
   if (!lastSeen) return null;
@@ -31,9 +34,14 @@ export async function getFleetStatus() {
 
   return snap.docs.map((doc) => {
     const f = doc.data();
-    const deviceStatus = f.deviceStatus || null;
-    const lastSeenMs = toMillis(deviceStatus?.lastSeen);
-    const online = lastSeenMs != null && Date.now() - lastSeenMs < ONLINE_THRESHOLD_MS;
+    // What this server heard last (memory) beats Firestore, which is only
+    // written now and then (see statusThrottle.js); Firestore after a restart.
+    const live = liveSnapshot(f.controller?.uniqueId);
+    const deviceStatus = live ? { ...(f.deviceStatus || {}), ...live.latest, nodeId: live.nodeId } : (f.deviceStatus || null);
+    const lastSeenMs = live ? live.lastMsgAt : toMillis(deviceStatus?.lastSeen);
+    const offlineAtMs = live ? null : toMillis(f.deviceStatus?.offlineAt);
+    const online = live ? live.online
+      : lastSeenMs != null && Date.now() - lastSeenMs < ONLINE_THRESHOLD_MS && !(offlineAtMs && offlineAtMs >= lastSeenMs);
 
     return {
       farmId: f.controller?.uniqueId || null,

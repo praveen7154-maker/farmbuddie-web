@@ -39,11 +39,17 @@ export function formatDurationShort(totalSec) {
   return `${s}s`;
 }
 
-/** True if deviceStatus.lastSeen is within the last 660s (11 min) - the same "still talking to the broker" threshold used across the admin panel (and server/src/bridge/fleetStatus.js). An idle hub with no app open sends status every 10 min and health every 5 min, so this rides out one lost health report. */
+/** Online: a report within 25 min (lastSeen is refreshed at least every 20 min) and not marked offline since (offlineAt - written 11 min after the last report). Same rule as server/src/bridge/fleetStatus.js. */
+// The server writes status to Firestore only now and then (to stay inside
+// Firebase's free limits): lastSeen at least every 20 min while the hub is
+// online, and offlineAt the moment it goes quiet (11 min without a report).
+const toDate = (v) => v?.toDate?.() || (v ? new Date(v) : null);
 export function isDeviceOnline(deviceStatus) {
-  const lastSeen = deviceStatus?.lastSeen?.toDate?.() || (deviceStatus?.lastSeen ? new Date(deviceStatus.lastSeen) : null);
+  const lastSeen = toDate(deviceStatus?.lastSeen);
   if (!lastSeen) return false;
-  return (Date.now() - lastSeen.getTime()) / 1000 < 660;
+  const offlineAt = toDate(deviceStatus?.offlineAt);
+  if (offlineAt && offlineAt >= lastSeen) return false;
+  return (Date.now() - lastSeen.getTime()) / 1000 < 25 * 60;
 }
 
 /**

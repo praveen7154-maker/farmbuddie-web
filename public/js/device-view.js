@@ -1,7 +1,7 @@
 import { auth, db } from "/js/firebase-init.js";
 import { initDeviceControl, updateDeviceControl } from "/js/device-control.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
-import { formatDurationShort, renderMotorsInto, renderValvesInto, valveListsFromSnapshot } from "/js/device-status-render.js";
+import { formatDurationShort, isDeviceOnline, renderMotorsInto, renderValvesInto, valveListsFromSnapshot } from "/js/device-status-render.js";
 
 /* =====================================================
    GET FARMER ID
@@ -67,11 +67,8 @@ function updateStatusSection(data) {
 
   if (data.lastSeen?.toDate) {
     const lastSeen = data.lastSeen.toDate();
-    const diff = (Date.now() - lastSeen.getTime()) / 1000;
-
-    // Online if updated within 660s - same threshold as isDeviceOnline()
-    // (device-status-render.js); an idle hub reports health every 5 min.
-    isOnline = diff < 660;
+    // Same rule as everywhere else - see isDeviceOnline() (device-status-render.js).
+    isOnline = isDeviceOnline(data);
 
     document.getElementById("lastSeenTime").innerText =
       lastSeen.toLocaleTimeString();

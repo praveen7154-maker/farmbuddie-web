@@ -1,3 +1,4 @@
+import { liveSnapshot } from "./firestoreMirror.js";
 import { db, messaging } from "../firebaseAdmin.js";
 
 // Firestore / FCM side of Message Broadcast (announcements.js): who the
@@ -5,7 +6,7 @@ import { db, messaging } from "../firebaseAdmin.js";
 // apart so announcements.js can be tested without Firebase.
 
 // Same "online" rule as fleetStatus.js (11 min - rides out one lost health report).
-const ONLINE_THRESHOLD_MS = 660 * 1000;
+const ONLINE_THRESHOLD_MS = 25 * 60 * 1000;   // see fleetStatus.js
 const AUDIENCE_CACHE_MS = 30 * 1000;
 const FCM_BATCH = 500;   // sendEachForMulticast's limit
 const DEAD_TOKEN_CODES = new Set(["messaging/registration-token-not-registered", "messaging/invalid-registration-token"]);
@@ -45,7 +46,8 @@ export async function loadAudience() {
       location: f.farmDetails?.location || null,
       distributorId: f.leadSource?.distributorId || null,   // who onboarded this farmer
       active: f.status !== "inactive",
-      online: lastSeen != null && Date.now() - lastSeen < ONLINE_THRESHOLD_MS
+      online: liveSnapshot(f.controller.uniqueId)?.online
+        ?? (lastSeen != null && Date.now() - lastSeen < ONLINE_THRESHOLD_MS && !(toMillis(f.deviceStatus?.offlineAt) >= lastSeen))
     };
   }).sort((a, b) => a.farmId.localeCompare(b.farmId, undefined, { numeric: true }));
   const phones = phoneSnap.docs
