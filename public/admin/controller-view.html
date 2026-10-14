@@ -24,6 +24,12 @@
   <link rel="stylesheet" href="/css/admin-controller-detail.css">
 
   <link rel="stylesheet" href="/css/admin-mobile.css">
+  <!-- Menu clicks feel instant: Chrome/Edge prepare the admin page you point
+       at (hover / touch) in the background, so the click just shows it. -->
+  <script type="speculationrules">
+  {"prerender": [{"where": {"and": [{"href_matches": "/admin/*"}, {"not": {"selector_matches": ".logout, [href='#'], [target]"}}]},
+                  "eagerness": "moderate"}]}
+  </script>
 </head>
 
 <body class="fb-layout">
