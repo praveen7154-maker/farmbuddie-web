@@ -6,6 +6,13 @@
   <title>Controller Database | Farm Buddie</title>
    
   <!-- ✅ Favicon -->
+  <!-- Start downloading Firebase straight away (it is otherwise found one
+       file at a time: page script -> firebase-init.js -> Firebase). -->
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js">
+  <link rel="modulepreload" href="/js/firebase-init.js">
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
   <link rel="icon" href="/assets/logo_icon.png" type="image/png">
   <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
   <link rel="apple-touch-icon" href="/assets/logo_icon.png">
@@ -231,13 +238,14 @@ style="display:none;">
 
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1/build/qrcode.min.js"></script>
+<script src="/js/lazy-xlsx.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
 <script type="module" src="/js/controller-database.js?v=2001"></script>
 <script src="/js/table-pagination.js"></script>
 
 <script>
-function downloadControllerSample() {
+async function downloadControllerSample() {
+    const XLSX = await window.loadXlsx();   // loaded on first use (lazy-xlsx.js)
 
     const headers = [[
         "Variant",

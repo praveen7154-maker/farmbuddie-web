@@ -18,6 +18,7 @@ import {
 
 import {
   startDataStore,
+  warmDataStore,
   getFarmers,
   getControllers,
   subscribe
@@ -37,8 +38,7 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
 
-  startDataStore();
-  subscribe(onStoreUpdate);
+  startDataStore(PAGE_DATA);
   onStoreUpdate();
 });
 
@@ -430,6 +430,7 @@ window.downloadAllFarmersExcel = async function () {
 
     });
 
+    const XLSX = await window.loadXlsx();
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
 
@@ -664,3 +665,9 @@ modal.innerHTML = `
 
 document.body.appendChild(modal);
 };
+/* ================= INSTANT FIRST PAINT ================= */
+// The last data this browser saw, shown while the login check and the live
+// listener start (see data-store.js warmDataStore()).
+const PAGE_DATA = ["farmers", "controllers"];
+subscribe(onStoreUpdate);
+warmDataStore(PAGE_DATA);

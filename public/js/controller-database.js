@@ -14,6 +14,7 @@ import {
 
 import {
   startDataStore,
+  warmDataStore,
   getControllers,
   getFarmers,
   subscribe
@@ -45,11 +46,8 @@ onAuthStateChanged(auth, (user) => {
 
   activateStatusTab("tabTotal");
 
-  /* START REALTIME DATA STORE */
-  startDataStore();
-
-  /* SUBSCRIBE TO STORE UPDATES */
-  subscribe(scheduleRender);
+  /* START REALTIME DATA STORE (only what this page shows) */
+  startDataStore(PAGE_DATA);
 
 });
 
@@ -141,8 +139,9 @@ uploadBtn.addEventListener("click", async () => {
 
     const reader = new FileReader();
 
-    reader.onload = function(e){
+    reader.onload = async function(e){
 
+        const XLSX = await window.loadXlsx();
         const workbook = XLSX.read(e.target.result,{
             type:"binary"
         });
@@ -1110,3 +1109,10 @@ window.generateInitialMqttCredentials = async function () {
     alert("❌ " + err.message);
   }
 };
+
+/* ================= INSTANT FIRST PAINT ================= */
+// The last data this browser saw, shown while the login check and the live
+// listener start (see data-store.js warmDataStore()).
+const PAGE_DATA = ["controllers", "farmers"];
+subscribe(scheduleRender);
+warmDataStore(PAGE_DATA);

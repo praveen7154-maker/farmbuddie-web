@@ -6,6 +6,7 @@ import {
 
 import {
   startDataStore,
+  warmDataStore,
   getFarmers,
   getDistributors,
   subscribe
@@ -23,8 +24,7 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
 
-  startDataStore();
-  subscribe(renderDashboard);
+  startDataStore(PAGE_DATA);
   renderDashboard();
 });
 
@@ -337,3 +337,10 @@ document.getElementById("closePanelBtn")?.addEventListener("click", () => {
   document.getElementById("dashboardFarmerPanel")
     .classList.add("hidden");
 });
+
+/* ================= INSTANT FIRST PAINT ================= */
+// The last data this browser saw, shown while the login check and the live
+// listener start (see data-store.js warmDataStore()).
+const PAGE_DATA = ["farmers", "distributors"];
+subscribe(renderDashboard);
+warmDataStore(PAGE_DATA);

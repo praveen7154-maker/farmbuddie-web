@@ -11,6 +11,7 @@ import {
 
 import {
   startDataStore,
+  warmDataStore,
   getDistributors,
   subscribe
 } from "/js/data-store.js";
@@ -27,8 +28,7 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
 
-  startDataStore();
-  subscribe(onStoreUpdate);
+  startDataStore(PAGE_DATA);
   onStoreUpdate();
 });
 
@@ -223,3 +223,9 @@ Are you sure you want to delete this distributor permanently?
 window.goToDistributorOnboarding = function () {
   window.location.href = "/admin/distributor-onboarding.html";
 };
+/* ================= INSTANT FIRST PAINT ================= */
+// The last data this browser saw, shown while the login check and the live
+// listener start (see data-store.js warmDataStore()).
+const PAGE_DATA = ["distributors"];
+subscribe(onStoreUpdate);
+warmDataStore(PAGE_DATA);

@@ -5,6 +5,13 @@
   <title>Admin Login | Farm Buddie</title>
 
   <!-- Main CSS -->
+  <!-- Start downloading Firebase straight away (it is otherwise found one
+       file at a time: page script -> firebase-init.js -> Firebase). -->
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js">
+  <link rel="modulepreload" href="/js/firebase-init.js">
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
   <link rel="stylesheet" href="/css/main.css">
 </head>
 

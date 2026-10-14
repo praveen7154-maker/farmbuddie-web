@@ -4,6 +4,7 @@ import { onAuthStateChanged, signOut }
 
 import {
   startDataStore,
+  warmDataStore,
   getFarmers,
   subscribe
 } from "/js/data-store.js";
@@ -22,8 +23,7 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
 
-  startDataStore();
-  subscribe(onStoreUpdate);
+  startDataStore(PAGE_DATA);
   onStoreUpdate();
 });
 
@@ -160,3 +160,10 @@ function renderTable(data) {
 }, 0);
 
 };
+
+/* ================= INSTANT FIRST PAINT ================= */
+// The last data this browser saw, shown while the login check and the live
+// listener start (see data-store.js warmDataStore()).
+const PAGE_DATA = ["farmers"];
+subscribe(onStoreUpdate);
+warmDataStore(PAGE_DATA);
