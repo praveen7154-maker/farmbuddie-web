@@ -31,6 +31,8 @@ import { findDistributor, distributorFarms, loadReferrals, loadRedemptions } fro
 import { requireAdmin } from "../adminAuth.js";
 import { createPricingModule } from "./pricing.js";
 import { pgPricingStore } from "./pricingStore.js";
+import { createAdminGateModule } from "./adminGate.js";
+import { pgAdminGateStore } from "./adminGateStore.js";
 
 export const app = express();
 // nginx (on the host) is the only caller - the port is published on
@@ -82,6 +84,18 @@ const distributorLoginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10,
 app.use("/distributor/login", distributorLoginLimiter);
 app.use("/distributor", cors({ origin: (origin, cb) => cb(null, true) }), distributors.publicRouter);
 
+// Irrigo Admin's admin access code (the 6-digit step before the admin
+// email/password form) - see adminGate.js. Checking it happens before any
+// login, so it sits here with its own tight per-address limit.
+const adminGate = createAdminGateModule({ store: pgAdminGateStore });
+const adminGateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false,
+  message: { error: "Too many tries - wait 15 minutes and try again" }
+});
+app.use("/admin-gate/check", adminGateLimiter);
+app.use("/admin-gate/status", rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }));
+app.use("/admin-gate", cors({ origin: (origin, cb) => cb(null, true) }), adminGate.publicRouter);
+
 // Every route below: a Firebase login (admin web panel / Irrigo Admin, or a
 // farmer's Irrigo app), or a distributor's session token ("fbd_..."). A
 // distributor still on their first password may only set a new one.
@@ -113,6 +127,7 @@ app.use(cors(corsOptions), limiter, verifyCaller);
 
 app.use("/distributor", distributors.router);
 app.use("/distributors", requireAdmin, distributors.adminRouter);
+app.use("/admin-gate", requireAdmin, adminGate.adminRouter);
 
 // Module Pricing (web panel > Module Pricing, Irrigo Admin > Price List /
 // Price Calculator) - see pricing.js. Its own role checks inside.
