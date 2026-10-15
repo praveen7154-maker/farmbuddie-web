@@ -457,3 +457,24 @@ test("the web panel's copy of the rules is the same file", async () => {
   const b = await readFile(new URL("../../public/js/pricing-rules.js", import.meta.url), "utf8");
   assert.equal(b, a, "copy server/src/bridge/pricingRules.js to public/js/pricing-rules.js");
 });
+
+test("mrpView: MRP without GST as the shown price, totals still add up", async () => {
+  const { mrpView, calculateQuote } = await import("../src/bridge/pricingRules.js");
+  const p = (variantId, basePrice, mrp, gstBp = 1800) => [variantId, {
+    variantId, sku: `S${variantId}`, productName: `P${variantId}`, variantName: "Standard", unit: "pcs", kind: "device",
+    mrp, basePrice, minPrice: basePrice - 10000, maxPrice: 10000000, maxDiscountType: "amt", maxDiscountValue: 10000,
+    distributorPrice: basePrice - 20000, gstBp
+  }];
+  // MRP 11,800 incl. 18% = 10,000 before GST; selling 9,000 -> MRP discount 1,000 a unit.
+  // No MRP / MRP not above the selling price -> shown at the selling price.
+  const prices = new Map([p(1, 900000, 1180000), p(2, 50000, null), p(3, 50000, 50000)]);
+  const q = calculateQuote(prices, [{ variantId: 1, qty: 2, discountType: "amt", discountValue: 5000 }, { variantId: 2, qty: 1 }, { variantId: 3, qty: 3 }]);
+  assert.equal(q.ok, true);
+  const m = mrpView(q.lines);
+  assert.deepEqual(m.lines.map((x) => x.unit), [1000000, 50000, 50000]);
+  assert.equal(m.mrpDiscount, 200000);
+  assert.equal(m.mrpTotal - m.mrpDiscount - q.totals.discount, q.totals.taxable);
+  // An MRP that isn't a whole rupee after GST is rounded down, never above the real MRP.
+  const odd = mrpView([{ mrp: 1000000, gstBp: 1800, listPrice: 800000, qty: 1 }]);
+  assert.equal(odd.lines[0].unit, 847400);
+});

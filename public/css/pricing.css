@@ -207,3 +207,4 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .pr-doc-sign div { flex: 0 1 260px; border-top: 1px solid #9ca3af; padding-top: 6px; text-align: center; }
 @media print { .pr-doc-terms ol { font-size: 10.5px; } }
 .pr-doc .pr-sum .row.disc { font-weight: 600; }
+.pr-doc .pr-sum .row.save { background: #f0fdf4; border-radius: 6px; padding-left: 6px; padding-right: 6px; }

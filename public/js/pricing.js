@@ -354,10 +354,11 @@ function renderSummary(calc) {
   $("sumValidity").innerHTML = `🗓️ Valid until <b>${fmtDate(new Date(until).toISOString())}</b> · prices of "${esc(current.list.name)}"`;
 }
 
-function totalsHtml(t, internal) {
+// head: false = start at "Total before GST" (the caller printed the lines above it).
+function totalsHtml(t, internal, head = true) {
   const row = (a, b, cls = "") => `<div class="row ${cls}"><span>${a}</span><span>${b}</span></div>`;
-  let h = row(internal ? "Products total (list price)" : "Products total", rs(t.gross));
-  if (t.discount) h += row(internal ? "Discount" : `Discount${t.gross ? ` (${(t.discount * 100 / t.gross).toFixed(1).replace(/\.0$/, "")}%)` : ""}`, `− ${rs(t.discount)}`, "disc");
+  let h = head ? row(internal ? "Products total (list price)" : "Products total", rs(t.gross)) : "";
+  if (head && t.discount) h += row(internal ? "Discount" : `Discount${t.gross ? ` (${(t.discount * 100 / t.gross).toFixed(1).replace(/\.0$/, "")}%)` : ""}`, `− ${rs(t.discount)}`, "disc");
   h += row("<b>Total before GST</b>", `<b>${rs(t.taxable)}</b>`);
   for (const g of t.gstBreakup) {
     if (t.interState) h += row(`IGST ${pct(g.gstBp)} on ${rs(g.taxable)}`, rs(g.igst), "sub");
@@ -428,14 +429,33 @@ function termsHtml() {
   return terms.length ? `<div class="pr-doc-terms"><h3>Terms &amp; Conditions</h3><ol>${terms.map((t) => `<li>${esc(t)}</li>`).join("")}</ol></div>` : "";
 }
 
+// The quote's MRP view (Settings > Show MRP discount), or null when off.
+const mrpOf = (q) => (current?.settings?.showMrpDiscount === false ? null : R.mrpView(q.lines));
+
+// A customer document's totals: Products total, then the discounts, then GST.
+function docTotalsHtml(q) {
+  const t = q.totals;
+  const m = mrpOf(q);
+  if (!m || !m.mrpDiscount) return totalsHtml(t, false);
+  const row = (a, b, cls = "") => `<div class="row ${cls}"><span>${a}</span><span>${b}</span></div>`;
+  const pc = (part, whole) => (whole ? ` (${(part * 100 / whole).toFixed(1).replace(/\.0$/, "")}%)` : "");
+  let h = row("Products total (MRP)", rs(m.mrpTotal));
+  h += row(`MRP discount${pc(m.mrpDiscount, m.mrpTotal)}`, `− ${rs(m.mrpDiscount)}`, "disc");
+  if (t.discount) h += row(`Additional discount${pc(t.discount, t.gross)}`, `− ${rs(t.discount)}`, "disc");
+  if (t.discount || m.mrpDiscount) h += row("Total savings", `<b>${rs(m.mrpDiscount + t.discount)}</b>`, "disc save");
+  // From "Total before GST" on, exactly as without MRP.
+  return h + totalsHtml(t, false, false);
+}
+
 function quoteDocHtml(q) {
+  const m = mrpOf(q);
   const lineRows = q.lines.map((l, i) => `<tr>
     <td>${i + 1}</td>
     <td><b>${esc(l.productName)}</b>${l.variantName && l.variantName !== "Standard" ? ` - ${esc(l.variantName)}` : ""}<br><small>${esc(l.sku)}${l.hsnSac ? ` · HSN/SAC ${esc(l.hsnSac)}` : ""}</small></td>
     <td class="num">${l.qty} ${esc(l.unit || "")}</td>
-    <td class="num">${rs(l.listPrice)}</td>
+    <td class="num">${rs(m ? m.lines[i].unit : l.listPrice)}</td>
     <td class="num">${pct(l.gstBp)}</td>
-    <td class="num">${rs(l.gross ?? l.listPrice * l.qty)}</td></tr>`).join("");
+    <td class="num">${rs(m ? m.lines[i].amount : l.gross ?? l.listPrice * l.qty)}</td></tr>`).join("");
   const expired = q.status === "open" && new Date(q.validUntil).getTime() < Date.now();
   return `<div class="pr-doc">
     ${expired ? `<div class="pr-expired-banner">⚠️ This quote has expired - prices may have changed. Make a new quote.</div>` : ""}
@@ -454,7 +474,7 @@ function quoteDocHtml(q) {
         <th class="num">Amount</th></tr></thead>
       <tbody>${lineRows}</tbody>
     </table>
-    <div class="pr-doc-totals pr-sum">${totalsHtml(q.totals, false)}</div>
+    <div class="pr-doc-totals pr-sum">${docTotalsHtml(q)}</div>
     ${q.notes ? `<p class="pr-doc-note"><b>Notes:</b> ${esc(q.notes)}</p>` : ""}
     <p class="pr-doc-note">${esc(current?.settings?.disclaimer || R.DISCLAIMER)}<br>Prices before GST unless marked; GST as shown. ${q.totals.interState ? "Inter-state supply - IGST." : "Intra-state supply - CGST + SGST."}</p>
     ${termsHtml()}
@@ -481,10 +501,12 @@ function printQuote(q) {
 
 function shareWhatsApp(q) {
   const t = q.totals;
-  const items = q.lines.map((l) => `• ${l.productName}${l.variantName && l.variantName !== "Standard" ? ` (${l.variantName})` : ""} × ${l.qty} = ${rs(l.gross ?? l.listPrice * l.qty)}`).join("\n");
+  const m = mrpOf(q);
+  const items = q.lines.map((l, i) => `• ${l.productName}${l.variantName && l.variantName !== "Standard" ? ` (${l.variantName})` : ""} × ${l.qty} = ${rs(m ? m.lines[i].amount : l.gross ?? l.listPrice * l.qty)}`).join("\n");
+  const mrpText = m && m.mrpDiscount ? `Products total (MRP): ${rs(m.mrpTotal)}\nMRP discount: − ${rs(m.mrpDiscount)}\n` : `Products total: ${rs(t.gross)}\n`;
   const msg = `*Farm Buddie ${q.quoteNo ? `Quotation ${q.quoteNo}` : "price estimate"}*\n` +
     `${q.customerName ? `For: ${q.customerName}\n` : ""}\n${items}\n\n` +
-    `Products total: ${rs(t.gross)}\n${t.discount ? `Discount: − ${rs(t.discount)}\n` : ""}Total before GST: ${rs(t.taxable)}\nGST: ${rs(t.gst)}\n` +
+    `${mrpText}${t.discount ? `${m && m.mrpDiscount ? "Additional discount" : "Discount"}: − ${rs(t.discount)}\n` : ""}Total before GST: ${rs(t.taxable)}\nGST: ${rs(t.gst)}\n` +
     `*Estimated total: ${rs(t.payable)}*\nValid until ${fmtDate(q.validUntil)}\n\n_${current?.settings?.disclaimer || R.DISCLAIMER}_`;
   const digits = String(q.customerPhone || "").replace(/\D/g, "");
   const to = digits.length === 10 ? `91${digits}` : digits.length === 12 && digits.startsWith("91") ? digits : "";
@@ -1347,8 +1369,9 @@ async function loadSettings() {
     $("stCoName").value = s.companyName || ""; $("stCoGstin").value = s.companyGstin || ""; $("stCoPhone").value = s.companyPhone || "";
     $("stCoEmail").value = s.companyEmail || ""; $("stCoWeb").value = s.companyWebsite || ""; $("stCoAddress").value = s.companyAddress || "";
     $("stTerms").value = s.quoteTerms || "";
+    $("stMrp").checked = s.showMrpDiscount !== false;
     const ro = !can("owner");
-    for (const id of ["stValidity", "stWarn", "stHome", "stTwo", "stDisclaimer", "stCoName", "stCoGstin", "stCoPhone", "stCoEmail", "stCoWeb", "stCoAddress", "stTerms"]) $(id).disabled = ro;
+    for (const id of ["stValidity", "stWarn", "stHome", "stTwo", "stDisclaimer", "stCoName", "stCoGstin", "stCoPhone", "stCoEmail", "stCoWeb", "stCoAddress", "stTerms", "stMrp"]) $(id).disabled = ro;
     $("staffBody").innerHTML = r.staff.length ? r.staff.map((x) => `<tr><td>${esc(x.email)}</td><td>${esc(x.role)}</td>
       <td>${esc(x.updatedBy || "")}<br><small class="ota-muted">${fmtDate(x.updatedAt)}</small></td>
       <td>${can("owner") ? `<button class="pr-link danger" data-rm="${esc(x.email)}">Remove</button>` : ""}</td></tr>`).join("")
@@ -1375,7 +1398,7 @@ $("stCoSave").addEventListener("click", async () => {
     await put("/pricing/admin/settings", {
       companyName: $("stCoName").value.trim(), companyGstin: $("stCoGstin").value.trim(), companyPhone: $("stCoPhone").value.trim(),
       companyEmail: $("stCoEmail").value.trim(), companyWebsite: $("stCoWeb").value.trim(), companyAddress: $("stCoAddress").value.trim(),
-      quoteTerms: $("stTerms").value.trim()
+      quoteTerms: $("stTerms").value.trim(), showMrpDiscount: $("stMrp").checked
     });
     showMsg("ok", "Company details saved.");
     await Promise.all([loadCurrent(), loadLists()]);

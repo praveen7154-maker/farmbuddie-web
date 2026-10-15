@@ -133,6 +133,28 @@ export function priceWarnings(item) {
 // ---- quote calculation ----
 
 /**
+ * How a quotation shows MRP (Settings > "Show MRP discount on quotations").
+ * Display only - what the customer pays doesn't change. Each line shows its
+ * MRP without GST (rounded down to the rupee) as the unit price, and the
+ * gap to the farmer selling price becomes one "MRP discount" row under the
+ * products total. A line with no MRP, or an MRP not above the selling
+ * price, shows the selling price as usual.
+ *   mrpTotal - mrpDiscount - totals.discount = totals.taxable, always.
+ */
+export function mrpView(lines) {
+  const shown = lines.map((l) => {
+    const ex = Number.isInteger(l.mrp) && l.mrp > 0 ? Math.floor(l.mrp * 10000 / (10000 + l.gstBp) / 100) * 100 : 0;
+    const unit = ex > l.listPrice ? ex : l.listPrice;
+    return { unit, amount: unit * l.qty, mrpDiscount: (unit - l.listPrice) * l.qty };
+  });
+  return {
+    lines: shown,
+    mrpTotal: shown.reduce((s, x) => s + x.amount, 0),
+    mrpDiscount: shown.reduce((s, x) => s + x.mrpDiscount, 0)
+  };
+}
+
+/**
  * prices: Map variantId -> price row + { sku, productName, variantName, unit,
  *   hsnSac, kind, category }  (only sellable rows - the current list's
  *   active items of active products/variants)
