@@ -222,6 +222,10 @@
       <summary>📘 How to fill a row (example: Motor Master Hub)</summary>
       <ol>
         <li><b>MRP</b> - the printed price <u>including GST</u>, e.g. ₹14,160.</li>
+        <li><b>Company discount</b> (optional) - Farm Buddie's discount off the MRP, <u>before GST</u>, per unit. Type e.g. ₹500 and the
+          farmer selling price becomes MRP without GST − ₹500 (₹12,000 − ₹500 = ₹11,500). The quotation shows it as "Company discount".
+          It is a real price cut: the farmer pays less and our profit drops. If distributors sell it too, lower the <b>Distributor price</b>
+          by the same amount - otherwise the discount comes out of their margin.</li>
         <li><b>Distributor price</b> - what the distributor pays you, <u>before GST</u>, e.g. ₹10,000.</li>
         <li><b>Farmer selling price</b> - what the farmer normally pays, <u>before GST</u>, e.g. ₹11,000 (farmer pays ₹11,000 + 18% = ₹12,980).</li>
         <li><b>Minimum price</b> - the lowest a distributor may sell at. <b>No discount allowed? Make it the same as the farmer selling price</b>
@@ -240,6 +244,7 @@
           <th title="On sale in this list">On</th><th>Product</th>
           <th class="num pr-cost-col pr-internal" title="Farm Buddie's purchase / procurement cost per unit, before GST - admins only">Our cost 🔒<br><small>before GST</small></th>
           <th class="num">MRP<br><small>incl. GST</small></th>
+          <th class="num" title="MRP without GST − farmer selling price: the discount the customer sees on the quotation">Company<br>discount</th>
           <th class="num">Distributor<br>price</th><th class="num">Farmer<br>selling price</th><th class="num">Minimum<br>price</th>
           <th class="num">Maximum<br>price</th><th class="num">Max discount<br><small>auto</small></th><th>GST</th><th class="num">Floor</th><th class="num">Distributor<br>margin</th><th class="num pr-cost-col pr-internal">Our profit 🔒<br><small>direct · via dist.</small></th><th>Check</th>
         </tr></thead>
@@ -333,8 +338,8 @@
     <label class="ota-field"><span>Address <small>(printed under the logo - one line per row)</small></span><textarea id="stCoAddress" rows="3" maxlength="300"></textarea></label>
     <label class="ota-field"><span>Terms &amp; conditions on customer quotations <small>(one term per line - numbered automatically)</small></span>
       <textarea id="stTerms" rows="10" maxlength="5000"></textarea></label>
-    <label class="pr-check"><input type="checkbox" id="stMrp"> Show MRP discount on quotations
-      <small>(each product at its MRP without GST, and "MRP discount" = MRP − farmer selling price under the products total; the customer pays the same)</small></label>
+    <label class="pr-check"><input type="checkbox" id="stMrp"> Show the company discount on quotations
+      <small>(each product at its MRP without GST, and "Company discount" = MRP without GST − farmer selling price under the products total; set it per product in the price list's Company discount column)</small></label>
     <div class="ota-actions"><button class="fb-btn-primary pr-owner-only" id="stCoSave">Save company details</button></div>
   </div>
   <div class="ota-card">

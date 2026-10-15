@@ -35,7 +35,7 @@ export const DEFAULT_SETTINGS = {
   homeState: HOME_STATE,
   requireSecondApprover: false,
   // Quotations show each product at its MRP (without GST) and the gap to
-  // the selling price as "MRP discount" - see pricingRules.js mrpView().
+  // the selling price as "Company discount" - see pricingRules.js mrpView().
   showMrpDiscount: true,
   disclaimer: DISCLAIMER,
   // Printed on price list PDFs and quotes.

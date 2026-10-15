@@ -133,10 +133,11 @@ export function priceWarnings(item) {
 // ---- quote calculation ----
 
 /**
- * How a quotation shows MRP (Settings > "Show MRP discount on quotations").
+ * How a quotation shows MRP and the company discount (Settings > "Show the
+ * company discount on quotations").
  * Display only - what the customer pays doesn't change. Each line shows its
  * MRP without GST (rounded down to the rupee) as the unit price, and the
- * gap to the farmer selling price becomes one "MRP discount" row under the
+ * gap to the farmer selling price becomes one "Company discount" row under the
  * products total. A line with no MRP, or an MRP not above the selling
  * price, shows the selling price as usual.
  *   mrpTotal - mrpDiscount - totals.discount = totals.taxable, always.

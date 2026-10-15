@@ -429,7 +429,7 @@ function termsHtml() {
   return terms.length ? `<div class="pr-doc-terms"><h3>Terms &amp; Conditions</h3><ol>${terms.map((t) => `<li>${esc(t)}</li>`).join("")}</ol></div>` : "";
 }
 
-// The quote's MRP view (Settings > Show MRP discount), or null when off.
+// The quote's company discount view (Settings > Show the company discount), or null when off.
 const mrpOf = (q) => (current?.settings?.showMrpDiscount === false ? null : R.mrpView(q.lines));
 
 // A customer document's totals: Products total, then the discounts, then GST.
@@ -440,7 +440,7 @@ function docTotalsHtml(q) {
   const row = (a, b, cls = "") => `<div class="row ${cls}"><span>${a}</span><span>${b}</span></div>`;
   const pc = (part, whole) => (whole ? ` (${(part * 100 / whole).toFixed(1).replace(/\.0$/, "")}%)` : "");
   let h = row("Products total (MRP)", rs(m.mrpTotal));
-  h += row(`MRP discount${pc(m.mrpDiscount, m.mrpTotal)}`, `− ${rs(m.mrpDiscount)}`, "disc");
+  h += row(`Company discount${pc(m.mrpDiscount, m.mrpTotal)}`, `− ${rs(m.mrpDiscount)}`, "disc");
   if (t.discount) h += row(`Additional discount${pc(t.discount, t.gross)}`, `− ${rs(t.discount)}`, "disc");
   if (t.discount || m.mrpDiscount) h += row("Total savings", `<b>${rs(m.mrpDiscount + t.discount)}</b>`, "disc save");
   // From "Total before GST" on, exactly as without MRP.
@@ -503,7 +503,7 @@ function shareWhatsApp(q) {
   const t = q.totals;
   const m = mrpOf(q);
   const items = q.lines.map((l, i) => `• ${l.productName}${l.variantName && l.variantName !== "Standard" ? ` (${l.variantName})` : ""} × ${l.qty} = ${rs(m ? m.lines[i].amount : l.gross ?? l.listPrice * l.qty)}`).join("\n");
-  const mrpText = m && m.mrpDiscount ? `Products total (MRP): ${rs(m.mrpTotal)}\nMRP discount: − ${rs(m.mrpDiscount)}\n` : `Products total: ${rs(t.gross)}\n`;
+  const mrpText = m && m.mrpDiscount ? `Products total (MRP): ${rs(m.mrpTotal)}\nCompany discount: − ${rs(m.mrpDiscount)}\n` : `Products total: ${rs(t.gross)}\n`;
   const msg = `*Farm Buddie ${q.quoteNo ? `Quotation ${q.quoteNo}` : "price estimate"}*\n` +
     `${q.customerName ? `For: ${q.customerName}\n` : ""}\n${items}\n\n` +
     `${mrpText}${t.discount ? `${m && m.mrpDiscount ? "Additional discount" : "Discount"}: − ${rs(t.discount)}\n` : ""}Total before GST: ${rs(t.taxable)}\nGST: ${rs(t.gst)}\n` +
@@ -850,12 +850,12 @@ function renderItems() {
       <td><input type="checkbox" data-k="active" ${r.active ? "checked" : ""} ${draft ? "" : "disabled"}></td>
       <td class="pr-prod"><b>${esc(r.productName)}</b><small>${r.variantName !== "Standard" ? `${esc(r.variantName)} · ` : ""}${esc(r.sku)}${r.catalogueActive ? "" : " · ⚠️ inactive in catalogue"}</small></td>
       <td class="num pr-cost-col">${money("costPrice")}</td>
-      <td class="num">${money("mrp")}</td><td class="num">${money("distributorPrice")}</td><td class="num">${money("basePrice")}</td>
+      <td class="num">${money("mrp")}</td><td class="num pr-cdisc">${companyDiscCell(r, draft)}</td><td class="num">${money("distributorPrice")}</td><td class="num">${money("basePrice")}</td>
       <td class="num">${money("minPrice")}</td><td class="num">${money("maxPrice")}</td>
       <td class="num">${disc}</td>
       <td>${draft ? `<select data-k="gstBp">${gstOpts(r.gstBp)}</select>` : pct(r.gstBp)}</td>
       <td class="num" data-c="floor"></td><td class="num" data-c="margin"></td><td class="num pr-cost-col" data-c="profit"></td><td class="pr-checkcell" data-c="check"></td></tr>`;
-  }).join("") : `<tr><td colspan="14" class="ota-muted">No rows match.</td></tr>`;
+  }).join("") : `<tr><td colspan="15" class="ota-muted">No rows match.</td></tr>`;
   showCostCols();
   $("itemsBody").querySelectorAll("tr[data-v]").forEach((tr) => {
     refreshRow(tr);
@@ -873,6 +873,24 @@ const profitHtml = (p) => {
 
 function rowOf(tr) { return editing.rows.find((r) => r.variantId === Number(tr.dataset.v)); }
 
+// Company discount = MRP without GST (to the rupee, as on the quotation) -
+// farmer selling price. Not stored: typing it sets the selling price.
+const mrpExGst = (r) => (Number.isInteger(r.mrp) && r.mrp > 0 ? Math.floor(r.mrp * 10000 / (10000 + r.gstBp) / 100) * 100 : null);
+const companyDisc = (r) => {
+  const ex = mrpExGst(r);
+  return ex !== null && Number.isInteger(r.basePrice) ? Math.max(0, ex - r.basePrice) : null;
+};
+const companyDiscPct = (r) => {
+  const d = companyDisc(r);
+  return d ? `<span class="pr-hint">${Math.round(d * 1000 / mrpExGst(r)) / 10}%</span>` : "";
+};
+function companyDiscCell(r, draft) {
+  const d = companyDisc(r);
+  if (!draft) return d ? `${rs(d)}${companyDiscPct(r)}` : "–";
+  if (mrpExGst(r) === null) return `<span class="ota-muted" title="Enter the MRP first">–</span>`;
+  return `<input class="pr-money" data-k="companyDisc" value="${d ? esc(paiseInput(d)) : ""}" placeholder="0" inputmode="decimal"><span data-c="cdpct">${companyDiscPct(r)}</span>`;
+}
+
 function onCell(tr, el) {
   const r = rowOf(tr);
   const k = el.dataset.k;
@@ -884,7 +902,23 @@ function onCell(tr, el) {
     const box = tr.querySelector('[data-k="maxDiscountValue"]');
     r.maxDiscountValue = readDiscount(r, box.value);
   } else if (k === "maxDiscountValue") r.maxDiscountValue = readDiscount(r, el.value);
-  else {
+  else if (k === "companyDisc") {
+    const d = el.value.trim() === "" ? 0 : toPaise(el.value);
+    const ex = mrpExGst(r);
+    const ok = Number.isInteger(d) && d >= 0 && ex !== null && d < ex;
+    el.classList.toggle("bad", !ok);
+    if (!ok) return;
+    r.basePrice = ex - d;
+    const base = tr.querySelector('[data-k="basePrice"]');
+    if (base) { base.value = paiseInput(r.basePrice); base.classList.toggle("changed", !!r.current && r.current.basePrice !== r.basePrice); }
+    // The minimum can't sit above the new selling price.
+    const min = tr.querySelector('[data-k="minPrice"]');
+    if (Number.isInteger(r.minPrice) && r.minPrice > r.basePrice) {
+      r.minPrice = r.basePrice;
+      if (min) { min.value = paiseInput(r.minPrice); min.classList.toggle("changed", !!r.current && r.current.minPrice !== r.minPrice); }
+    }
+    autoFill(tr, r, "basePrice");   // an auto-filled minimum follows the selling price
+  } else {
     r[k] = toPaise(el.value);
     el.classList.toggle("bad", Number.isNaN(r[k]));
     el.classList.toggle("changed", !!r.current && r.current[k] !== r[k]);
@@ -892,6 +926,13 @@ function onCell(tr, el) {
   autoFill(tr, r, k);
   syncDiscount(r);
   editing.dirty.set(r.variantId, r);
+  if (k !== "companyDisc" && ["mrp", "basePrice", "gstBp"].includes(k)) {
+    const cd = tr.querySelector(".pr-cdisc");
+    if (cd) cd.innerHTML = companyDiscCell(r, true);
+    cd?.querySelector("input")?.addEventListener("input", (e) => onCell(tr, e.target));
+  }
+  const pctBox = tr.querySelector('[data-c="cdpct"]');
+  if (k === "companyDisc" && pctBox) pctBox.innerHTML = companyDiscPct(r);
   refreshRow(tr);
 }
 // Fills an EMPTY box from the others, so a simple "no discount" row needs
