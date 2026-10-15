@@ -25,6 +25,7 @@ import {
 
 const RANK = { viewer: 1, editor: 2, approver: 3, owner: 4 };
 const PAGE = 25;
+const QUOTE_PAGE = 15;
 const SEGMENT = "standard";
 const SKU_RE = /^[A-Z0-9][A-Z0-9-]{1,31}$/;
 const HSN_RE = /^\d{4,8}$/;
@@ -56,11 +57,20 @@ export const DEFAULT_SETTINGS = {
   companyGstin: "",
   companyPhone: "",
   companyEmail: "",
-  companyWebsite: ""
+  companyWebsite: "",
+  // Printed beside the totals on every quotation (all optional).
+  bankName: "",
+  bankAccountName: "",
+  bankAccountNo: "",
+  bankIfsc: "",
+  bankBranch: "",
+  upiId: ""
 };
 const companyOf = (s) => ({
   name: s.companyName, address: s.companyAddress, gstin: s.companyGstin,
-  phone: s.companyPhone, email: s.companyEmail, website: s.companyWebsite
+  phone: s.companyPhone, email: s.companyEmail, website: s.companyWebsite,
+  bank: { name: s.bankName || "", accountName: s.bankAccountName || "", accountNo: s.bankAccountNo || "",
+    ifsc: s.bankIfsc || "", branch: s.bankBranch || "", upi: s.upiId || "" }
 });
 
 class Bad extends Error {
@@ -316,8 +326,8 @@ export function createPricingModule({ store, findDistributor = async () => null,
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 60) || null : null;
     const t = now();
-    const { quotes, total } = await store.listQuotes(myQuoteScope(req), search, PAGE, (page - 1) * PAGE);
-    res.json({ quotes: await Promise.all(quotes.map((q) => withProfit(req, quoteView(q, t)))), total, page, pageSize: PAGE });
+    const { quotes, total } = await store.listQuotes(myQuoteScope(req), search, QUOTE_PAGE, (page - 1) * QUOTE_PAGE);
+    res.json({ quotes: await Promise.all(quotes.map((q) => withProfit(req, quoteView(q, t)))), total, page, pageSize: QUOTE_PAGE });
   }));
 
   async function ownQuote(req) {
@@ -339,6 +349,14 @@ export function createPricingModule({ store, findDistributor = async () => null,
     if (status === "accepted" && quoteView(q).expired) throw new Bad("This quote has expired - make a new one at current prices");
     if (!(await store.setQuoteStatus(q.id, status, actorOf(req)))) throw new Bad("Only an open quote can be changed", 409);
     await audit(req, status === "accepted" ? "accept" : "cancel", "quote", q.id, q.quoteNo);
+    res.json({ ok: true });
+  }));
+
+  // Admins only: a quote made by mistake or a test. Its number is not reused.
+  router.delete("/quotes/:id", need("owner"), wrap(async (req, res) => {
+    const q = await ownQuote(req);
+    if (!(await store.deleteQuote(q.id))) throw new Bad("Quote not found", 404);
+    await audit(req, "delete", "quote", q.id, `${q.quoteNo} for ${q.customerName || "-"} deleted (${q.totals.payable / 100} INR, ${q.status})`, q);
     res.json({ ok: true });
   }));
 
@@ -750,8 +768,17 @@ export function createPricingModule({ store, findDistributor = async () => null,
       companyPhone: text(b.companyPhone ?? before.companyPhone, "Phone", 40) || "",
       companyEmail: text(b.companyEmail ?? before.companyEmail, "Email", 120) || "",
       companyWebsite: text(b.companyWebsite ?? before.companyWebsite, "Website", 120) || "",
+      bankName: text(b.bankName ?? before.bankName, "Bank name", 80) || "",
+      bankAccountName: text(b.bankAccountName ?? before.bankAccountName, "Account name", 80) || "",
+      bankAccountNo: (text(b.bankAccountNo ?? before.bankAccountNo, "Account number", 20) || "").replace(/\s+/g, ""),
+      bankIfsc: (text(b.bankIfsc ?? before.bankIfsc, "IFSC", 11) || "").toUpperCase(),
+      bankBranch: text(b.bankBranch ?? before.bankBranch, "Branch", 80) || "",
+      upiId: text(b.upiId ?? before.upiId, "UPI ID", 60) || "",
       quoteTerms: text(b.quoteTerms ?? before.quoteTerms, "Terms & conditions", 5000) || ""
     };
+    if (next.bankAccountNo && !/^\d{6,20}$/.test(next.bankAccountNo)) throw new Bad("Account number should be 6 to 20 digits");
+    if (next.bankIfsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(next.bankIfsc)) throw new Bad("IFSC should be 11 characters, like SBIN0001234");
+    if (next.upiId && !/^[\w.-]{2,}@[a-zA-Z]{2,}$/.test(next.upiId)) throw new Bad("UPI ID should look like farmbuddie@okaxis");
     if (next.companyGstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/.test(next.companyGstin)) throw new Bad("GSTIN should be 15 characters, like 33ABCDE1234F1Z5");
     await store.saveSettings(next);
     await audit(req, "update", "settings", null, "Pricing settings", before, next);

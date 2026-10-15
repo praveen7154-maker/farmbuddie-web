@@ -78,9 +78,9 @@ function showMsg(kind, msg, list) {
 }
 const fail = (err) => showMsg("error", err.message, err.data?.problems);
 
-function pager(el, page, total, onPage) {
-  const pages = Math.max(1, Math.ceil(total / PAGE));
-  if (total <= PAGE) { el.innerHTML = total ? `<span class="ota-muted">${total} total</span>` : ""; return; }
+function pager(el, page, total, onPage, size = PAGE) {
+  const pages = Math.max(1, Math.ceil(total / size));
+  if (total <= size) { el.innerHTML = total ? `<span class="ota-muted">${total} total</span>` : ""; return; }
   const nums = [];
   for (let p = Math.max(1, page - 2); p <= Math.min(pages, page + 2); p++) nums.push(p);
   el.innerHTML = `<span class="ota-muted">${total} total</span>
@@ -429,6 +429,44 @@ function termsHtml() {
   return terms.length ? `<div class="pr-doc-terms"><h3>Terms &amp; Conditions</h3><ol>${terms.map((t) => `<li>${esc(t)}</li>`).join("")}</ol></div>` : "";
 }
 
+// ₹ in words, Indian style (lakh, crore): 7174300 paise -> "Rupees Seventy-One Thousand Seven Hundred Forty-Three Only".
+const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen",
+  "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+function words99(n) { return n < 20 ? ONES[n] : TENS[Math.floor(n / 10)] + (n % 10 ? `-${ONES[n % 10]}` : ""); }
+function words999(n) {
+  const h = Math.floor(n / 100), r = n % 100;
+  return [h ? `${ONES[h]} Hundred` : "", r ? words99(r) : ""].filter(Boolean).join(" ");
+}
+function inWords(n) {
+  if (n === 0) return "Zero";
+  const parts = [];
+  const crore = Math.floor(n / 10000000); n %= 10000000;
+  const lakh = Math.floor(n / 100000); n %= 100000;
+  const thousand = Math.floor(n / 1000); n %= 1000;
+  if (crore) parts.push(`${inWords(crore)} Crore`);
+  if (lakh) parts.push(`${words99(lakh)} Lakh`);
+  if (thousand) parts.push(`${words99(thousand)} Thousand`);
+  if (n) parts.push(words999(n));
+  return parts.join(" ");
+}
+function amountInWords(paise) {
+  const rupees = Math.floor(Math.abs(paise) / 100), p = Math.abs(paise) % 100;
+  return `Rupees ${inWords(rupees)}${p ? ` and ${words99(p)} Paise` : ""} Only`;
+}
+
+// Beside the totals: the amount in words and how to pay.
+function docLeftHtml(q) {
+  const b = current?.settings?.company?.bank || {};
+  const rows = [["Bank", b.name], ["Account name", b.accountName], ["Account no.", b.accountNo], ["IFSC", b.ifsc], ["Branch", b.branch], ["UPI", b.upi]]
+    .filter(([, v]) => v);
+  return `<div class="pr-doc-left">
+    <div class="pr-doc-words"><small>Amount in words</small><b>${esc(amountInWords(q.totals.payable))}</b></div>
+    ${rows.length ? `<div class="pr-doc-bank"><small>Bank details for payment</small>
+      <table>${rows.map(([k, v]) => `<tr><td>${k}</td><td><b>${esc(v)}</b></td></tr>`).join("")}</table></div>` : ""}
+  </div>`;
+}
+
 // The quote's company discount view (Settings > Show the company discount), or null when off.
 const mrpOf = (q) => (current?.settings?.showMrpDiscount === false ? null : R.mrpView(q.lines));
 
@@ -474,7 +512,7 @@ function quoteDocHtml(q) {
         <th class="num">Amount</th></tr></thead>
       <tbody>${lineRows}</tbody>
     </table>
-    <div class="pr-doc-totals pr-sum">${docTotalsHtml(q)}</div>
+    <div class="pr-doc-bottom">${docLeftHtml(q)}<div class="pr-doc-totals pr-sum">${docTotalsHtml(q)}</div></div>
     ${q.notes ? `<p class="pr-doc-note"><b>Notes:</b> ${esc(q.notes)}</p>` : ""}
     <p class="pr-doc-note">${esc(current?.settings?.disclaimer || R.DISCLAIMER)}<br>Prices before GST unless marked; GST as shown. ${q.totals.interState ? "Inter-state supply - IGST." : "Intra-state supply - CGST + SGST."}</p>
     ${termsHtml()}
@@ -524,7 +562,8 @@ function showQuote(q) {
   a.innerHTML = `<button class="pr-btn" data-a="print">🖨️ Print / PDF</button><button class="pr-btn" data-a="wa">🟢 WhatsApp</button>
     <button class="pr-btn" data-a="copy">📋 Copy to calculator</button>
     ${q.id && q.status === "open" && !expired ? `<button class="pr-btn go" data-a="accept">✔ Mark accepted</button>` : ""}
-    ${q.id && q.status === "open" ? `<button class="pr-btn danger" data-a="cancel">Cancel quote</button>` : ""}`;
+    ${q.id && q.status === "open" ? `<button class="pr-btn danger" data-a="cancel">Cancel quote</button>` : ""}
+    ${q.id && can("owner") ? `<button class="pr-btn danger" data-a="delete">🗑 Delete</button>` : ""}`;
   a.querySelector('[data-a="print"]').onclick = () => printQuote(q);
   a.querySelector('[data-a="wa"]').onclick = () => shareWhatsApp(q);
   a.querySelector('[data-a="copy"]').onclick = () => {
@@ -545,6 +584,8 @@ function showQuote(q) {
     renderLines();
     if (dropped) showMsg("error", `${dropped} product(s) aren't in the current price list and were left out.`);
   };
+  const delBtn = a.querySelector('[data-a="delete"]');
+  if (delBtn) delBtn.onclick = async () => { if (await deleteQuote(q)) closeModal("quoteModal"); };
   for (const s of ["accept", "cancel"]) {
     const b = a.querySelector(`[data-a="${s}"]`);
     if (!b) continue;
@@ -585,16 +626,35 @@ async function loadQuotes(page) {
         <td>${esc(q.customerName || "–")}<br><small class="ota-muted">${esc(q.customerPhone || "")} ${esc(q.customerPlace || "")}</small></td>
         <td>${esc(q.distributorId || q.createdBy)}</td><td class="num">${rs(q.totals.payable)}</td>
         <td class="num pr-cost-col">${q.profit ? rs(q.profit.ourProfit) : "–"}</td>
-        <td>${fmtDate(q.validUntil)}</td><td><span class="pr-pill ${st}">${st}</span></td><td><button class="pr-link">View</button></td></tr>`;
+        <td>${fmtDate(q.validUntil)}</td><td><span class="pr-pill ${st}">${st}</span></td>
+        <td class="pr-nowrap"><button class="pr-link">View</button>${can("owner") ? ` <button class="pr-link danger" data-del="${q.id}" title="Delete this quote">🗑 Delete</button>` : ""}</td></tr>`;
     }).join("") : `<tr><td colspan="9" class="ota-muted">No quotes${search ? " match" : " yet"}.</td></tr>`;
     showCostCols();
-    $("quoteBody").querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", async () => {
+    $("quoteBody").querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", async (e) => {
+      if (e.target.closest("[data-del]")) {
+        const q = r.quotes.find((x) => String(x.id) === tr.dataset.id);
+        return deleteQuote(q);
+      }
       try { showQuote((await api(`/pricing/quotes/${tr.dataset.id}`)).quote); } catch (err) { fail(err); }
     }));
-    pager($("quotePager"), page, r.total, loadQuotes);
+    pager($("quotePager"), page, r.total, loadQuotes, r.pageSize || PAGE);
   } catch (err) { fail(err); }
 }
 $("quoteSearch").addEventListener("input", debounce(() => loadQuotes(1), 350));
+
+// Admins only. The number isn't reused; the audit log keeps a copy.
+async function deleteQuote(q) {
+  if (!q) return;
+  if (!confirm(`Delete quote ${q.quoteNo} for ${q.customerName || "-"} (${rs(q.totals.payable)})?\n\nThis can't be undone. The audit log keeps a copy.`)) return false;
+  try {
+    await api(`/pricing/quotes/${q.id}`, { method: "DELETE" });
+    showMsg("ok", `Quote ${q.quoteNo} deleted.`);
+    // Stay on this page unless it just became empty.
+    const r = await api(`/pricing/quotes?page=${quotePage}`).catch(() => null);
+    loadQuotes(r && !r.quotes.length && quotePage > 1 ? quotePage - 1 : quotePage);
+    return true;
+  } catch (err) { fail(err); return false; }
+}
 
 // =====================================================================
 // PRICE LISTS
@@ -1400,6 +1460,8 @@ $("auditDelAll").addEventListener("click", () => deleteAudit({ all: true }, "the
 // SETTINGS
 // =====================================================================
 
+const BANK_FIELDS = [["stBankName", "bankName"], ["stBankAcName", "bankAccountName"], ["stBankAcNo", "bankAccountNo"],
+  ["stBankIfsc", "bankIfsc"], ["stBankBranch", "bankBranch"], ["stUpi", "upiId"]];
 async function loadSettings() {
   try {
     const r = await api("/pricing/admin/settings");
@@ -1411,8 +1473,9 @@ async function loadSettings() {
     $("stCoEmail").value = s.companyEmail || ""; $("stCoWeb").value = s.companyWebsite || ""; $("stCoAddress").value = s.companyAddress || "";
     $("stTerms").value = s.quoteTerms || "";
     $("stMrp").checked = s.showMrpDiscount !== false;
+    for (const [id, k] of BANK_FIELDS) $(id).value = s[k] || "";
     const ro = !can("owner");
-    for (const id of ["stValidity", "stWarn", "stHome", "stTwo", "stDisclaimer", "stCoName", "stCoGstin", "stCoPhone", "stCoEmail", "stCoWeb", "stCoAddress", "stTerms", "stMrp"]) $(id).disabled = ro;
+    for (const id of ["stValidity", "stWarn", "stHome", "stTwo", "stDisclaimer", "stCoName", "stCoGstin", "stCoPhone", "stCoEmail", "stCoWeb", "stCoAddress", "stTerms", "stMrp", ...BANK_FIELDS.map(([id]) => id)]) $(id).disabled = ro;
     $("staffBody").innerHTML = r.staff.length ? r.staff.map((x) => `<tr><td>${esc(x.email)}</td><td>${esc(x.role)}</td>
       <td>${esc(x.updatedBy || "")}<br><small class="ota-muted">${fmtDate(x.updatedAt)}</small></td>
       <td>${can("owner") ? `<button class="pr-link danger" data-rm="${esc(x.email)}">Remove</button>` : ""}</td></tr>`).join("")
@@ -1439,7 +1502,8 @@ $("stCoSave").addEventListener("click", async () => {
     await put("/pricing/admin/settings", {
       companyName: $("stCoName").value.trim(), companyGstin: $("stCoGstin").value.trim(), companyPhone: $("stCoPhone").value.trim(),
       companyEmail: $("stCoEmail").value.trim(), companyWebsite: $("stCoWeb").value.trim(), companyAddress: $("stCoAddress").value.trim(),
-      quoteTerms: $("stTerms").value.trim(), showMrpDiscount: $("stMrp").checked
+      quoteTerms: $("stTerms").value.trim(), showMrpDiscount: $("stMrp").checked,
+      ...Object.fromEntries(BANK_FIELDS.map(([id, k]) => [k, $(id).value.trim()]))
     });
     showMsg("ok", "Company details saved.");
     await Promise.all([loadCurrent(), loadLists()]);

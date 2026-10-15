@@ -343,6 +343,7 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal((await call(DIST, `/pricing/quotes/${quote.id}/status`, "POST", { status: "accepted" })).status, 400);
     assert.equal((await call(DIST, `/pricing/quotes/${quote.id}/status`, "POST", { status: "cancelled" })).status, 200);
 
+
     // Roles: a viewer can look, not edit; an editor can't approve
     await call(OWNER, "/pricing/admin/staff", "PUT", { email: "viewer@farmbuddie.com", role: "viewer" });
     await call(OWNER, "/pricing/admin/staff", "PUT", { email: "editor@farmbuddie.com", role: "editor" });
@@ -445,6 +446,23 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     const left = (await call(OWNER, "/pricing/admin/audit")).body;
     assert.equal(left.total, 1);
     assert.match(left.entries[0].summary, /Whole audit log deleted/);
+    // Deleting a quote: admins only, logged, gone from the list; 15 a page
+    const lastQuote = (await call(OWNER, "/pricing/quotes")).body.quotes[0];
+    assert.equal((await call(OWNER, "/pricing/quotes")).body.pageSize, 15);
+    assert.equal((await call(DIST, `/pricing/quotes/${lastQuote.id}`, "DELETE")).status, 403);
+    const before = (await call(OWNER, "/pricing/quotes")).body.total;
+    assert.equal((await call(OWNER, `/pricing/quotes/${lastQuote.id}`, "DELETE")).status, 200);
+    assert.equal((await call(OWNER, `/pricing/quotes/${lastQuote.id}`)).status, 404);
+    assert.equal((await call(OWNER, "/pricing/quotes")).body.total, before - 1);
+    assert.equal((await call(OWNER, `/pricing/quotes/${lastQuote.id}`, "DELETE")).status, 404);
+    assert.ok((await call(OWNER, "/pricing/admin/audit?search=deleted")).body.entries.some((e) => e.entity === "quote" && e.action === "delete"));
+
+    // Bank details: checked, then on /current for the quotation
+    assert.equal((await call(OWNER, "/pricing/admin/settings", "PUT", { bankIfsc: "SBIN123" })).status, 400);
+    assert.equal((await call(OWNER, "/pricing/admin/settings", "PUT", { bankAccountNo: "12-34" })).status, 400);
+    assert.equal((await call(OWNER, "/pricing/admin/settings", "PUT", { bankName: "State Bank of India", bankAccountNo: "1234 5678 9012", bankIfsc: "sbin0001234", upiId: "farmbuddie@okaxis" })).status, 200);
+    const bank = (await call(DIST, "/pricing/current")).body.settings.company.bank;
+    assert.deepEqual([bank.name, bank.accountNo, bank.ifsc, bank.upi], ["State Bank of India", "123456789012", "SBIN0001234", "farmbuddie@okaxis"]);
   } finally {
     server.close();
     await pool.end();

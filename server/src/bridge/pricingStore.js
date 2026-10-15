@@ -661,6 +661,11 @@ export const pgPricingStore = {
     return { quotes: list.rows, total: count.rows[0].n };
   },
 
+  async deleteQuote(id) {
+    const { rowCount } = await pool.query(`DELETE FROM pricing_quotes WHERE id = $1`, [id]);
+    return rowCount === 1;
+  },
+
   async setQuoteStatus(id, status, by) {
     const { rowCount } = await pool.query(
       `UPDATE pricing_quotes SET status = $2, status_by = $3, status_at = now() WHERE id = $1 AND status = 'open'`, [id, status, by]);

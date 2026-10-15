@@ -338,6 +338,15 @@
     <label class="ota-field"><span>Address <small>(printed under the logo - one line per row)</small></span><textarea id="stCoAddress" rows="3" maxlength="300"></textarea></label>
     <label class="ota-field"><span>Terms &amp; conditions on customer quotations <small>(one term per line - numbered automatically)</small></span>
       <textarea id="stTerms" rows="10" maxlength="5000"></textarea></label>
+    <h3 class="pr-subhead">Bank details <small class="ota-muted">- printed on quotations beside the totals (leave empty to hide)</small></h3>
+    <div class="pr-grid2">
+      <label class="ota-field"><span>Bank name</span><input type="text" id="stBankName" maxlength="80" placeholder="State Bank of India"></label>
+      <label class="ota-field"><span>Account name</span><input type="text" id="stBankAcName" maxlength="80" placeholder="Farm Buddie"></label>
+      <label class="ota-field"><span>Account number</span><input type="text" id="stBankAcNo" maxlength="20" inputmode="numeric"></label>
+      <label class="ota-field"><span>IFSC</span><input type="text" id="stBankIfsc" maxlength="11" placeholder="SBIN0001234"></label>
+      <label class="ota-field"><span>Branch</span><input type="text" id="stBankBranch" maxlength="80"></label>
+      <label class="ota-field"><span>UPI ID <small>(optional)</small></span><input type="text" id="stUpi" maxlength="60" placeholder="farmbuddie@okaxis"></label>
+    </div>
     <label class="pr-check"><input type="checkbox" id="stMrp"> Show the company discount on quotations
       <small>(each product at its MRP without GST, and "Company discount" = MRP without GST − farmer selling price under the products total; set it per product in the price list's Company discount column)</small></label>
     <div class="ota-actions"><button class="fb-btn-primary pr-owner-only" id="stCoSave">Save company details</button></div>

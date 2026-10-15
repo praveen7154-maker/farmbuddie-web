@@ -164,6 +164,17 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .pr-doc th { background: #f0fdf4; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: #374151; }
 .pr-doc td.num, .pr-doc th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pr-doc-totals { margin-left: auto; width: min(360px, 100%); }
+/* Under the product table: amount in words + bank details left, totals right */
+.pr-doc-bottom { display: flex; gap: 28px; align-items: flex-start; justify-content: space-between; page-break-inside: avoid; }
+.pr-doc-bottom .pr-doc-totals { flex: 0 0 min(360px, 100%); }
+.pr-doc-left { flex: 1 1 auto; max-width: 380px; display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.pr-doc-left small { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 3px; }
+.pr-doc-words { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: #14532d; }
+.pr-doc-bank { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; }
+.pr-doc .pr-doc-bank table { margin: 0; width: auto; }
+.pr-doc .pr-doc-bank td { border: none; padding: 2px 12px 2px 0; font-size: 12px; }
+.pr-doc .pr-doc-bank td:first-child { color: #6b7280; white-space: nowrap; }
+@media (max-width: 640px) { .pr-doc-bottom { flex-direction: column-reverse; } .pr-doc-left { max-width: none; } }
 .pr-doc-note { font-size: 12px; color: #4b5563; margin-top: 14px; line-height: 1.5; }
 .pr-expired-banner { background: #fef2f2; color: #991b1b; padding: 8px 12px; border-radius: 8px; font-weight: 700; margin-bottom: 10px; }
 
@@ -208,3 +219,5 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 @media print { .pr-doc-terms ol { font-size: 10.5px; } }
 .pr-doc .pr-sum .row.disc { font-weight: 600; }
 .pr-doc .pr-sum .row.save { background: #f0fdf4; border-radius: 6px; padding-left: 6px; padding-right: 6px; }
+.pr-nowrap { white-space: nowrap; }
+.pr-subhead { font-size: 14px; margin: 18px 0 6px; color: #14532d; }
