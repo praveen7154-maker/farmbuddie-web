@@ -910,7 +910,7 @@ function renderItems() {
       <td><input type="checkbox" data-k="active" ${r.active ? "checked" : ""} ${draft ? "" : "disabled"}></td>
       <td class="pr-prod"><b>${esc(r.productName)}</b><small>${r.variantName !== "Standard" ? `${esc(r.variantName)} · ` : ""}${esc(r.sku)}${r.catalogueActive ? "" : " · ⚠️ inactive in catalogue"}</small></td>
       <td class="num pr-cost-col">${money("costPrice")}</td>
-      <td class="num">${money("mrp")}</td><td class="num pr-cdisc">${companyDiscCell(r, draft)}</td><td class="num">${money("distributorPrice")}</td><td class="num">${money("basePrice")}</td>
+      <td class="num">${money("mrp")}<span data-c="mrpex">${mrpExHint(r)}</span></td><td class="num pr-cdisc">${companyDiscCell(r, draft)}</td><td class="num">${money("distributorPrice")}</td><td class="num">${money("basePrice")}</td>
       <td class="num">${money("minPrice")}</td><td class="num">${money("maxPrice")}</td>
       <td class="num">${disc}</td>
       <td>${draft ? `<select data-k="gstBp">${gstOpts(r.gstBp)}</select>` : pct(r.gstBp)}</td>
@@ -940,9 +940,18 @@ const companyDisc = (r) => {
   const ex = mrpExGst(r);
   return ex !== null && Number.isInteger(r.basePrice) ? Math.max(0, ex - r.basePrice) : null;
 };
+// Under the MRP: the same MRP without GST, the figure every other column uses.
+const mrpExHint = (r) => {
+  const ex = mrpExGst(r);
+  return ex !== null && r.gstBp ? `<span class="pr-hint">${rs(ex)} without GST</span>` : "";
+};
+// The discount is before GST; with GST the customer saves 18% more - the
+// same % either way (% of the MRP).
 const companyDiscPct = (r) => {
   const d = companyDisc(r);
-  return d ? `<span class="pr-hint">${Math.round(d * 1000 / mrpExGst(r)) / 10}%</span>` : "";
+  if (!d) return "";
+  const withGst = Math.round(d * (10000 + r.gstBp) / 10000);
+  return `<span class="pr-hint">${Math.round(d * 1000 / mrpExGst(r)) / 10}% off MRP${r.gstBp ? ` · ${rs(withGst)} with GST` : ""}</span>`;
 };
 function companyDiscCell(r, draft) {
   const d = companyDisc(r);
@@ -991,6 +1000,8 @@ function onCell(tr, el) {
     if (cd) cd.innerHTML = companyDiscCell(r, true);
     cd?.querySelector("input")?.addEventListener("input", (e) => onCell(tr, e.target));
   }
+  const exBox = tr.querySelector('[data-c="mrpex"]');
+  if (exBox && (k === "mrp" || k === "gstBp")) exBox.innerHTML = mrpExHint(r);
   const pctBox = tr.querySelector('[data-c="cdpct"]');
   if (k === "companyDisc" && pctBox) pctBox.innerHTML = companyDiscPct(r);
   refreshRow(tr);
