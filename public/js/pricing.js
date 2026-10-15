@@ -356,8 +356,8 @@ function renderSummary(calc) {
 
 function totalsHtml(t, internal) {
   const row = (a, b, cls = "") => `<div class="row ${cls}"><span>${a}</span><span>${b}</span></div>`;
-  let h = row("Products total (list price)", rs(t.gross));
-  if (t.discount) h += row("Discount", `− ${rs(t.discount)}`, "disc");
+  let h = row(internal ? "Products total (list price)" : "Products total", rs(t.gross));
+  if (t.discount) h += row(internal ? "Discount" : `Discount${t.gross ? ` (${(t.discount * 100 / t.gross).toFixed(1).replace(/\.0$/, "")}%)` : ""}`, `− ${rs(t.discount)}`, "disc");
   h += row("<b>Total before GST</b>", `<b>${rs(t.taxable)}</b>`);
   for (const g of t.gstBreakup) {
     if (t.interState) h += row(`IGST ${pct(g.gstBp)} on ${rs(g.taxable)}`, rs(g.igst), "sub");
@@ -434,11 +434,8 @@ function quoteDocHtml(q) {
     <td><b>${esc(l.productName)}</b>${l.variantName && l.variantName !== "Standard" ? ` - ${esc(l.variantName)}` : ""}<br><small>${esc(l.sku)}${l.hsnSac ? ` · HSN/SAC ${esc(l.hsnSac)}` : ""}</small></td>
     <td class="num">${l.qty} ${esc(l.unit || "")}</td>
     <td class="num">${rs(l.listPrice)}</td>
-    <td class="num">${l.unitDiscount > 0 ? rs(l.unitDiscount) : "–"}</td>
-    <td class="num">${rs(l.unitPrice)}</td>
-    <td class="num">${rs(l.taxable)}</td>
     <td class="num">${pct(l.gstBp)}</td>
-    <td class="num">${rs(l.total)}</td></tr>`).join("");
+    <td class="num">${rs(l.gross ?? l.listPrice * l.qty)}</td></tr>`).join("");
   const expired = q.status === "open" && new Date(q.validUntil).getTime() < Date.now();
   return `<div class="pr-doc">
     ${expired ? `<div class="pr-expired-banner">⚠️ This quote has expired - prices may have changed. Make a new quote.</div>` : ""}
@@ -453,8 +450,8 @@ function quoteDocHtml(q) {
     </div>
     <div><b>To:</b> ${esc(q.customerName || "–")}${q.customerPhone ? ` · ${esc(q.customerPhone)}` : ""}${q.customerPlace ? ` · ${esc(q.customerPlace)}` : ""}${q.customerState ? `, ${esc(q.customerState)}` : ""}</div>
     <table>
-      <thead><tr><th>#</th><th>Product</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Discount / unit</th>
-        <th class="num">Net / unit</th><th class="num">Before GST</th><th class="num">GST</th><th class="num">Total</th></tr></thead>
+      <thead><tr><th>#</th><th>Product</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">GST</th>
+        <th class="num">Amount</th></tr></thead>
       <tbody>${lineRows}</tbody>
     </table>
     <div class="pr-doc-totals pr-sum">${totalsHtml(q.totals, false)}</div>
@@ -484,10 +481,10 @@ function printQuote(q) {
 
 function shareWhatsApp(q) {
   const t = q.totals;
-  const items = q.lines.map((l) => `• ${l.productName}${l.variantName && l.variantName !== "Standard" ? ` (${l.variantName})` : ""} × ${l.qty} = ${rs(l.taxable)}`).join("\n");
+  const items = q.lines.map((l) => `• ${l.productName}${l.variantName && l.variantName !== "Standard" ? ` (${l.variantName})` : ""} × ${l.qty} = ${rs(l.gross ?? l.listPrice * l.qty)}`).join("\n");
   const msg = `*Farm Buddie ${q.quoteNo ? `Quotation ${q.quoteNo}` : "price estimate"}*\n` +
     `${q.customerName ? `For: ${q.customerName}\n` : ""}\n${items}\n\n` +
-    `Total before GST: ${rs(t.taxable)}${t.discount ? ` (discount ${rs(t.discount)})` : ""}\nGST: ${rs(t.gst)}\n` +
+    `Products total: ${rs(t.gross)}\n${t.discount ? `Discount: − ${rs(t.discount)}\n` : ""}Total before GST: ${rs(t.taxable)}\nGST: ${rs(t.gst)}\n` +
     `*Estimated total: ${rs(t.payable)}*\nValid until ${fmtDate(q.validUntil)}\n\n_${current?.settings?.disclaimer || R.DISCLAIMER}_`;
   const digits = String(q.customerPhone || "").replace(/\D/g, "");
   const to = digits.length === 10 ? `91${digits}` : digits.length === 12 && digits.startsWith("91") ? digits : "";

@@ -139,7 +139,15 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .pr-modal-box { position: relative; background: #fff; border-radius: 16px; padding: 24px; width: min(860px, 100%); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2); }
 .pr-modal-box.wide { width: min(980px, 100%); }
 .pr-modal-box h2 { margin-top: 0; }
-.pr-modal-close { position: absolute; top: 12px; right: 14px; border: none; background: none; font-size: 20px; cursor: pointer; color: #6b7280; }
+.pr-modal-close { position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid #e5e7eb;
+  background: #f9fafb; font-size: 16px; line-height: 1; cursor: pointer; color: #4b5563; display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s; z-index: 2; }
+.pr-modal-close:hover { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+/* A header strip over a document (quote / audit view): title left, close right, never over the content */
+.pr-modal-bar { position: sticky; top: -30px; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: -24px -24px 20px; padding: 12px 16px 12px 24px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; border-radius: 16px 16px 0 0;
+  font-size: 13px; font-weight: 700; color: #374151; letter-spacing: .02em; }
+.pr-modal-bar .pr-modal-close { position: static; }
 .pr-modal input[type="text"].pr-cell, .pr-modal select.pr-cell { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; width: 100%; min-width: 80px; }
 .pr-modal input[type="number"].pr-cell { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; width: 70px; }
 .pr-grow { flex: 1 1 260px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 14px; }
@@ -198,3 +206,4 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .pr-doc-sign small { color: #6b7280; font-size: 10.5px; }
 .pr-doc-sign div { flex: 0 1 260px; border-top: 1px solid #9ca3af; padding-top: 6px; text-align: center; }
 @media print { .pr-doc-terms ol { font-size: 10.5px; } }
+.pr-doc .pr-sum .row.disc { font-weight: 600; }
