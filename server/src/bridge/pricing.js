@@ -37,7 +37,19 @@ export const DEFAULT_SETTINGS = {
   disclaimer: DISCLAIMER,
   // Printed on price list PDFs and quotes.
   companyName: "Farm Buddie",
-  companyAddress: "",
+  companyAddress: "14/218/1, Sankaragoundanpalayam\nVarathanallur Post, Bhavani Taluk\nErode, Tamil Nadu 638311",
+  // Printed on every customer quotation (one term per line).
+  quoteTerms: [
+    "For any service or maintenance, customers must contact Farm Buddie directly. Unauthorised opening, modification or servicing of the controller, panel, valves or wiring will void the warranty, and Farm Buddie is not responsible for any resulting damage.",
+    "Scope includes supply, installation and commissioning of the smart irrigation system. System performance depends on site conditions, water source and electrical setup.",
+    "A 1-year warranty is provided on the controller and valves. The warranty excludes minor fittings, consumables, and damage due to lightning, natural causes, rodents, insects, poor maintenance, improper usage or use of chemicals.",
+    "Installation will be carried out as per TNEB and government norms and standard safety guidelines.",
+    "Installation timeline depends on site conditions and system complexity. The customer must ensure availability of water and electricity and follow proper operating instructions.",
+    "A SIM card will be provided by Farm Buddie with yearly recharge. System performance depends on network availability, and Farm Buddie is not responsible for network-related issues.",
+    "Any modification, rewiring or third-party integration without approval, improper power supply, lack of earthing, or poor water quality (salinity, mud, debris) may affect system performance and will void the warranty.",
+    "After installation, equipment safety, handling and protection from theft or physical damage is the responsibility of the customer.",
+    "Payment terms: 90% advance at the time of product supply and 10% upon completion of installation."
+  ].join("\n"),
   companyGstin: "",
   companyPhone: "",
   companyEmail: "",
@@ -137,7 +149,10 @@ export function createPricingModule({ store, findDistributor = async () => null,
   });
 
   async function settings() {
-    return { ...DEFAULT_SETTINGS, ...(await store.settings()) };
+    const s = { ...DEFAULT_SETTINGS, ...(await store.settings()) };
+    // Left empty in Settings = the standard text.
+    for (const k of ["companyAddress", "quoteTerms"]) if (!s[k]) s[k] = DEFAULT_SETTINGS[k];
+    return s;
   }
 
   // The published list in force now, and the next scheduled one.
@@ -223,7 +238,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
       next: next ? { id: next.id, name: next.name, effectiveFrom: next.effectiveFrom } : null,
       items,
       accessories,
-      settings: { quoteValidityDays: s.quoteValidityDays, homeState, disclaimer: s.disclaimer, company: companyOf(s) },
+      settings: { quoteValidityDays: s.quoteValidityDays, homeState, disclaimer: s.disclaimer, company: companyOf(s), quoteTerms: s.quoteTerms },
       valveTypes: VALVE_TYPES,
       myState,
       role: req.pricingRole,
@@ -730,7 +745,8 @@ export function createPricingModule({ store, findDistributor = async () => null,
       companyGstin: (text(b.companyGstin ?? before.companyGstin, "GSTIN", 15) || "").toUpperCase(),
       companyPhone: text(b.companyPhone ?? before.companyPhone, "Phone", 40) || "",
       companyEmail: text(b.companyEmail ?? before.companyEmail, "Email", 120) || "",
-      companyWebsite: text(b.companyWebsite ?? before.companyWebsite, "Website", 120) || ""
+      companyWebsite: text(b.companyWebsite ?? before.companyWebsite, "Website", 120) || "",
+      quoteTerms: text(b.quoteTerms ?? before.quoteTerms, "Terms & conditions", 5000) || ""
     };
     if (next.companyGstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/.test(next.companyGstin)) throw new Bad("GSTIN should be 15 characters, like 33ABCDE1234F1Z5");
     await store.saveSettings(next);

@@ -419,7 +419,13 @@ function companyBlock() {
   const c = current?.settings?.company || {};
   const lines = [c.name, c.address, [c.gstin && `GSTIN: ${c.gstin}`, c.phone && `Ph: ${c.phone}`].filter(Boolean).join(" · "),
     [c.email, c.website].filter(Boolean).join(" · ")].filter(Boolean);
-  return lines.length ? `<div class="pr-doc-co">${lines.map(esc).join("<br>")}</div>` : "";
+  return lines.length ? `<div class="pr-doc-co">${lines.map((l) => esc(l).replace(/\n/g, "<br>")).join("<br>")}</div>` : "";
+}
+
+// Settings > Terms & conditions, one per line; "1." / "-" at the start is dropped (the list numbers them).
+function termsHtml() {
+  const terms = String(current?.settings?.quoteTerms || "").split(/\n+/).map((t) => t.trim().replace(/^(\d+[.)]|[-•*])\s*/, "")).filter(Boolean);
+  return terms.length ? `<div class="pr-doc-terms"><h3>Terms &amp; Conditions</h3><ol>${terms.map((t) => `<li>${esc(t)}</li>`).join("")}</ol></div>` : "";
 }
 
 function quoteDocHtml(q) {
@@ -437,7 +443,7 @@ function quoteDocHtml(q) {
   return `<div class="pr-doc">
     ${expired ? `<div class="pr-expired-banner">⚠️ This quote has expired - prices may have changed. Make a new quote.</div>` : ""}
     <div class="pr-doc-head">
-      <div><img src="/assets/logo.png" alt="Farm Buddie"><h1>${q.quoteNo ? "Quotation" : "Price estimate"}</h1>${companyBlock()}</div>
+      <div><img src="${location.origin}/assets/logo.png" alt="Farm Buddie"><h1>${q.quoteNo ? "Quotation" : "Price estimate"}</h1>${companyBlock()}</div>
       <div class="pr-doc-meta">
         ${q.quoteNo ? `<b>${esc(q.quoteNo)}</b><br>` : ""}
         Date: ${fmtDate(q.createdAt)}<br>
@@ -454,14 +460,22 @@ function quoteDocHtml(q) {
     <div class="pr-doc-totals pr-sum">${totalsHtml(q.totals, false)}</div>
     ${q.notes ? `<p class="pr-doc-note"><b>Notes:</b> ${esc(q.notes)}</p>` : ""}
     <p class="pr-doc-note">${esc(current?.settings?.disclaimer || R.DISCLAIMER)}<br>Prices before GST unless marked; GST as shown. ${q.totals.interState ? "Inter-state supply - IGST." : "Intra-state supply - CGST + SGST."}</p>
+    ${termsHtml()}
+    <div class="pr-doc-sign">
+      <div>Customer signature &amp; date<br><small>(I accept this quotation and the terms above)</small></div>
+      <div>For ${esc(current?.settings?.company?.name || "Farm Buddie")}<br><small>Authorised signatory</small></div>
+    </div>
   </div>`;
 }
 
 function printQuote(q) {
   const w = window.open("", "_blank");
   if (!w) { showMsg("error", "Allow pop-ups for this site to print"); return; }
+  // The quote's own styles, copied in (the print window has no stylesheet of its own).
+  const css = [...document.styleSheets].flatMap((ss) => { try { return [...ss.cssRules]; } catch { return []; } })
+    .map((r) => r.cssText).filter((t) => /\.pr-(doc|sum|expired)/.test(t)).join("\n");
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(q.quoteNo || "Estimate")} - Farm Buddie</title>
-    <link rel="stylesheet" href="/css/pricing.css">
+    <style>${css}</style>
     <style>body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:24px;color:#111827}
       @media print{body{margin:0}} .pr-sum .row.internal{display:none}</style></head>
     <body>${quoteDocHtml(q)}<script>window.onload=()=>{window.print();}<\/script></body></html>`);
@@ -1335,8 +1349,9 @@ async function loadSettings() {
     $("stTwo").checked = !!s.requireSecondApprover; $("stDisclaimer").value = s.disclaimer;
     $("stCoName").value = s.companyName || ""; $("stCoGstin").value = s.companyGstin || ""; $("stCoPhone").value = s.companyPhone || "";
     $("stCoEmail").value = s.companyEmail || ""; $("stCoWeb").value = s.companyWebsite || ""; $("stCoAddress").value = s.companyAddress || "";
+    $("stTerms").value = s.quoteTerms || "";
     const ro = !can("owner");
-    for (const id of ["stValidity", "stWarn", "stHome", "stTwo", "stDisclaimer", "stCoName", "stCoGstin", "stCoPhone", "stCoEmail", "stCoWeb", "stCoAddress"]) $(id).disabled = ro;
+    for (const id of ["stValidity", "stWarn", "stHome", "stTwo", "stDisclaimer", "stCoName", "stCoGstin", "stCoPhone", "stCoEmail", "stCoWeb", "stCoAddress", "stTerms"]) $(id).disabled = ro;
     $("staffBody").innerHTML = r.staff.length ? r.staff.map((x) => `<tr><td>${esc(x.email)}</td><td>${esc(x.role)}</td>
       <td>${esc(x.updatedBy || "")}<br><small class="ota-muted">${fmtDate(x.updatedAt)}</small></td>
       <td>${can("owner") ? `<button class="pr-link danger" data-rm="${esc(x.email)}">Remove</button>` : ""}</td></tr>`).join("")
@@ -1362,7 +1377,8 @@ $("stCoSave").addEventListener("click", async () => {
   try {
     await put("/pricing/admin/settings", {
       companyName: $("stCoName").value.trim(), companyGstin: $("stCoGstin").value.trim(), companyPhone: $("stCoPhone").value.trim(),
-      companyEmail: $("stCoEmail").value.trim(), companyWebsite: $("stCoWeb").value.trim(), companyAddress: $("stCoAddress").value.trim()
+      companyEmail: $("stCoEmail").value.trim(), companyWebsite: $("stCoWeb").value.trim(), companyAddress: $("stCoAddress").value.trim(),
+      quoteTerms: $("stTerms").value.trim()
     });
     showMsg("ok", "Company details saved.");
     await Promise.all([loadCurrent(), loadLists()]);

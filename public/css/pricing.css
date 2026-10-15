@@ -188,3 +188,13 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .pr-lists td:last-child { width: 1%; white-space: nowrap; }
 .pr-scroll { overflow-x: auto; max-width: 100%; }
 .pr-doc-co { font-size: 11.5px; color: #374151; line-height: 1.5; margin-top: 4px; }
+/* Quote: terms and signatures */
+.pr-doc-terms { margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+.pr-doc-terms li { page-break-inside: avoid; }
+.pr-doc-terms h3 { margin: 0 0 6px; font-size: 13px; color: #14532d; text-transform: uppercase; letter-spacing: .4px; }
+.pr-doc-terms ol { margin: 0; padding-left: 18px; font-size: 11.5px; color: #374151; line-height: 1.5; }
+.pr-doc-terms li { margin-bottom: 3px; }
+.pr-doc-sign { display: flex; justify-content: space-between; gap: 40px; margin-top: 64px; font-size: 12px; page-break-inside: avoid; }
+.pr-doc-sign small { color: #6b7280; font-size: 10.5px; }
+.pr-doc-sign div { flex: 0 1 260px; border-top: 1px solid #9ca3af; padding-top: 6px; text-align: center; }
+@media print { .pr-doc-terms ol { font-size: 10.5px; } }
