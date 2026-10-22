@@ -22,7 +22,7 @@ export const OFFLINE_AFTER_MS = 11 * 60 * 1000;
 // Readings and counters that change on almost every report - left out
 // when deciding whether a report "changed". (They are still written, on
 // the next heartbeat or change.)
-const MOVING = /^(volt_|curr_|pressure_|delta_psi|signal_pct|node_rssi_pct|rssi|free_heap|max_alloc_heap|mesh_drops|run_total_sec|run_sec|uptime_sec|device_uptime_sec|transport_uptime_sec|phase_elapsed_sec|ts$|time$|v$|i$)|_remaining_sec$/;
+const MOVING = /^(volt_|curr_|pressure_|delta_psi|signal_pct|node_rssi_pct|rssi|free_heap|max_alloc_heap|battery_mv|mesh_drops|run_total_sec|run_sec|uptime_sec|device_uptime_sec|transport_uptime_sec|phase_elapsed_sec|ts$|time$|v$|i$)|_remaining_sec$/;
 
 function strip(value) {
   if (Array.isArray(value)) return value.map(strip);
