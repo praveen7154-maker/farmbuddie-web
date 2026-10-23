@@ -78,6 +78,47 @@ export async function fetchConfigReadback(auth, { farmId, nodeId, motorNum, getC
 }
 
 /**
+ * Asks the device for its status and waits for the report it sends back,
+ * read from /telemetry (the bridge stores every report as it arrives). The
+ * farmer doc's deviceStatus can't be used for this: the bridge writes a
+ * report whose only change is the readings to Firestore at most every 20
+ * minutes (server statusThrottle.js), so it often shows old volts/amps.
+ * A report counts only if it was stored after the newest one already there
+ * when we asked - server times on both sides, so this PC's clock doesn't
+ * matter. Resolves { payload, at } (at: when the bridge got it).
+ */
+export async function fetchFreshStatus(auth, { farmId, nodeId, motorNum, maxWaitMs = 25000, pollIntervalMs = 1500 }) {
+  const eventType = `motor${motorNum}_status`;
+  // Wide window: only the newest report matters, and a PC clock running a
+  // little fast must not push "since" past the report we're waiting for.
+  const windowMs = maxWaitMs + 2 * 60 * 1000;
+  const newestStatus = async () => {
+    const events = await fetchDeviceEvents(auth, farmId, windowMs);
+    let newest = null;
+    for (const e of events) {
+      // An alert shares the status topic - "event" is what marks it.
+      if (e.event_type !== eventType || !e.payload || typeof e.payload !== "object" || e.payload.event !== undefined) continue;
+      if (!newest || new Date(e.recorded_at) > new Date(newest.recorded_at)) newest = e;
+    }
+    return newest;
+  };
+
+  const before = await newestStatus();
+  await sendDeviceCommand(auth, { farmId, nodeId, motorNum, cmd: "get_status" });
+
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, pollIntervalMs));
+    const latest = await newestStatus();
+    if (latest && (!before || new Date(latest.recorded_at) > new Date(before.recorded_at))) {
+      return { payload: latest.payload, at: new Date(latest.recorded_at) };
+    }
+  }
+
+  throw new Error("The device did not send a fresh reading in time - it may be offline.");
+}
+
+/**
  * Sends a command with its own id, then polls /telemetry for the device's
  * ack carrying that id (motor{N}_response with cmd/id/ok). For a motor node
  * the hub resends over the mesh and reports ok:false / motor_node_no_ack if

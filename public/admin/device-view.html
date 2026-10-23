@@ -139,9 +139,11 @@
 <details class="card-industrial fleet-section" open>
   <summary class="section-title">🎚️ VI Calibration (<span class="ctlMotorLabel">Motor 1</span>)</summary>
   <p class="cal-help">
-    1. Press <b>Fetch Device Constants</b>. 2. Measure the phase with a multimeter (voltage) or clamp meter
-    (current - motor running) and enter it. 3. <b>Calculate</b> - new constant = constant × meter ÷ device reading.
-    4. <b>Push</b> sends only that phase. After a push, press <b>Refresh Reading</b> and compare again.
+    1. Press <b>Fetch Device Constants</b> - it also gets a fresh reading from the device. 2. At the same time,
+    measure the phase with a multimeter (voltage) or clamp meter (current - motor running) and enter it.
+    3. <b>Calculate</b> - new constant = constant × meter ÷ device reading. 4. <b>Push</b> sends only that phase;
+    the page then gets a new reading by itself - compare it with the meter again. Grey readings are an old copy:
+    press <b>Refresh Reading</b> before calculating.
   </p>
   <div class="fleet-btn-row">
     <button class="fb-btn-primary small" id="calFetch">⬇️ Fetch Device Constants</button>

@@ -15,7 +15,7 @@
  * Each phase is pushed on its own - set_vi_calibration keeps every field
  * it isn't given. */
 
-import { sendDeviceCommand, sendCommandAwaitAck, fetchConfigReadback } from "/js/device-commands.js";
+import { sendDeviceCommand, sendCommandAwaitAck, fetchConfigReadback, fetchFreshStatus } from "/js/device-commands.js";
 import { motorNodeFlags } from "/js/device-status-render.js";
 
 const MOTOR_NUMS = ["1", "2", "3", "4"];
@@ -38,7 +38,19 @@ let auth = null;
 let farm = null;          // latest farmer doc
 let deviceCal = null;     // last config_vi read from the hub
 let lastMotorJson = "";
-let readingAt = null;     // when the selected motor's live reading last changed
+/* The selected motor's reading shown in the table:
+ *   payload - its status report, at - when the bridge got it (server time),
+ *   fresh   - straight from the hub via Refresh Reading (or newer than
+ *             such a reading). Only a fresh one is used to calculate: the
+ *             farmer doc's copy can be up to 20 minutes old (the bridge
+ *             writes readings-only changes that rarely - statusThrottle.js),
+ *   gotAtMs - when this page got it (this PC's clock). */
+let reading = null;
+let readingBusy = false;
+// Bumped by every push: a reading asked for before it was made with the old constant.
+let calEpoch = 0;
+// A fresh reading is trusted this long - mains voltage and motor load drift.
+const READING_FRESH_MS = 3 * 60 * 1000;
 
 const $ = (id) => document.getElementById(id);
 
@@ -108,26 +120,39 @@ function setRowNote(key, text, kind) {
   el.className = kind ? `cal-note ${kind}` : "cal-note";
 }
 
+const readingIsFresh = () => !!reading?.fresh && Date.now() - reading.gotAtMs < READING_FRESH_MS;
+
 function renderCalValues() {
-  const motor = selectedMotor();
-  for (const { key, unit, reading } of CAL_ROWS) {
+  const fresh = readingIsFresh();
+  for (const { key, unit, reading: pick } of CAL_ROWS) {
     const c = $(`calConst_${key}`);
     if (c) c.textContent = deviceCal ? fmt(deviceCal[key]) : "--";
     const r = $(`calReading_${key}`);
-    const value = reading(motor);
-    if (r) r.textContent = value == null ? "--" : `${value} ${unit}`;
+    const value = pick(reading?.payload);
+    if (r) {
+      r.textContent = value == null ? "--" : `${value} ${unit}`;
+      r.classList.toggle("cal-stale", !fresh);
+    }
   }
   const at = $("calReadingAt");
-  if (at) at.textContent = readingAt ? readingAt.toLocaleTimeString() : "--";
+  if (at) {
+    at.textContent = reading?.at
+      ? `${reading.at.toLocaleTimeString()}${fresh ? " (fresh from the device)" : " (old copy - press Refresh Reading)"}`
+      : "--";
+  }
 }
 
 function calculate(key) {
   const row = CAL_ROWS.find((r) => r.key === key);
   const oldConst = deviceCal?.[key];
-  const deviceReading = Number(row.reading(selectedMotor()));
+  const deviceReading = Number(row.reading(reading?.payload));
   const meter = Number($(`calMeter_${key}`).value);
 
   if (oldConst == null) return setRowNote(key, "Press \"Fetch Device Constants\" first.", "error");
+  if (readingBusy) return setRowNote(key, "Waiting for the device's fresh reading - try again in a moment.", "error");
+  if (!readingIsFresh()) {
+    return setRowNote(key, "The Device Reading is old - press Refresh Reading, read the meter at the same time, then Calculate.", "error");
+  }
   if (!(meter > 0)) return setRowNote(key, `Enter the multimeter / clamp-meter reading (${row.unit}).`, "error");
   if (!(deviceReading > 0)) {
     return setRowNote(key, row.unit === "A"
@@ -151,10 +176,45 @@ async function fetchConstants() {
       ...target(), getCmd: "get_vi_calibration", responseType: "config_vi"
     });
     renderCalValues();
-    setNote("calNote", "Loaded the device's current constants.", "success");
   } catch (err) {
     console.error("Fetch VI calibration failed:", err);
     setNote("calNote", err.message, "error");
+    return;
+  }
+  await refreshReading("Loaded the device's current constants.");
+}
+
+/* Asks the hub for a status report and shows the one it sends back. */
+async function refreshReading(donePrefix = "") {
+  if (!farm) return;
+  if (readingBusy) {
+    // A refresh is already on its way - it will update the note itself.
+    if (donePrefix) setNote("calNote", `${donePrefix} Waiting for the device's fresh reading…`);
+    return;
+  }
+  readingBusy = true;
+  const forMotor = motorNum;
+  const epoch = calEpoch;
+  const btn = $("calRefreshReading");
+  if (btn) btn.disabled = true;
+  setNote("calNote", `${donePrefix ? donePrefix + " " : ""}Asking the device for a fresh reading…`);
+  try {
+    const { payload, at } = await fetchFreshStatus(auth, target());
+    // The motor selector changed meanwhile, or a push did (its own refresh follows).
+    if (forMotor !== motorNum || epoch !== calEpoch) return;
+    reading = { payload, at, fresh: true, gotAtMs: Date.now() };
+    renderCalValues();
+    // "Reading is old" / "reads 0" messages no longer apply.
+    for (const { key } of CAL_ROWS) {
+      if ($(`calNote_${key}`)?.classList.contains("error")) setRowNote(key, "");
+    }
+    setNote("calNote", `${donePrefix ? donePrefix + " " : ""}Fresh reading from the device - read your meter now and enter it.`, "success");
+  } catch (err) {
+    console.error("Refresh reading failed:", err);
+    if (forMotor === motorNum && epoch === calEpoch) setNote("calNote", err.message, "error");
+  } finally {
+    readingBusy = false;
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -177,15 +237,25 @@ async function pushPhase(key) {
       // The hub replies with all six constants - wait for the one that has ours.
       accept: (p) => Math.abs(Number(p[key]) - value) < 0.01
     });
+    // The reading on screen was made with the old constant - never calculate from it again.
+    calEpoch++;
+    if (reading) reading = { ...reading, fresh: false };
     renderCalValues();
     $(`calMeter_${key}`).value = "";
     $(`calNew_${key}`).value = "";
-    setRowNote(key, `Saved on the device (${fmt(deviceCal[key])}). Refreshing the reading - compare it with the meter again.`, "success");
-    sendDeviceCommand(auth, { ...target(), cmd: "get_status" }).catch(() => {});
+    setRowNote(key, `Saved on the device (${fmt(deviceCal[key])}). Getting a new reading - compare it with the meter again.`, "success");
+    setNote("calNote", "Saved - getting a new reading in a moment…");
   } catch (err) {
     console.error("Push VI calibration failed:", err);
     setRowNote(key, `${err.message} Press Fetch Device Constants to check whether it was saved.`, "error");
+    return;
   }
+  // The hub sends a status right after the push too, but its reading can
+  // still come from the old constant - give the sensor a couple of seconds
+  // (one full V+I cycle) before asking for the reading to compare.
+  await new Promise((r) => setTimeout(r, 2500));
+  while (readingBusy) await new Promise((r) => setTimeout(r, 500));   // an older refresh, now ignored
+  await refreshReading();
 }
 
 /* ================= SAFETY LIMITS ================= */
@@ -293,7 +363,7 @@ function selectMotor(n) {
   // Constants, readings and limits belong to the previous motor - clear them.
   deviceCal = null;
   lastMotorJson = JSON.stringify(selectedMotor() ?? null);
-  readingAt = farm?.deviceStatus?.lastSeen?.toDate?.() ?? null;
+  reading = savedReading();
   document.querySelectorAll(".ctlMotorLabel").forEach((el) => { el.textContent = `Motor ${n}`; });
   for (const { key } of CAL_ROWS) {
     $(`calMeter_${key}`).value = "";
@@ -354,10 +424,20 @@ export function initDeviceControl(firebaseAuth) {
   on("safetySave", saveSafety);
 
   on("calFetch", fetchConstants);
-  on("calRefreshReading", async () => {
-    sendDeviceCommand(auth, { ...target(), cmd: "get_status" }).catch(() => {});
-    setNote("calNote", "Asked the device for a fresh reading - the Device Reading column updates when it arrives.");
-  });
+  on("calRefreshReading", () => refreshReading());
+  // "Fresh" runs out after a few minutes even with no new data.
+  setInterval(renderCalValues, 30 * 1000);
+}
+
+/* The farmer doc's copy of the selected motor's report. Its time is the
+ * device's last report of any kind - the closest the doc has. */
+function savedReading() {
+  return {
+    payload: selectedMotor() ?? null,
+    at: farm?.deviceStatus?.lastSeen?.toDate?.() ?? null,
+    fresh: false,
+    gotAtMs: Date.now()
+  };
 }
 
 /* Called with every Firestore snapshot of the farmer doc. */
@@ -367,9 +447,13 @@ export function updateDeviceControl(farmerData) {
   renderMotorSelect();
   const motorJson = JSON.stringify(selectedMotor() ?? null);
   if (motorJson !== lastMotorJson) {
-    // First snapshot: best guess is the last time the device reported at all.
-    readingAt = lastMotorJson ? new Date() : (farmerData?.deviceStatus?.lastSeen?.toDate?.() ?? null);
     lastMotorJson = motorJson;
+    const saved = savedReading();
+    // The bridge writes the doc when the motor's state changes (on/off,
+    // fault...), so a copy newer than a fresh reading is just as fresh.
+    if (!reading?.at || (saved.at && saved.at > reading.at)) {
+      reading = { ...saved, fresh: !!reading?.fresh && !!saved.at };
+    }
   }
   renderCalValues();
 }
