@@ -35,6 +35,13 @@ firmware does this automatically at boot until it succeeds. See
 - **Hub replaced, or its flash wiped?** Its new key won't match. Clear the
   binding, then let the new hub bootstrap:
   `node scripts/resetDeviceBinding.js <farmId>` (dry run) then `... --apply`.
+- **Full test reset** (every farm, device, app login and history - before
+  testing again from nothing): `docker compose exec bridge node
+  scripts/resetAllTestData.js` (dry run, lists what goes and what stays),
+  then `... --apply --confirm=RESET-ALL`, then `docker compose restart bridge
+  provision-api`. Keeps admin email logins, the bridge / OTA admin broker
+  logins, the admin access code and the pricing catalog (`--with-pricing` to
+  empty that too). See the script's header.
 - **Legacy firmware** (no device key) can still bootstrap a farm that isn't
   bound yet. Once no unit in stock or in the field runs such firmware, set
   `BOOTSTRAP_REQUIRE_DEVICE_KEY=true` in `.env` to refuse keyless requests.
