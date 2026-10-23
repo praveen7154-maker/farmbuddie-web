@@ -79,6 +79,14 @@ export function setOtaStatusHandler(fn) {
   otaStatusHandler = fn;
 }
 
+// Set by index.js - replies to commands the bridge itself sent and is
+// waiting on (admin Event Log page, eventLog.js). Returns true when it
+// took the message: it's then not stored or sent to the farm's phones.
+let deviceReplyHandler = null;
+export function setDeviceReplyHandler(fn) {
+  deviceReplyHandler = fn;
+}
+
 /** Live MQTT connection state of the bridge's own persistent client - used by GET /healthz (see server.js) for the "VPS & TBMQ" admin status page. */
 export function isBridgeConnected() {
   return client !== null && client.connected === true;
@@ -143,6 +151,10 @@ async function handleMessage(topic, messageBuf, packet) {
   } catch {
     console.warn(`[bridge] non-JSON payload on ${topic}, storing raw`);
     payload = { raw: messageBuf.toString() };
+  }
+
+  if (category === "motor" && leaf === "response" && deviceReplyHandler && deviceReplyHandler(farmId, nodeId, payload)) {
+    return;
   }
 
   const eventType = motorNum ? `motor${motorNum}_${leaf}` : `${category}_${leaf}`;

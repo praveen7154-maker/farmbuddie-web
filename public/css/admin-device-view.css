@@ -27,6 +27,10 @@
   cursor: pointer;
 }
 
+.header-actions { display: flex; gap: 8px; align-items: center; }
+a.back-industrial { color: inherit; text-decoration: none; font-size: 13px; }
+a.back-industrial[hidden] { display: none; }
+
 /* CARD */
 .card-industrial {
   background: rgba(255,255,255,0.7);

@@ -35,6 +35,14 @@ onSnapshot(farmerRef, (snap) => {
   document.getElementById("uniqueId").innerText =
     farmerData.controller?.uniqueId || "-";
 
+  // This hub's black box (admin > Event Log), for the farm it's on.
+  const hubFarmId = farmerData.controller?.uniqueId;
+  const eventLogLink = document.getElementById("eventLogLink");
+  if (eventLogLink && hubFarmId) {
+    eventLogLink.href = `/admin/event-log.html?farm=${encodeURIComponent(hubFarmId)}`;
+    eventLogLink.hidden = false;
+  }
+
   const isOnline = updateStatusSection(data);
 
   renderMotorsInto(document.getElementById("motorGrid"), data, isOnline);

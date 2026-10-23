@@ -11,6 +11,7 @@ import { getFleetStatus } from "./fleetStatus.js";
 import { issueDeviceCredentialByFarmId } from "../deviceProvisioning.js";
 import { buildDeviceQrPng } from "./qrPayload.js";
 import { createOtaModule } from "./ota.js";
+import { createEventLogModule } from "./eventLog.js";
 import { pgOtaStore } from "./otaStore.js";
 import { publishJson } from "./mqttBridge.js";
 import { normalizeFarmElectrical } from "./farmElectrical.js";
@@ -135,6 +136,11 @@ export const pricing = createPricingModule({ store: pgPricingStore, findDistribu
 app.use("/pricing", pricing.router);
 
 app.use("/ota", ota.adminRouter);
+
+// Event Log (admin panel > Event Log): a hub's EEPROM black box, read on
+// request over its command topic - see eventLog.js.
+export const eventLog = createEventLogModule({ publishCommand });
+app.use("/event-log", requireAdmin, eventLog.adminRouter);
 
 // Message Broadcast (admin panel > Message Broadcast) and each phone's
 // "Farm Buddie Official" feed in the Irrigo app - see announcements.js.

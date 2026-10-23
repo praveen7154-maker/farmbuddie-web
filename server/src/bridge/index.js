@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { ensureSchema, startRetentionCleanup } from "./postgres.js";
 import { ensureFarmConfigCacheSchema } from "./farmConfigCache.js";
-import { connectBridge, publishCommand, setOtaStatusHandler } from "./mqttBridge.js";
+import { connectBridge, publishCommand, setOtaStatusHandler, setDeviceReplyHandler } from "./mqttBridge.js";
 import { ensureOtaSchema } from "./otaStore.js";
 import { ensureAnnouncementSchema } from "./announcementStore.js";
 import { ensureReportSchema } from "./reportStore.js";
@@ -12,7 +12,7 @@ import { TOKEN_PREFIX } from "./distributors.js";
 import { auth } from "../firebaseAdmin.js";
 import { startFarmerDocCacheRefresh, startOfflineSweep } from "./firestoreMirror.js";
 import { attachLiveGateway } from "./liveGateway.js";
-import { app, ota, broadcast, reports, distributors } from "./server.js";
+import { app, ota, broadcast, reports, distributors, eventLog } from "./server.js";
 
 async function main() {
   await ensureSchema();
@@ -24,6 +24,7 @@ async function main() {
   await ensurePricingSchema();
   await ensureAdminGateSchema();
   setOtaStatusHandler(ota.handleOtaStatus);
+  setDeviceReplyHandler(eventLog.handleResponse);
   startRetentionCleanup();
   broadcast.startScheduler();
   reports.startRollUp();

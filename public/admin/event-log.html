@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Event Log | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Start downloading Firebase straight away (it is otherwise found one
+       file at a time: page script -> firebase-init.js -> Firebase). -->
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js">
+  <link rel="modulepreload" href="/js/firebase-init.js">
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-tables.css">
+  <link rel="stylesheet" href="/css/vps-status.css">
+  <link rel="stylesheet" href="/css/ota.css">
+  <link rel="stylesheet" href="/css/event-log.css">
+  <link rel="stylesheet" href="/css/admin-mobile.css">
+  <!-- Menu clicks feel instant: Chrome/Edge prepare the admin page you point
+       at (hover / touch) in the background, so the click just shows it. -->
+  <script type="speculationrules">
+  {"prerender": [{"where": {"and": [{"href_matches": "/admin/*"}, {"not": {"selector_matches": ".logout, [href='#'], [target]"}}]},
+                  "eagerness": "moderate"}]}
+  </script>
+</head>
+
+<body class="fb-layout">
+
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/vps-status.html">🖥️ VPS & TBMQ</a>
+    <a href="/admin/ota.html">🚀 Firmware OTA</a>
+    <a class="active" href="/admin/event-log.html">🗃️ Event Log</a>
+    <a href="/admin/broadcast.html">📢 Message Broadcast</a>
+    <a href="/admin/pricing.html">💰 Module Pricing</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>🗃️ Event Log</h1>
+  <span class="fb-user">Admin</span>
+</header>
+
+<div id="pageError" class="ota-alert error" hidden></div>
+
+<!-- 1. HUB -->
+<section class="ota-card">
+  <h2><span class="ota-step">1</span> Hub</h2>
+  <div class="ota-row">
+    <input type="search" id="farmSearch" class="ota-search" placeholder="Search farm ID, farmer or serial">
+    <label class="ota-field">
+      <span>Farm</span>
+      <select id="farmSelect"><option value="">Loading…</option></select>
+    </label>
+    <button class="fb-btn-primary" id="readCardBtn" disabled>Read warranty card</button>
+  </div>
+  <p class="ota-note">Each V2 hub keeps its own "black box" in its EEPROM: warranty card, lifetime counters and the
+    last ~476 events (faults, resets, updates, power cuts, node problems). It survives power cuts, updates and a flash
+    erase. Nothing is sent by the hub on its own - this page asks for it. A full read takes about a minute over GSM.
+    No network? Read it at the hub (BOOT button), see the Event Log guide.</p>
+</section>
+
+<!-- 2. WARRANTY CARD -->
+<section class="ota-card" id="cardSection" hidden>
+  <h2><span class="ota-step">2</span> Warranty card <span class="ota-muted" id="cardMeta"></span></h2>
+  <div class="ev-grid" id="cardGrid"></div>
+  <div class="ev-serial" id="serialForm" hidden>
+    <p class="ota-note">No serial number on this hub yet. It can be set once from here (after that only at the hub's
+      service console). Format: IRRIGO + year + series + unit, e.g. <b>IRRIGO26AA10001</b>.</p>
+    <div class="ota-row">
+      <label class="ota-field narrow"><span>Serial number</span>
+        <input type="text" id="serialInput" maxlength="15" placeholder="IRRIGO26AA10001" autocomplete="off"></label>
+      <label class="ota-field narrow"><span>Factory test</span>
+        <select id="serialTest"><option value="pass">Pass</option><option value="fail">Fail</option><option value="">Not recorded</option></select></label>
+      <button class="fb-btn-primary" id="serialSaveBtn">Save serial</button>
+    </div>
+  </div>
+  <h3 class="ota-subhead">Lifetime</h3>
+  <div class="ev-tiles" id="counterTiles"></div>
+  <h3 class="ota-subhead">Faults (all time)</h3>
+  <div class="ev-tiles" id="faultTiles"></div>
+</section>
+
+<!-- 3. EVENTS -->
+<section class="ota-card" id="logSection" hidden>
+  <h2><span class="ota-step">3</span> Events <span class="ota-muted" id="logMeta"></span></h2>
+  <div class="ota-actions">
+    <button class="fb-btn-primary" id="readLogBtn">Read events</button>
+    <span class="ota-status-text" id="logProgress"></span>
+  </div>
+  <div class="ota-row ota-filters" id="logFilters" hidden>
+    <label class="ota-filter"><span>Show</span>
+      <select id="kindFilter">
+        <option value="">All events</option>
+        <option value="fault">Faults only</option>
+        <option value="critical">Faults, resets, updates</option>
+        <option value="routine">Routine only</option>
+      </select>
+    </label>
+    <label class="ota-filter"><span>Unit</span><select id="unitFilter"><option value="">All units</option></select></label>
+    <input type="search" id="logSearch" class="ota-search" placeholder="Search event or details">
+    <label class="ota-radio"><input type="checkbox" id="newestFirst" checked> Newest first</label>
+    <button class="fb-btn-primary small" id="csvBtn">⬇ CSV</button>
+    <button class="fb-btn-primary small" id="jsonBtn">⬇ JSON</button>
+  </div>
+  <div class="fb-table-card ota-farms" id="logTableWrap" hidden>
+    <table class="fb-table ev-table">
+      <thead><tr><th>#</th><th>Time (IST)</th><th>Unit</th><th>Event</th><th>Details</th><th>State</th></tr></thead>
+      <tbody id="logBody"></tbody>
+    </table>
+  </div>
+  <div class="ota-pager" id="logPager"></div>
+</section>
+
+</main>
+
+<script type="module" src="/js/event-log.js"></script>
+<script src="/js/admin-mobile.js" defer></script>
+</body>
+</html>
