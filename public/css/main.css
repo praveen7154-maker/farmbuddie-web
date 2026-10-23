@@ -498,6 +498,17 @@ body.fb-layout {
   display: block;
 }
 
+.mqtt-reveal-box .mqtt-qr-error {
+  max-width: 220px;
+  padding: 14px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .mqtt-reveal-box .mqtt-qr-info {
   flex: 0 1 260px;
   min-width: 180px;

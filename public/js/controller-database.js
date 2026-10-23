@@ -28,7 +28,7 @@ let activeStatus = "ALL";
 let activeVariant = "ALL";
 
 let renderScheduled = false;
-let lastControllerCount = 0;
+let lastTableKey = "";
 
 /* ================= ADMIN VISIBLE STATUS ================= */
 const ADMIN_VISIBLE_STATUSES = ["available", "assigned", "sold"];
@@ -54,14 +54,27 @@ onAuthStateChanged(auth, (user) => {
 
 /* ================= SMART RENDER ================= */
 
+// What the table shows: the controllers, and which farmer holds each one.
+// Redrawing only when the controller COUNT changed missed both a controller
+// turning assigned and the farmer list arriving after the controllers - the
+// farmer column stayed empty until something else redrew it. Farmer docs
+// also change on every device status update; those don't touch the table,
+// so they don't redraw it.
+function tableKey(){
+  const holders = getFarmers()
+    .map(f => `${f.controller?.uniqueId || ""}=${f.farmBuddieId || ""}`)
+    .sort()
+    .join(",");
+  return JSON.stringify(getControllers()) + "|" + holders;
+}
+
 function scheduleRender(){
 
-  const controllers = getControllers();
-
   /* prevent unnecessary re-render */
-  if (controllers.length === lastControllerCount) return;
+  const key = tableKey();
+  if (key === lastTableKey) return;
 
-  lastControllerCount = controllers.length;
+  lastTableKey = key;
 
   if (renderScheduled) return;
 
@@ -749,7 +762,11 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
   // farmer's data is already in getFarmers() via data-store.js's listener.
   const f = getFarmers().find(x => x.farmBuddieId === farmBuddieId);
 
-  if (!f) return;
+  if (!f) {
+    document.getElementById("farmerPanelBody").innerHTML =
+      `<div class="info-item full">Farmer details are still loading - close this and open it again in a moment.</div>`;
+    return;
+  }
 
   const appUsersHtml = (f.appUsers?.length)
     ? f.appUsers.map(u =>

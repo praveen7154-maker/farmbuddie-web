@@ -37,6 +37,30 @@ export async function provisionDeviceCredentials(auth, controllerDocId, { rotate
  * simply reopened - founders can look at or re-share it anytime, no
  * Rotate (which actually changes the password) needed just to view it.
  */
+// The QR drawing library (node-qrcode's browser build), loaded here on first
+// use so no page that shows a credential can forget it. Pinned to 1.5.1:
+// 1.5.3 and later no longer ship build/qrcode.min.js (a 404 - the QR box
+// just stayed empty).
+const QR_LIB_URL = "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
+let qrLibPromise = null;
+
+function loadQrLib() {
+  if (window.QRCode) return Promise.resolve(window.QRCode);
+  if (!qrLibPromise) {
+    qrLibPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = QR_LIB_URL;
+      script.onload = () => (window.QRCode ? resolve(window.QRCode) : reject(new Error("QR library didn't start")));
+      script.onerror = () => {
+        qrLibPromise = null;   // let the next try load it again
+        reject(new Error("QR library couldn't be downloaded"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return qrLibPromise;
+}
+
 export async function renderMqttCredentialReveal(container, data) {
   container.innerHTML = `
     <div class="mqtt-reveal-box">
@@ -97,6 +121,7 @@ export async function renderMqttCredentialReveal(container, data) {
     const encryptedBytes = await encryptRaw(qrPayload);
     const clampedBytes = new Uint8ClampedArray(encryptedBytes);
     const canvas = container.querySelector("#mqttQrCanvas");
+    const QRCode = await loadQrLib();
     await QRCode.toCanvas(canvas, [{ data: clampedBytes, mode: "byte" }], { width: 220 });
 
     // Onboarding (office) and physical install (field) are usually
@@ -120,6 +145,12 @@ export async function renderMqttCredentialReveal(container, data) {
     }
   } catch (qrErr) {
     console.error("QR generation error:", qrErr);
+    // Never just an empty box - say why, and how to retry.
+    const visual = container.querySelector(".mqtt-qr-visual");
+    if (visual) {
+      visual.innerHTML = `<div class="mqtt-qr-error">QR code couldn't be drawn (${qrErr.message || "error"}).<br>
+        Check the internet connection and press Fetch MQTT Credentials again.</div>`;
+    }
   }
 }
 
@@ -175,6 +206,7 @@ async function buildDownloadableQrImage(qrBytes, data) {
   ctx.fillText("Scan for Irrigo Login", W / 2, 46);
 
   const qrCanvas = document.createElement("canvas");
+  const QRCode = await loadQrLib();
   await QRCode.toCanvas(qrCanvas, [{ data: qrBytes, mode: "byte" }], { width: QR_SIZE });
 
   const qrX = (W - QR_SIZE) / 2;
