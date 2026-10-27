@@ -40,7 +40,8 @@ const RESTART_CAUSES = { 0: "", 1: "app reboot", 2: "GSM task hung", 3: "memory 
   10: "safety task failed", 11: "SMS task hung", 12: "valve config changed",
   // Task watchdog resets - which task froze (hub Watchdog::lastHang()).
   13: "main loop froze", 14: "safety task froze", 15: "mesh task froze", 16: "froze while starting up",
-  17: "CPU 0 overloaded", 18: "several tasks froze", 19: "event log writer stuck", 255: "other" };
+  17: "CPU 0 overloaded", 18: "several tasks froze", 19: "event log writer stuck",
+  20: "mesh task failed to start", 255: "other" };
 const OTA_ERRORS = { 0: "error", 1: "busy", 2: "motor running", 3: "bad request", 4: "signature", 5: "download",
   6: "checksum", 7: "flash write", 8: "wrong chip", 9: "no units", 10: "did not validate" };
 const LINKS = { 1: "WiFi mesh", 2: "LoRa", 3: "RS485" };
