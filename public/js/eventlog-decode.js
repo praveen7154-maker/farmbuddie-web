@@ -37,7 +37,10 @@ const RESET_REASONS = ["unknown", "power on", "reset pin", "software", "crash", 
   "task watchdog", "watchdog", "deep sleep", "brownout", "sdio", "usb", "jtag", "efuse", "power glitch", "cpu lockup"];
 const RESTART_CAUSES = { 0: "", 1: "app reboot", 2: "GSM task hung", 3: "memory low", 4: "cloud offline too long",
   5: "MQTT task hung", 6: "node update staged", 7: "OTA failed", 8: "OTA rollback", 9: "OTA update",
-  10: "safety task failed", 11: "SMS task hung", 12: "valve config changed", 255: "other" };
+  10: "safety task failed", 11: "SMS task hung", 12: "valve config changed",
+  // Task watchdog resets - which task froze (hub Watchdog::lastHang()).
+  13: "main loop froze", 14: "safety task froze", 15: "mesh task froze", 16: "froze while starting up",
+  17: "CPU 0 overloaded", 18: "several tasks froze", 19: "event log writer stuck", 255: "other" };
 const OTA_ERRORS = { 0: "error", 1: "busy", 2: "motor running", 3: "bad request", 4: "signature", 5: "download",
   6: "checksum", 7: "flash write", 8: "wrong chip", 9: "no units", 10: "did not validate" };
 const LINKS = { 1: "WiFi mesh", 2: "LoRa", 3: "RS485" };

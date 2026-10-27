@@ -118,8 +118,10 @@ function updateStatusSection(data) {
       formatDurationShort(health.uptime_sec);
     document.getElementById("deviceUptime").innerText =
       formatDurationShort(health.device_uptime_sec);
+    // restart_cause names which of the hub's own reboots it was - after a
+    // task watchdog reset, which task froze ("wdt_loop", "wdt_safety"...).
     document.getElementById("resetReason").innerText =
-      health.reset_reason ?? "-";
+      (health.reset_reason ?? "-") + (health.restart_cause ? ` (${health.restart_cause})` : "");
   }
 
   return isOnline;   // 🔥 VERY IMPORTANT
