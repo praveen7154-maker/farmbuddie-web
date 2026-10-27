@@ -77,7 +77,7 @@
       </select>
     </label>
     <label class="ota-field">
-      <span>firmware.bin <small>(.pio/build/esp32dev/firmware.bin)</small></span>
+      <span>firmware.bin <small>(.pio/build/hub_v2/firmware.bin - V2 board; esp32dev/ for V1)</small></span>
       <input type="file" id="binInput" accept=".bin">
     </label>
     <label class="ota-field narrow">
@@ -118,9 +118,9 @@
     <table class="fb-table">
       <thead>
         <tr><th class="ota-check-col"><input type="checkbox" id="selectAll" title="Select all shown"></th>
-          <th>Farm ID</th><th>Farmer</th><th>Online</th><th>Hub firmware</th><th>Units</th></tr>
+          <th>Farm ID</th><th>Farmer</th><th>Online</th><th>Hub firmware</th><th>Board</th><th>Units</th></tr>
       </thead>
-      <tbody id="farmBody"><tr><td colspan="6">Loading…</td></tr></tbody>
+      <tbody id="farmBody"><tr><td colspan="7">Loading…</td></tr></tbody>
     </table>
   </div>
   <div class="ota-pager" id="farmPager"></div>

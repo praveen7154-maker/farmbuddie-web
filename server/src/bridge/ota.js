@@ -28,7 +28,23 @@ export const OTA_BROADCAST_TOPIC = "motor/ota/broadcast";
 // be flashed. A hub still on the old 2 x 1.25 MB table refuses an image too big
 // for it on its own (Update.begin fails) and reports the OTA as failed.
 export const MAX_FIRMWARE_BYTES = 1966080;
+// The V2 hub (ESP32-S3-MINI-1U-N8, default_8MB partitions: 2 x 3.2 MB).
+export const MAX_FIRMWARE_BYTES_S3 = 3342336;
 const ESP_IMAGE_MAGIC = 0xe9;
+
+// Which chip an image is built for: the chip id in its header (bytes 12-13,
+// esp_image_header_t). The hub refuses one for another chip ("wrong_chip");
+// knowing it here sends each hub image only to hubs that can run it.
+export const CHIP_ESP32 = 0;     // V1 hub, and every node
+export const CHIP_ESP32S3 = 9;   // V2 hub
+export const CHIP_NAMES = { [CHIP_ESP32]: "V1 board (ESP32)", [CHIP_ESP32S3]: "V2 board (ESP32-S3)" };
+export const imageChip = (data) => (data && data.length >= 16 ? data[12] | (data[13] << 8) : -1);
+// A hub's board, from its health report (Motor repo board.h BOARD_NAME);
+// null when unknown (older firmware) - the hub's own chip check covers it.
+const BOARD_CHIPS = new Map([["v1", CHIP_ESP32], ["v2-s3", CHIP_ESP32S3]]);
+export const boardChip = (board) => (BOARD_CHIPS.has(board) ? BOARD_CHIPS.get(board) : null);
+export const maxFirmwareBytes = (product, chip) =>
+  (product === "hub" && chip === CHIP_ESP32S3 ? MAX_FIRMWARE_BYTES_S3 : MAX_FIRMWARE_BYTES);
 const VERSION_RE = /^[A-Za-z0-9._-]{1,32}$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
 const FARM_RE = /^\d{1,6}$/;
@@ -181,23 +197,28 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
   adminRouter.get("/config", async (req, res) => {
     try {
       const fleet = await listFleet();
-      return res.json({ publicKeyPem, maxFirmwareBytes: MAX_FIRMWARE_BYTES, farms: fleet });
+      return res.json({ publicKeyPem, maxFirmwareBytes: MAX_FIRMWARE_BYTES, maxFirmwareBytesS3: MAX_FIRMWARE_BYTES_S3, farms: fleet });
     } catch (err) {
       console.error("[ota] config failed:", err);
       return res.status(500).json({ error: "Failed to load the fleet" });
     }
   });
 
-  adminRouter.post("/firmware", express.raw({ type: "application/octet-stream", limit: "2mb" }), async (req, res) => {
+  adminRouter.post("/firmware", express.raw({ type: "application/octet-stream", limit: "4mb" }), async (req, res) => {
     const version = String(req.get("X-Firmware-Version") || "");
     const product = String(req.get("X-Firmware-Product") || "hub");
     const data = req.body;
     if (!VERSION_RE.test(version)) return res.status(400).json({ error: "Version must be 1-32 letters/digits/._-" });
     if (!PRODUCTS.includes(product)) return res.status(400).json({ error: `Unknown product "${product}"` });
     if (!Buffer.isBuffer(data) || data.length === 0) return res.status(400).json({ error: "Empty upload - send the .bin as application/octet-stream" });
-    // A node image is staged in the hub's spare app slot, so the same limit applies.
-    if (data.length > MAX_FIRMWARE_BYTES) return res.status(400).json({ error: `Firmware is ${data.length} bytes - more than the hub's ${MAX_FIRMWARE_BYTES}-byte app slot` });
-    if (data[0] !== ESP_IMAGE_MAGIC) return res.status(400).json({ error: "Not an ESP32 firmware image - choose .pio/build/esp32dev/firmware.bin" });
+    if (data[0] !== ESP_IMAGE_MAGIC) {
+      return res.status(400).json({ error: "Not an ESP32 firmware image - choose .pio/build/hub_v2/firmware.bin (V2 board) or esp32dev/firmware.bin (V1)" });
+    }
+    const chip = imageChip(data);
+    if (product === "hub" && !CHIP_NAMES[chip]) return res.status(400).json({ error: `Built for a chip no hub has (chip id ${chip})` });
+    // A node image is staged in the hub's spare app slot, so a V1 hub's limit applies.
+    const max = maxFirmwareBytes(product, chip);
+    if (data.length > max) return res.status(400).json({ error: `Firmware is ${data.length} bytes - more than the ${max}-byte app slot` });
     const labels = productLabels(data);
     if (labels.length === 0) {
       return res.status(400).json({ error: "This firmware doesn't say which device it is for - rebuild it from the current repo" });
@@ -213,7 +234,7 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     try {
       const sha256 = crypto.createHash("sha256").update(data).digest("hex");
       await store.saveFirmware({ sha256, version, product, size: data.length, data, uploadedBy: req.decodedToken.email });
-      return res.json({ sha256, size: data.length, version, product, url: firmwareUrl(sha256) });
+      return res.json({ sha256, size: data.length, version, product, chip, url: firmwareUrl(sha256) });
     } catch (err) {
       console.error("[ota] firmware save failed:", err);
       return res.status(500).json({ error: "Failed to store the firmware" });
@@ -257,7 +278,24 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
         if (unknown.length) return res.status(400).json({ error: `Unknown farm(s): ${unknown.join(", ")}` });
         targets = ids.map((id) => byId.get(id));
       }
-      if (targets.length === 0) return res.status(400).json({ error: "No farms to update" });
+      // A hub image runs on one board only (V1 ESP32 or V2 ESP32-S3) - not to
+      // hubs known to have the other. "All" skips them (and so goes farm by
+      // farm instead of the broadcast every hub hears); picking one is an error.
+      let skipped = [];
+      if (!isNodeProduct(product)) {
+        const chip = imageChip(await store.getFirmwareData(sha256));
+        const otherBoard = (t) => boardChip(t.board) !== null && boardChip(t.board) !== chip;
+        skipped = targets.filter(otherBoard);
+        if (skipped.length && !all) {
+          return res.status(400).json({
+            error: `Farm(s) ${skipped.map((t) => t.farmId).join(", ")} have a ${CHIP_NAMES[boardChip(skipped[0].board)]} hub - this image is for the ${CHIP_NAMES[chip] || "other board"} - untick them`
+          });
+        }
+        targets = targets.filter((t) => !otherBoard(t));
+      }
+      if (targets.length === 0) {
+        return res.status(400).json({ error: skipped.length ? "No farm has a hub for this image's board" : "No farms to update" });
+      }
       // A node image only goes to farms that have that kind of unit -
       // otherwise the hub downloads it, restarts and offers it to nobody.
       if (isNodeProduct(product)) {
@@ -273,13 +311,14 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
       };
       const releaseId = await store.createRelease(release, targets.map((t) => ({ farmId: t.farmId, nodeId: t.nodeId })), now());
 
-      if (all) {
+      if (all && skipped.length === 0) {
         await publish(OTA_BROADCAST_TOPIC, startPayload(release, fw.size));
       } else {
         await sendToFarms(release, fw.size, targets);
       }
-      console.log(`[ota] release ${releaseId}: v${version} -> ${all ? "ALL" : targets.map((t) => t.farmId).join(",")} by ${req.decodedToken.email}`);
-      return res.json({ releaseId, targets: targets.length });
+      console.log(`[ota] release ${releaseId}: v${version} -> ${all ? "ALL" : targets.map((t) => t.farmId).join(",")}` +
+                  `${skipped.length ? ` (skipped other board: ${skipped.map((t) => t.farmId).join(",")})` : ""} by ${req.decodedToken.email}`);
+      return res.json({ releaseId, targets: targets.length, skipped: skipped.map((t) => t.farmId) });
     } catch (err) {
       console.error("[ota] release failed:", err);
       return res.status(500).json({ error: "Failed to send the release" });

@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import express from "express";
 import {
-  createOtaModule, productLabels, otaManifest, verifyReleaseSignature, nodeOutcomeOf, summarizeNodes, outcomeOf
+  createOtaModule, productLabels, otaManifest, verifyReleaseSignature, nodeOutcomeOf, summarizeNodes, outcomeOf,
+  imageChip, boardChip, maxFirmwareBytes, CHIP_ESP32, CHIP_ESP32S3, MAX_FIRMWARE_BYTES, MAX_FIRMWARE_BYTES_S3,
+  OTA_BROADCAST_TOPIC
 } from "../src/bridge/ota.js";
 import { loadSigningKey, signRelease, otaManifest as browserManifest } from "../../public/js/ota-crypto.js";
 
@@ -94,16 +96,18 @@ function fakeStore() {
   };
 }
 
-async function withServer(fn) {
+const DEFAULT_FLEET = [
+  { farmId: "1", nodeId: "MOTOR_1", online: true, units: { motorNodes: 2, valves: 0, backwash: 0 } },
+  { farmId: "2", nodeId: "MOTOR_1", online: true, units: { motorNodes: 0, valves: 3, backwash: 0 } }
+];
+
+async function withServer(fn, fleet = DEFAULT_FLEET) {
   const store = fakeStore();
   const published = [];
   const ota = createOtaModule({
     store,
     publish: async (topic, payload) => published.push({ topic, payload }),
-    listFleet: async () => [
-      { farmId: "1", nodeId: "MOTOR_1", online: true, units: { motorNodes: 2, valves: 0, backwash: 0 } },
-      { farmId: "2", nodeId: "MOTOR_1", online: true, units: { motorNodes: 0, valves: 3, backwash: 0 } }
-    ],
+    listFleet: async () => fleet,
     publicBaseUrl: "https://example.test",
     publicKeyPem: PUB_PEM
   });
@@ -119,9 +123,10 @@ async function withServer(fn) {
   }
 }
 
-function fakeImage(product = "hub", size = 4096) {
+function fakeImage(product = "hub", size = 4096, chip = CHIP_ESP32) {
   const data = Buffer.alloc(size, 0x11);
   data[0] = 0xe9;
+  data.writeUInt16LE(chip, 12);   // esp_image_header_t chip id
   Buffer.from(PUB_PEM).copy(data, 100);
   if (product) Buffer.from(`FARMBUDDIE-FW-PRODUCT=${product};`).copy(data, 3000);
   return data;
@@ -286,4 +291,90 @@ test("stop: a node release's hubs are told to stop handing it out, except farms 
   } finally {
     server.close();
   }
+});
+
+test("chip of an image, chip of a hub's board, and the slot size for each", () => {
+  assert.equal(imageChip(fakeImage("hub", 4096, CHIP_ESP32S3)), CHIP_ESP32S3);
+  assert.equal(imageChip(fakeImage("hub")), CHIP_ESP32);
+  assert.equal(imageChip(Buffer.alloc(4)), -1);
+  assert.equal(boardChip("v2-s3"), CHIP_ESP32S3);
+  assert.equal(boardChip("v1"), CHIP_ESP32);
+  assert.equal(boardChip(null), null);
+  assert.equal(boardChip("constructor"), null);
+  assert.equal(maxFirmwareBytes("hub", CHIP_ESP32S3), MAX_FIRMWARE_BYTES_S3);
+  assert.equal(maxFirmwareBytes("hub", CHIP_ESP32), MAX_FIRMWARE_BYTES);
+  assert.equal(maxFirmwareBytes("valve", CHIP_ESP32S3), MAX_FIRMWARE_BYTES);   // staged in a V1 hub's slot too
+});
+
+test("upload: a hub image's chip and size are checked against the board it is for", async () => {
+  await withServer(async ({ base }) => {
+    const upload = (data, product = "hub") => fetch(`${base}/firmware`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Firmware-Version": "1.0.5", "X-Firmware-Product": product },
+      body: data
+    });
+    const big = 2500000;   // over a V1 slot, under a V2 slot
+    const s3 = await upload(fakeImage("hub", big, CHIP_ESP32S3));
+    assert.equal(s3.status, 200);
+    assert.equal((await s3.json()).chip, CHIP_ESP32S3);
+    assert.equal((await upload(fakeImage("hub", big, CHIP_ESP32))).status, 400);
+    assert.equal((await upload(fakeImage("valve", big), "valve")).status, 400);
+    const odd = await upload(fakeImage("hub", 4096, 5));
+    assert.equal(odd.status, 400);
+    assert.match((await odd.json()).error, /chip no hub has/);
+  });
+});
+
+test("a hub image goes only to hubs with its board", async () => {
+  const fleet = [
+    { farmId: "1", nodeId: "MOTOR_1", online: true, board: "v1" },
+    { farmId: "2", nodeId: "MOTOR_1", online: true, board: "v2-s3" },
+    { farmId: "3", nodeId: "MOTOR_1", online: true, board: null }   // older firmware - board unknown
+  ];
+  await withServer(async ({ base, published, store }) => {
+    const up = await (await fetch(`${base}/firmware`, {
+      method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Firmware-Version": "1.0.6" },
+      body: fakeImage("hub", 4096, CHIP_ESP32S3)
+    })).json();
+    const key = await loadSigningKey(PRIV_PEM, "");
+    const sig = await signRelease(key, PUB_PEM, up.sha256, up.size, "1.0.6");
+    const post = (target) => fetch(`${base}/releases`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sha256: up.sha256, version: "1.0.6", signature: sig, target })
+    });
+
+    // Picking a V1 hub for a V2 image is an error, before anything is sent.
+    const bad = await post({ farmIds: ["1", "2"] });
+    assert.equal(bad.status, 400);
+    assert.match((await bad.json()).error, /Farm\(s\) 1 have a V1 board \(ESP32\) hub - this image is for the V2 board/);
+    assert.equal(published.length, 0);
+
+    // "All": the V1 hub is skipped, so it goes farm by farm, not on the broadcast every hub hears.
+    const all = await post("all");
+    assert.equal(all.status, 200);
+    assert.deepEqual(await all.json(), { releaseId: 1, targets: 2, skipped: ["1"] });
+    assert.deepEqual(published.map((p) => p.topic), ["farm/2/MOTOR_1/ota/cmd", "farm/3/MOTOR_1/ota/cmd"]);
+    assert.deepEqual(store.releases[0].targets.map((t) => t.farmId), ["2", "3"]);
+  }, fleet);
+});
+
+test("\"all\" still uses the broadcast when every hub can run the image", async () => {
+  const fleet = [
+    { farmId: "2", nodeId: "MOTOR_1", online: true, board: "v2-s3" },
+    { farmId: "3", nodeId: "MOTOR_1", online: true, board: null }
+  ];
+  await withServer(async ({ base, published }) => {
+    const up = await (await fetch(`${base}/firmware`, {
+      method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Firmware-Version": "1.0.7" },
+      body: fakeImage("hub", 4096, CHIP_ESP32S3)
+    })).json();
+    const key = await loadSigningKey(PRIV_PEM, "");
+    const sig = await signRelease(key, PUB_PEM, up.sha256, up.size, "1.0.7");
+    const res = await fetch(`${base}/releases`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sha256: up.sha256, version: "1.0.7", signature: sig, target: "all" })
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(published.map((p) => p.topic), [OTA_BROADCAST_TOPIC]);
+  }, fleet);
 });

@@ -48,8 +48,22 @@ const ERROR_TEXT = {
 const UNIT_KEY = { "motor-node": "motorNodes", valve: "valves", "filter-backwash": "backwash" };
 const UNIT_WORD = { "motor-node": ["motor node", "motor nodes"], valve: ["valve unit", "valve units"], "filter-backwash": ["backwash node", "backwash nodes"] };
 const unitCount = (f, p = product()) => (UNIT_KEY[p] ? Number(f.units?.[UNIT_KEY[p]] || 0) : null);
+// Which chip a hub image is built for (its header, bytes 12-13) and which
+// board each hub reports in its health - see imageChip()/boardChip() in the
+// server's ota.js. A hub refuses an image for the other chip.
+const CHIP_ESP32 = 0, CHIP_ESP32S3 = 9;
+const CHIP_TEXT = { [CHIP_ESP32]: "V1 board (ESP32)", [CHIP_ESP32S3]: "V2 board (ESP32-S3)" };
+const BOARD_CHIP = { v1: CHIP_ESP32, "v2-s3": CHIP_ESP32S3 };
+const BOARD_TEXT = { v1: "V1", "v2-s3": "V2 (S3)" };
+const boardChipOf = (f) => (Object.prototype.hasOwnProperty.call(BOARD_CHIP, f.board) ? BOARD_CHIP[f.board] : null);
+const fileChipKnown = () => Boolean(fileInfo && CHIP_TEXT[fileInfo.chip]);
+// A hub known to have the other board than the chosen hub image (unknown: allowed).
+const otherBoard = (f) => !isNode() && fileChipKnown() && boardChipOf(f) !== null && boardChipOf(f) !== fileInfo.chip;
 // A farm the chosen image can go to. An old server without units: all.
-const eligible = (f) => !isNode() || !f.units || unitCount(f) > 0;
+const eligible = (f) => (!isNode() || !f.units || unitCount(f) > 0) && !otherBoard(f);
+// The app slot the image must fit: a V2 hub's is bigger. Node images are
+// staged in the hub's spare slot, so a V1 hub's size applies to them.
+const maxBytes = () => (!isNode() && fileInfo?.chip === CHIP_ESP32S3 && config?.maxFirmwareBytesS3) || config?.maxFirmwareBytes;
 const unitsText = (f) => {
   if (!f.units) return "-";
   const parts = Object.entries(UNIT_KEY).map(([p, k]) => [p, Number(f.units[k] || 0)]).filter(([, n]) => n > 0)
@@ -157,12 +171,16 @@ $("binInput").addEventListener("change", async (e) => {
       size: fileBytes.length,
       sha256: await sha256Hex(fileBytes),
       isEsp: fileBytes[0] === 0xe9,
+      chip: fileBytes.length >= 16 ? fileBytes[12] | (fileBytes[13] << 8) : -1,
       hasKey: config ? bytesInclude(fileBytes, config.publicKeyPem) : false,
       labels: productLabels(fileBytes)
     };
   }
   renderChecks();
-  updateReleaseButton();
+  // A farm ticked for an image of the other board can't take this one.
+  for (const f of config?.farms || []) if (!eligible(f)) selectedFarms.delete(f.farmId);
+  farmPage = 1;
+  renderFarms();
 });
 $("versionInput").addEventListener("input", () => { renderChecks(); updateReleaseButton(); });
 $("productInput").addEventListener("change", () => {
@@ -189,7 +207,8 @@ function fileProblems() {
   if (!fileInfo.isEsp) p.push("Not an ESP32 firmware image");
   const lp = labelProblem();
   if (lp) p.push(lp);
-  if (config && fileInfo.size > config.maxFirmwareBytes) p.push(`Too big for the hub (${fileInfo.size} > ${config.maxFirmwareBytes} bytes)`);
+  if (!isNode() && fileInfo.isEsp && !fileChipKnown()) p.push(`Built for a chip no hub has (chip id ${fileInfo.chip})`);
+  if (config && fileInfo.size > maxBytes()) p.push(`Too big for the hub (${fileInfo.size} > ${maxBytes()} bytes)`);
   if (!fileInfo.hasKey) p.push("Doesn't contain the fleet's OTA public key - rebuild from the current repo");
   if (!/^[A-Za-z0-9._-]{1,32}$/.test(versionValue())) p.push("Enter the version (same as FIRMWARE_VERSION in config.h)");
   return p;
@@ -212,9 +231,18 @@ function renderChecks() {
     [fileInfo.isEsp, fileInfo.isEsp ? "ESP32 firmware image" : "Not an ESP32 firmware image"],
     [!labelProblem(), labelProblem() || `${PRODUCT_TEXT[product()]} firmware - matches the type above`],
     [fileInfo.hasKey, fileInfo.hasKey ? "Contains the fleet's OTA public key" : "Does NOT contain the fleet's OTA public key - devices would refuse later updates"],
-    [!config || fileInfo.size <= config.maxFirmwareBytes, "Fits the hub's app slot"]
+    ...(isNode() || !fileInfo.isEsp ? [] : [[fileChipKnown(), boardCheckText()]]),
+    [!config || fileInfo.size <= maxBytes(), "Fits the hub's app slot"]
   ];
   ul.innerHTML = items.map(([ok, text]) => `<li class="${ok ? "ok" : "bad"}">${text}</li>`).join("");
+}
+
+function boardCheckText() {
+  if (!fileChipKnown()) return `Built for a chip no hub has (chip id ${fileInfo.chip})`;
+  const farms = config?.farms || [];
+  const other = farms.filter(otherBoard).length;
+  return `Built for the ${CHIP_TEXT[fileInfo.chip]}` +
+    (other ? ` - ${other} hub${other > 1 ? "s" : ""} with the other board ${other > 1 ? "are" : "is"} left out` : "");
 }
 
 // ---------------- 2. targets ----------------
@@ -269,9 +297,11 @@ function renderFarms() {
       <td>${esc(f.farmerName || "-")}</td>
       <td><span class="vps-dot ${f.online ? "ok" : "down"}"></span> ${f.online ? "Online" : "Offline"}</td>
       <td>${esc(f.fwVersion || "-")}</td>
+      <td>${esc(BOARD_TEXT[f.board] || "-")}</td>
       <td>${esc(unitsText(f))}</td>
-    </tr>`).join("") : `<tr><td colspan="6">${!config?.farms?.length ? "No farms with a controller"
+    </tr>`).join("") : `<tr><td colspan="7">${!config?.farms?.length ? "No farms with a controller"
       : isNode() && !config.farms.some(eligible) ? `No farm has a ${UNIT_WORD[product()][0]} paired`
+      : !config.farms.some(eligible) ? `No farm has a hub with the ${CHIP_TEXT[fileInfo.chip]}`
       : "No farm matches the filters"}</td></tr>`;
   // Header box = every farm the filters show (all pages), not just this page.
   const allShownPicked = farms.length > 0 && farms.every((f) => selectedFarms.has(f.farmId));
@@ -281,7 +311,9 @@ function renderFarms() {
   const pool = (config?.farms || []).filter(eligible).length;
   $("farmCount").textContent = isNode()
     ? `${farms.length} of ${pool} farms with a ${UNIT_WORD[product()][0]} shown`
-    : `${farms.length} of ${config?.farms?.length || 0} farms shown`;
+    : pool < (config?.farms?.length || 0)
+      ? `${farms.length} of ${pool} farms with a ${CHIP_TEXT[fileInfo.chip]} hub shown`
+      : `${farms.length} of ${config?.farms?.length || 0} farms shown`;
   renderPager($("farmPager"), farmPage, totalPages, farms.length, "farms", (p) => { farmPage = p; renderFarms(); });
   updateTargetNote();
 }
@@ -293,10 +325,13 @@ function selectedFarmIds() {
 function updateTargetNote() {
   const all = mode() === "all";
   $("confirmAllWrap").hidden = !all;
-  const n = all ? (config?.farms.length || 0) : selectedFarmIds().length;
-  const offline = all ? (config?.farms || []).filter((f) => !f.online).length : 0;
+  const pool = (config?.farms || []).filter(eligible);
+  const left = (config?.farms?.length || 0) - pool.length;
+  const n = all ? pool.length : selectedFarmIds().length;
+  const offline = all ? pool.filter((f) => !f.online).length : 0;
   $("targetNote").textContent = all
-    ? `All ${n} farms. ${offline ? `${offline} are offline now - they'll show "Waiting"; resend to them later.` : ""}`
+    ? `All ${n} farms${left ? ` with this board (${left} with the other board left out)` : ""}. ` +
+      `${offline ? `${offline} are offline now - they'll show "Waiting"; resend to them later.` : ""}`
     : n ? `${n} farm${n > 1 ? "s" : ""} selected: ${selectedFarmIds().slice(0, 12).join(", ")}${n > 12 ? ", …" : ""}.`
       : "Tick the farm(s) to update - start with one hub.";
   updateReleaseButton();
@@ -333,7 +368,7 @@ $("passInput").addEventListener("input", updateReleaseButton);
 function releaseProblems() {
   const p = fileProblems();
   if (mode() === "all") {
-    if (!config?.farms.length) p.push("No farms");
+    if (!(config?.farms || []).some(eligible)) p.push("No farms");
     if ($("confirmAllInput").value.trim() !== versionValue()) p.push("Type the version again to confirm all farms");
   } else if (selectedFarmIds().length === 0) {
     p.push("Pick at least one farm");
@@ -360,7 +395,7 @@ $("releaseBtn").addEventListener("click", async () => {
   const version = versionValue();
   const all = mode() === "all";
   const farmIds = selectedFarmIds();
-  const what = all ? `ALL ${config.farms.length} farms` : `farm${farmIds.length > 1 ? "s" : ""} ${farmIds.join(", ")}`;
+  const what = all ? `ALL ${config.farms.filter(eligible).length} farms` : `farm${farmIds.length > 1 ? "s" : ""} ${farmIds.join(", ")}`;
   const kind = PRODUCT_TEXT[product()];
   if (!confirm(isNode()
     ? `Send ${kind} firmware ${version} to the hub of ${what}? Each hub restarts once, then updates its ${kind.toLowerCase()}s.`
@@ -393,7 +428,8 @@ $("releaseBtn").addEventListener("click", async () => {
     $("pemInput").value = "";
     pemText = null;
     $("confirmAllInput").value = "";
-    setReleaseStatus(`Sent to ${rel.targets} hub${rel.targets > 1 ? "s" : ""} - watch the progress below.`);
+    const left = rel.skipped?.length ? ` (${rel.skipped.length} with the other board left out)` : "";
+    setReleaseStatus(`Sent to ${rel.targets} hub${rel.targets > 1 ? "s" : ""}${left} - watch the progress below.`);
     historyPage = 1;
     await loadHistory();
     openRelease(rel.releaseId);
