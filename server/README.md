@@ -271,7 +271,9 @@ progress and resend to the ones that were busy/offline/failed.
 - The bridge stores each uploaded `.bin` in its Postgres database
   (`ota_firmware`) and serves it to hubs at
   `https://api.farmbuddie.com/bridge/ota/firmware/<sha256>.bin` (no login - the
-  signed SHA-256 is what the hub trusts).
+  signed SHA-256 is what the hub trusts). It answers `Range: bytes=<from>-`
+  with 206 and just that part, so a hub whose GSM download was cut off
+  carries on from where it stopped instead of starting again.
 - It refuses a `.bin` that isn't an ESP32 image, is bigger than the hub's app
   slot, or doesn't contain the fleet's OTA public key
   (`src/bridge/otaSigningKey.js` - must match the Motor repo's

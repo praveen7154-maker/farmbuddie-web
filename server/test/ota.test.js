@@ -6,7 +6,7 @@ import express from "express";
 import {
   createOtaModule, productLabels, otaManifest, verifyReleaseSignature, nodeOutcomeOf, summarizeNodes, outcomeOf,
   imageChip, boardChip, maxFirmwareBytes, CHIP_ESP32, CHIP_ESP32S3, MAX_FIRMWARE_BYTES, MAX_FIRMWARE_BYTES_S3,
-  OTA_BROADCAST_TOPIC
+  OTA_BROADCAST_TOPIC, parseByteRange
 } from "../src/bridge/ota.js";
 import { loadSigningKey, signRelease, otaManifest as browserManifest } from "../../public/js/ota-crypto.js";
 
@@ -112,6 +112,7 @@ async function withServer(fn, fleet = DEFAULT_FLEET) {
     publicKeyPem: PUB_PEM
   });
   const app = express();
+  app.use("/ota/firmware", ota.publicRouter);   // no login - as in server.js
   app.use((req, _res, next) => { req.decodedToken = { email: "admin@test" }; next(); });
   app.use("/ota", ota.adminRouter);
   const server = app.listen(0);
@@ -377,4 +378,56 @@ test("\"all\" still uses the broadcast when every hub can run the image", async 
     assert.equal(res.status, 200);
     assert.deepEqual(published.map((p) => p.topic), [OTA_BROADCAST_TOPIC]);
   }, fleet);
+});
+
+test("parseByteRange reads one byte range", () => {
+  assert.equal(parseByteRange(undefined, 100), null);
+  assert.deepEqual(parseByteRange("bytes=40-", 100), { start: 40, end: 99 });
+  assert.deepEqual(parseByteRange("bytes=0-9", 100), { start: 0, end: 9 });
+  assert.deepEqual(parseByteRange("bytes=90-500", 100), { start: 90, end: 99 });
+  assert.deepEqual(parseByteRange("bytes=-10", 100), { start: 90, end: 99 });
+  assert.equal(parseByteRange("bytes=100-", 100), "unsatisfiable");
+  assert.equal(parseByteRange("bytes=-0", 100), "unsatisfiable");
+  // can't be parsed, or more than one range: the whole file
+  assert.equal(parseByteRange("bytes=0-1,5-6", 100), null);
+  assert.equal(parseByteRange("bytes=9-3", 100), null);
+  assert.equal(parseByteRange("items=0-5", 100), null);
+  assert.equal(parseByteRange("bytes=-", 100), null);
+});
+
+test("a hub resuming a cut-off download gets just the rest of the image", async () => {
+  await withServer(async ({ base }) => {
+    const data = fakeImage("hub", 4096);
+    for (let i = 400; i < 2900; i++) data[i] = i & 0xff;   // varied bytes, clear of the key and the label
+    const up = await (await fetch(`${base}/firmware`, {
+      method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Firmware-Version": "1.0.8" },
+      body: data
+    })).json();
+    const url = `${base}/firmware/${up.sha256}.bin`;
+
+    const whole = await fetch(url);
+    assert.equal(whole.status, 200);
+    assert.equal(whole.headers.get("accept-ranges"), "bytes");
+    assert.equal(whole.headers.get("content-length"), "4096");
+    assert.deepEqual(Buffer.from(await whole.arrayBuffer()), data);
+
+    const rest = await fetch(url, { headers: { Range: "bytes=1000-" } });
+    assert.equal(rest.status, 206);
+    assert.equal(rest.headers.get("content-range"), "bytes 1000-4095/4096");
+    assert.equal(rest.headers.get("content-length"), "3096");
+    assert.deepEqual(Buffer.from(await rest.arrayBuffer()), data.subarray(1000));
+
+    const past = await fetch(url, { headers: { Range: "bytes=4096-" } });
+    assert.equal(past.status, 416);
+    assert.equal(past.headers.get("content-range"), "bytes */4096");
+    await past.arrayBuffer();
+
+    const many = await fetch(url, { headers: { Range: "bytes=0-1,5-6" } });
+    assert.equal(many.status, 200);
+    assert.deepEqual(Buffer.from(await many.arrayBuffer()), data);
+
+    const missing = await fetch(`${base}/firmware/${"cd".repeat(32)}.bin`, { headers: { Range: "bytes=10-" } });
+    assert.equal(missing.status, 404);
+    await missing.arrayBuffer();
+  });
 });

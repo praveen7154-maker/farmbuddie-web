@@ -142,6 +142,30 @@ export function summarizeNodes(nodes) {
   return s;
 }
 
+// One "Range: bytes=..." range of a file `size` bytes long: {start, end}
+// (end inclusive), "unsatisfiable", or null to send the whole file - for no
+// Range header, one that can't be parsed, or several ranges (a server may
+// ignore Range; the hub only ever asks for one).
+export function parseByteRange(header, size) {
+  if (typeof header !== "string") return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (m[1] === "" && m[2] === "")) return null;
+  let start, end;
+  if (m[1] === "") {
+    // "bytes=-N": the last N bytes
+    const n = Number(m[2]);
+    if (n === 0) return "unsatisfiable";
+    start = Math.max(0, size - n);
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1);
+    if (m[2] !== "" && Number(m[2]) < start) return null;
+  }
+  if (start >= size) return "unsatisfiable";
+  return { start, end };
+}
+
 export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publicKeyPem = OTA_SIGNING_PUBLIC_KEY_PEM, now = () => new Date() }) {
   const firmwareUrl = (sha256) => `${publicBaseUrl}/ota/firmware/${sha256}.bin`;
 
@@ -177,9 +201,24 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
       // Content-Length, no chunked encoding - the hub's GSM downloader needs it.
       res.set({
         "Content-Type": "application/octet-stream",
-        "Content-Length": String(data.length),
-        "Cache-Control": "public, max-age=31536000, immutable"
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Accept-Ranges": "bytes"
       });
+      // A hub whose GSM download was cut off asks for the rest only
+      // ("Range: bytes=<from>-") instead of starting again from 0.
+      const range = parseByteRange(req.headers.range, data.length);
+      if (range === "unsatisfiable") {
+        res.set("Content-Range", `bytes */${data.length}`);
+        return res.status(416).end();
+      }
+      if (range) {
+        res.status(206).set({
+          "Content-Range": `bytes ${range.start}-${range.end}/${data.length}`,
+          "Content-Length": String(range.end - range.start + 1)
+        });
+        return res.end(data.subarray(range.start, range.end + 1));
+      }
+      res.set("Content-Length", String(data.length));
       return res.end(data);
     } catch (err) {
       console.error("[ota] firmware download failed:", err);
