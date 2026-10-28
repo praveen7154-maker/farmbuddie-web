@@ -191,6 +191,10 @@ html[data-theme="dark"] .fbx-logo {
   white-space: nowrap;
   min-width: 0;
 }
+/* Touch screens: breadcrumb links big enough to tap */
+@media (pointer: coarse) {
+  .fbx-crumbs a, .fbx-crumbs [aria-current] { min-height: 36px; }
+}
 .fbx-crumbs a:hover { color: var(--fbx-accent); background: var(--fbx-accent-soft); }
 .fbx-crumbs [aria-current] { color: var(--fbx-text); font-weight: 600; }
 .fbx-crumbs [aria-current] span { overflow: hidden; text-overflow: ellipsis; }
@@ -840,6 +844,11 @@ html[data-theme="dark"] ::selection { background: rgba(68, 196, 134, 0.35); }
   .fbx-crumbs { border-left: 0; padding-left: 0; }
   .fbx-crumbs .fbx-sep { display: none; }
   .fbx-ibtn { width: 36px; height: 36px; }
+}
+@container fbx-header (max-width: 440px) {
+  /* the logo already goes Home, and the grid button lists every module */
+  .fbx-right > a.fbx-ibtn[href="/admin/home.html"],
+  .fbx-right > .fbx-search { display: none; }
 }
 /* In Classic the sidebar already shows the logo and name */
 html[data-view="classic"] .fbx-brand-txt { display: none; }
