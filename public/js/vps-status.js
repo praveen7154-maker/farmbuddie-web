@@ -2,6 +2,7 @@ import { auth } from "/js/firebase-init.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 import { API_BASE_URL } from "/js/config.js";
+import { fmtDateTime, fmtTime } from "/js/time-format.js";
 
 const POLL_INTERVAL_MS = 20000;
 let pollTimer = null;
@@ -61,7 +62,7 @@ function renderConnectedClients(connectedClients) {
         <td>${/^FBIRG\d+$/.test(c.clientId) ? "Farm Device" : "Infrastructure"}</td>
         <td>${c.subscriptionsCount ?? "-"}</td>
         <td>${c.clientIpAdr || "-"}</td>
-        <td>${c.connectedAt ? new Date(c.connectedAt).toLocaleString() : "-"}</td>
+        <td>${fmtDateTime(c.connectedAt, { seconds: true })}</td>
       </tr>
     `)
     .join("");
@@ -117,7 +118,7 @@ async function refreshStatus() {
 
     renderConnectedClients(data.connectedClients);
 
-    lastChecked.textContent = `Last checked: ${new Date(data.checkedAt).toLocaleTimeString()}`;
+    lastChecked.textContent = `Last checked: ${fmtTime(data.checkedAt, { seconds: true })}`;
   } catch (err) {
     console.error("Status check error:", err);
     // The fetch itself failing (not just a service inside it) means the

@@ -17,6 +17,7 @@ import {
   uploadBytes,
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-storage.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 const storage = getStorage();
 
@@ -223,7 +224,7 @@ document.getElementById("distributorForm")
 });
    hideLoader();
 
-    const updatedTime = new Date().toLocaleString();
+    const updatedTime = fmtDateTime(new Date());
 
     alert(
       `Distributor Updated Successfully ✅\n` +

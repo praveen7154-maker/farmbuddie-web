@@ -36,6 +36,7 @@ import {
  } from "/js/phone-auth.js";
 
 import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisioning.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 /* ✅ INITIALIZE STORAGE */
 const storage = getStorage();
@@ -971,7 +972,7 @@ pumpServiceMapping: Array.from({ length: parseInt(motorCount || 0) })
     });
 
        const now = new Date();
-    const formattedTime = now.toLocaleString();
+    const formattedTime = fmtDateTime(now);
 
     hideLoader();
     alert(

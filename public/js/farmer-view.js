@@ -6,6 +6,7 @@ import { onAuthStateChanged, signOut }
 
 import { doc, getDoc, collection, query, where, getDocs }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 /* ================= AUTH GUARD ================= */
 onAuthStateChanged(auth, (user) => {
@@ -285,11 +286,11 @@ async function loadFarmer() {
     <div class="info-grid">
       <div class="info-item">
         <b>Created At:</b>
-        ${f.createdAt?.toDate()?.toLocaleString() || "-"}
+        ${fmtDateTime(f.createdAt)}
       </div>
       <div class="info-item">
         <b>Last Updated:</b>
-        ${f.updatedAt?.toDate()?.toLocaleString() || "-"}
+        ${fmtDateTime(f.updatedAt)}
       </div>
     </div>
   `;

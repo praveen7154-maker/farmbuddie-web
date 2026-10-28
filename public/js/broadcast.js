@@ -2,6 +2,7 @@ import { auth } from "/js/firebase-init.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 import { BRIDGE_BASE_URL } from "/js/config.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 // Admin > Message Broadcast. Server side: server/src/bridge/announcements.js.
 // Farmers read these in the Irrigo app under Notifications > Farm Buddie Official.
@@ -85,7 +86,7 @@ let previewLang = "en";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const radio = (name) => document.querySelector(`input[name="${name}"]:checked`).value;
-const fmtTime = (t) => (t ? new Date(t).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "-");
+const fmtTime = (t) => (t ? fmtDateTime(t) : "-");
 
 async function api(path, options = {}) {
   const idToken = await auth.currentUser.getIdToken();
@@ -346,7 +347,7 @@ $("sendBtn").addEventListener("click", async () => {
   const who = toDistributors
     ? (selectedDistributors.size ? `${selectedDistributors.size} selected distributor${selectedDistributors.size > 1 ? "s" : ""}` : "ALL distributors")
     : all ? `ALL ${audience?.totals.farms ?? ""} farms` : `${selected.size} selected farm${selected.size > 1 ? "s" : ""}`;
-  const when = later ? `at ${new Date($("sendAtInput").value).toLocaleString()}` : "now";
+  const when = later ? `at ${fmtDateTime(new Date($("sendAtInput").value))}` : "now";
   if (!confirm(`Send "${$("titleInput").value.trim()}" to ${who} ${when}?`)) return;
 
   const body = {
@@ -367,7 +368,7 @@ $("sendBtn").addEventListener("click", async () => {
   try {
     const r = await api("/broadcast/announcements", { method: "POST", body: JSON.stringify(body) });
     if (r.scheduled) {
-      showMsg("ok", `⏰ Message #${r.id} scheduled for ${new Date(r.sendAt).toLocaleString()}.`);
+      showMsg("ok", `⏰ Message #${r.id} scheduled for ${fmtDateTime(r.sendAt)}.`);
     } else {
       const d = r.delivery || {};
       showMsg("ok", `✅ Message #${r.id} sent to ${d.targetFarms ?? "?"} farms · ${d.targetPhones ?? "?"} phones · ` +

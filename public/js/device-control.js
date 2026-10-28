@@ -17,6 +17,7 @@
 
 import { sendDeviceCommand, sendCommandAwaitAck, fetchConfigReadback, fetchFreshStatus } from "/js/device-commands.js";
 import { motorNodeFlags } from "/js/device-status-render.js";
+import { fmtTime } from "/js/time-format.js";
 
 const MOTOR_NUMS = ["1", "2", "3", "4"];
 let motorNum = "1";       // the motor the Control / VI / Safety sections act on
@@ -137,7 +138,7 @@ function renderCalValues() {
   const at = $("calReadingAt");
   if (at) {
     at.textContent = reading?.at
-      ? `${reading.at.toLocaleTimeString()}${fresh ? " (fresh from the device)" : " (old copy - press Refresh Reading)"}`
+      ? `${fmtTime(reading.at, { seconds: true })}${fresh ? " (fresh from the device)" : " (old copy - press Refresh Reading)"}`
       : "--";
   }
 }

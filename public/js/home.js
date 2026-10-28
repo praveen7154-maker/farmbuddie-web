@@ -5,6 +5,7 @@ import {
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+import { fmtTime } from "/js/time-format.js";
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -94,7 +95,7 @@ function tick() {
   document.getElementById("greet").textContent =
     h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   document.getElementById("clockTime").textContent =
-    now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    fmtTime(now);
   document.getElementById("clockDate").textContent =
     now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }

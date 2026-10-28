@@ -1,3 +1,4 @@
+import { fmtIstDateTime } from "./time-format.js";
 // Decodes a hub's raw event log records (Motor repo, include/event_log.h) -
 // used by the admin Event Log page and the bridge's tests. Same tables as
 // the firmware's codeName()/describe() and tools/hub_eventlog.py.
@@ -46,7 +47,6 @@ const OTA_ERRORS = { 0: "error", 1: "busy", 2: "motor running", 3: "bad request"
   6: "checksum", 7: "flash write", 8: "wrong chip", 9: "no units", 10: "did not validate" };
 const LINKS = { 1: "WiFi mesh", 2: "LoRa", 3: "RS485" };
 const FLAG_UPTIME = 0x01, FLAG_RUNNING = 0x02, FLAG_ONLINE = 0x04;
-const IST_OFFSET_MS = 19800 * 1000;
 
 export function crc8(bytes) {
   let c = 0;
@@ -103,11 +103,9 @@ export function describe(code, value, aux) {
   }
 }
 
-// "2026-10-22 18:05:33" in IST (the farms' time), whatever the viewer's zone.
+// "22 Oct 2026, 6:05:33 PM" in IST (the farms' time), whatever the viewer's zone.
 export function istTime(unix) {
-  const d = new Date(unix * 1000 + IST_OFFSET_MS);
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+  return fmtIstDateTime(unix * 1000, { seconds: true });
 }
 
 // One record from its 32 hex characters; null if empty or corrupt.

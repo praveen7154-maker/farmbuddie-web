@@ -23,6 +23,7 @@ import {
   getControllers,
   subscribe
 } from "/js/data-store.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 /* ================= AUTH GUARD ================= */
 // Used to run its own one-shot getDocs() over the whole farmers collection
@@ -420,9 +421,7 @@ window.downloadAllFarmersExcel = async function () {
         /* ===== CREATED ===== */
 
         "Created At": f.createdAt
-          ? (f.createdAt.toDate
-              ? f.createdAt.toDate().toLocaleString()
-              : new Date(f.createdAt.seconds * 1000).toLocaleString())
+          ? fmtDateTime(f.createdAt)
           : "",
         "Created By": "Farm Buddie Admin"
 

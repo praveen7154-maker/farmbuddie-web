@@ -139,7 +139,7 @@ test("decoder matches the firmware's records", () => {
     assert.equal(r.event, event);
     assert.equal(r.unit, unit);
     assert.equal(r.details, details);
-    assert.equal(r.time, "2026-10-14 23:16:40");
+    assert.equal(r.time, "14 Oct 2026, 11:16:40 PM");
   }
   assert.equal(decodeRecord("0400000000c0cf6a020100ce04e8032c").kind, "critical");
   assert.equal(decodeRecord("0900000000c0cf6a87850004000200cd").kind, "routine");

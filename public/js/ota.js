@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 import { BRIDGE_BASE_URL } from "/js/config.js";
 import { sha256Hex, bytesInclude, loadSigningKey, signRelease } from "/js/ota-crypto.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 // Admin > Firmware OTA. Server side: server/src/bridge/ota.js. The signing
 // key and its passphrase are only ever used in this page (ota-crypto.js).
@@ -121,7 +122,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const mode = () => document.querySelector('input[name="mode"]:checked').value;
 const product = () => $("productInput").value;
 const isNode = () => product() !== "hub";
-const fmtTime = (t) => (t ? new Date(t).toLocaleString() : "-");
+const fmtTime = (t) => (t ? fmtDateTime(t, { seconds: true }) : "-");
 // "2m 05s" since a GSM download started.
 const gsmElapsed = (t) => {
   const sec = t ? Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 1000)) : 0;

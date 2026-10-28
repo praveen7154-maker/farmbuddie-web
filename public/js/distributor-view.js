@@ -6,6 +6,7 @@ import { doc, getDoc }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { BRIDGE_BASE_URL } from "/js/config.js";
 import { hardcopyRows, DISTRIBUTOR_DOCS } from "/js/upload-prep.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -110,7 +111,7 @@ async function loadDistributor() {
     <div class="info-grid">
       <div class="info-item">
         <b>Created At:</b>
-        ${d.createdAt?.toDate()?.toLocaleString() || "-"}
+        ${fmtDateTime(d.createdAt)}
       </div>
     </div>
 

@@ -2,6 +2,7 @@ import { auth, db } from "/js/firebase-init.js";
 import { initDeviceControl, updateDeviceControl } from "/js/device-control.js";
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { formatDurationShort, isDeviceOnline, renderMotorsInto, renderValvesInto, valveListsFromSnapshot } from "/js/device-status-render.js";
+import { fmtTime } from "/js/time-format.js";
 
 /* =====================================================
    GET FARMER ID
@@ -79,7 +80,7 @@ function updateStatusSection(data) {
     isOnline = isDeviceOnline(data);
 
     document.getElementById("lastSeenTime").innerText =
-      lastSeen.toLocaleTimeString();
+      fmtTime(lastSeen, { seconds: true });
   } else {
     document.getElementById("lastSeenTime").innerText = "-";
   }

@@ -27,6 +27,7 @@ import {
 
 import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisioning.js";
 import { formatFarmBuddieId, claimNextNumber } from "/js/id-format.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -1019,7 +1020,7 @@ const valveConfig = readValveConfig().config;
       updatedAt: serverTimestamp()
     });
     const now = new Date();
-    const formattedTime = now.toLocaleString();
+    const formattedTime = fmtDateTime(now);
     hideLoader();
     alert(
   `✅ New Farm Onboarded Successfully\n` +

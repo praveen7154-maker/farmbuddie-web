@@ -20,6 +20,7 @@ import {
   uploadBytes,
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-storage.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 const storage = getStorage();
 
@@ -246,7 +247,7 @@ document.getElementById("distributorForm")
 
    hideLoader();
 
-    const createdTime = new Date().toLocaleString();
+    const createdTime = fmtDateTime(new Date());
 
     const successMessage =
       `Distributor Created Successfully ✅\n` +

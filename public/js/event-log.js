@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 import { BRIDGE_BASE_URL } from "/js/config.js";
 import { decodeRecord } from "/js/eventlog-decode.js";
+import { fmtTime } from "/js/time-format.js";
 
 // Admin > Event Log: a hub's EEPROM "black box" (Motor repo, event_log.h),
 // read on request through the bridge (server/src/bridge/eventLog.js). The
@@ -20,7 +21,6 @@ let logPage = 1;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const istDate = (unix) => (unix ? new Date(unix * 1000 + 19800000).toISOString().slice(0, 10) : "-");
-const istDateTime = (unix) => (unix ? new Date(unix * 1000 + 19800000).toISOString().slice(0, 16).replace("T", " ") : "-");
 const hours = (sec) => Math.floor((sec || 0) / 3600).toLocaleString("en-IN");
 
 async function api(path, options = {}) {
@@ -233,7 +233,7 @@ async function readLog() {
       from = d.next;
     }
     records.sort((a, b) => a.seq - b.seq);
-    $("logProgress").textContent = `${records.length} events read ${new Date().toLocaleTimeString()}`;
+    $("logProgress").textContent = `${records.length} events read ${fmtTime(new Date(), { seconds: true })}`;
   } catch (e) {
     showPageError(`${e.message}${records.length ? ` - showing the ${records.length} read so far` : ""}`);
     $("logProgress").textContent = "";

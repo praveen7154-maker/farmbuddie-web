@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 import { BRIDGE_BASE_URL } from "/js/config.js";
 import * as R from "/js/pricing-rules.js";
+import { fmtIstDateTime } from "/js/time-format.js";
 
 // Admin > Module Pricing. Server side: server/src/bridge/pricing.js; the
 // rules (floor, GST, quick builder) are pricing-rules.js - the same file as
@@ -39,7 +40,7 @@ function toPaise(s) {
 }
 const paiseInput = (p) => (p === null || p === undefined ? "" : (p % 100 === 0 ? String(p / 100) : (p / 100).toFixed(2)));
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("en-IN", { ...IST, day: "2-digit", month: "short", year: "numeric" }) : "–");
-const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { ...IST, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "–");
+const fmtDateTime = (iso) => (iso ? fmtIstDateTime(iso) : "–");
 const istYmd = (t) => new Date(t).toLocaleDateString("en-CA", IST);
 const istIsMidnight = (iso) => new Date(iso).toLocaleTimeString("en-GB", { ...IST, hour12: false }).startsWith("00:00");
 // An end date is stored as the moment it ends (next midnight) - shown as the last day.

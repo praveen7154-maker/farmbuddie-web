@@ -21,6 +21,7 @@ import {
 } from "/js/data-store.js";
 
 import { provisionDeviceCredentials, renderMqttCredentialReveal } from "/js/provisioning.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 /* ================= CACHE ================= */
 
@@ -980,11 +981,11 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
   <div class="info-grid">
     <div class="info-item">
       <b>Created At:</b>
-      ${f.createdAt?.toDate()?.toLocaleString() || "-"}
+      ${fmtDateTime(f.createdAt)}
     </div>
     <div class="info-item">
       <b>Last Updated:</b>
-      ${f.updatedAt?.toDate()?.toLocaleString() || "-"}
+      ${fmtDateTime(f.updatedAt)}
     </div>
   </div>
 

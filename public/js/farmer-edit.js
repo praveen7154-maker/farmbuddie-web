@@ -38,6 +38,7 @@ import {
   validatePhones
 } from "/js/phone-auth.js";
 import { provisionDeviceCredentials, showMqttCredentialModal } from "/js/provisioning.js";
+import { fmtDateTime } from "/js/time-format.js";
 
 /* ================= LOADER FUNCTIONS ================= */
 function showLoader(message = "Processing...") {
@@ -1205,7 +1206,7 @@ await updateDoc(doc(db, "controllers", controllerDoc.id), {
 });
 
 const now = new Date();
-const formattedTime = now.toLocaleString();
+const formattedTime = fmtDateTime(now);
 
 hideLoader();
 
@@ -1288,7 +1289,7 @@ return;
 
     hideLoader();
     const now = new Date();
-    const formattedTime = now.toLocaleString();
+    const formattedTime = fmtDateTime(now);
 
 
     alert(`✅ Farmer updated successfully
