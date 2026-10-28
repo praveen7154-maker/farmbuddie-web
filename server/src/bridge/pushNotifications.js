@@ -23,7 +23,8 @@ const PUSH_EVENTS = new Set([
   66, 67,          // TNEB load limit: motor stopped / start refused (sanctioned HP)
   68,              // a due schedule could not start - another program was running
   69,              // manual valve switch: the new valve did not open, the old one was kept open
-  70               // a sequence valve did not open (tried twice) - skipped, others continue
+  70,              // a sequence valve did not open (tried twice) - skipped, others continue
+  71               // phase order fault released - the order is right again (phase reversal protection)
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
@@ -48,6 +49,7 @@ const FAULT_TEXT = {
   4: "High voltage - the motor was stopped",
   5: "Phase loss - a phase is missing, the motor was stopped",
   6: "Phase imbalance - the motor was stopped",
+  7: "Phase order reversed - the motor will not start. Swap any two phases at the panel",
   10: "Power outage - no supply on any phase"
 };
 const EVENT_TEXT = {
@@ -75,7 +77,8 @@ const EVENT_TEXT = {
   67: "Motor not started - the sanctioned HP is already in use by the other motors",
   68: "A scheduled cyclic could not start - another cyclic program was already running",
   69: "The new valve did not open - the previous valve was kept open and the motor keeps running",
-  70: "A valve did not open (tried twice) - skipped, the other valves continue. Please check it"
+  70: "A valve did not open (tried twice) - skipped, the other valves continue. Please check it",
+  71: "Phase order is correct again - the motor can start"
 };
 
 function buildNotification(nodeId, motorNum, payload) {

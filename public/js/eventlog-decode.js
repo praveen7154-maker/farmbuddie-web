@@ -7,7 +7,7 @@
 
 export const CODES = {
   1: "Dry run", 2: "Overload", 3: "Low voltage", 4: "High voltage", 5: "Phase loss", 6: "Phase imbalance",
-  11: "Power cut", 12: "Power back", 16: "Started at panel", 17: "Fault cleared", 18: "Cyclic interrupted",
+  7: "Phase order reversed", 11: "Power cut", 12: "Power back", 16: "Started at panel", 17: "Fault cleared", 18: "Cyclic interrupted",
   19: "Cyclic resumed", 20: "Cyclic complete", 22: "Stop not confirmed", 23: "GSM/WiFi switched",
   24: "Phase restored", 25: "Dry run auto restart", 26: "Phase mode switched", 27: "Start retry",
   28: "Stop retry", 29: "Stopped at panel", 30: "Cyclic paused (panel stop)", 31: "Motor started",
@@ -18,7 +18,7 @@ export const CODES = {
   57: "Valve closed mid run", 58: "Backwash started", 60: "Backwash valves failed",
   62: "Backwash timed out", 63: "Backwash complete", 64: "Voltage restored", 65: "Restarted while running",
   66: "Load limit stop", 67: "Load limit blocked", 68: "Schedule not started", 69: "Valve did not open",
-  70: "Valve not opening",
+  70: "Valve not opening", 71: "Phase order OK",
   128: "Boot", 129: "Firmware changed", 130: "OTA start", 131: "OTA failed", 132: "OTA ok",
   133: "OTA rollback", 134: "Cloud back", 135: "Node offline", 136: "Node online", 137: "Node OTA ok",
   138: "Node OTA failed", 139: "EEPROM error", 140: "RTC error", 141: "Clock corrected",

@@ -194,7 +194,15 @@
     <label>Cyclic Resume Cooldown (s, 30-600) <input type="number" step="1" min="30" max="600" id="fs_cyclicResumeCooldownSec"></label>
     <label>DOL Pulse (ms) <input type="number" step="1" id="fs_dolPulseMs"></label>
     <label>Confirm Timeout (s) <input type="number" step="1" id="fs_confirmTimeoutSec"></label>
+    <label>Phase Reverse Protection
+      <select id="fs_phaseReversalProtect">
+        <option value="">(unchanged)</option>
+        <option value="1">Active - block start if R/Y/B reversed</option>
+        <option value="0">Inactive</option>
+      </select>
+    </label>
   </div>
+  <div class="fleet-form-note" id="phaseSeqLive"></div>
   <div class="fleet-form-note" id="safetyNote"></div>
 </details>
 

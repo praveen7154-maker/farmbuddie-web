@@ -26,6 +26,7 @@ export const FAULT_LABELS = {
   4: "Voltage High",
   5: "Phase Loss",
   6: "Phase Imbalance",
+  7: "Phase Order Reversed",
   10: "Power Outage",
 };
 

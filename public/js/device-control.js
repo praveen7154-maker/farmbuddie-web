@@ -279,6 +279,11 @@ async function fetchSafety() {
     $("fs_cyclicResumeCooldownSec").value = payload.cyclic_resume_cooldown_sec ?? "";
     $("fs_dolPulseMs").value = payload.dol_pulse_ms ?? "";
     $("fs_confirmTimeoutSec").value = payload.confirm_timeout_sec ?? "";
+    // Older firmware has no such setting - left at "(unchanged)", never sent.
+    $("fs_phaseReversalProtect").value =
+      typeof payload.phase_reversal_protect === "boolean" ? (payload.phase_reversal_protect ? "1" : "0") : "";
+    seqSupported = payload.phase_seq_supported === true;
+    renderPhaseSeq();
     setNote("safetyNote", "Loaded current values from the device.", "success");
   } catch (err) {
     console.error("Fetch safety config failed:", err);
@@ -305,6 +310,13 @@ async function saveSafety() {
     setNote("safetyNote", "Cyclic Resume Cooldown must be a whole number of seconds from 30 to 600.", "error");
     return;
   }
+  // Phase reverse protection: "" = leave it as it is on the device.
+  const reverseSel = $("fs_phaseReversalProtect").value;
+  const phaseReversalProtect = reverseSel === "" ? undefined : reverseSel === "1";
+  if (phaseReversalProtect === true && selectedMotor()?.phase_seq !== "ok" && !confirm(
+    "The live phase order isn't showing R → Y → B correct right now. With Phase Reverse Protection " +
+    "active, a reversed order stops the motor and refuses every start. Activate anyway?"
+  )) return;
   if (!confirm(
     "This changes the device's own protective thresholds (dry-run/overload/voltage cutoffs) for the " +
     (phaseMode === 1 ? "2-Phase" : "3-Phase") +
@@ -327,13 +339,34 @@ async function saveSafety() {
       phase_imbalance_max: num("fs_phaseImbalanceMax"),
       cyclic_resume_cooldown_sec: num("fs_cyclicResumeCooldownSec"),
       dol_pulse_ms: num("fs_dolPulseMs"),
-      confirm_timeout_sec: num("fs_confirmTimeoutSec")
+      confirm_timeout_sec: num("fs_confirmTimeoutSec"),
+      phase_reversal_protect: phaseReversalProtect
     });
     if (ack.ok) setNote("safetyNote", `Saved on Motor ${motorNum}.`, "success");
     else setNote("safetyNote", `Motor ${motorNum} rejected the change: ${ack.error || "unknown error"}`, "error");
   } catch (err) {
     console.error("Save safety config failed:", err);
     setNote("safetyNote", err.message, "error");
+  }
+}
+
+/* The selected motor's live phase order (its status report's phase_seq) -
+ * shown under the safety limits so Phase Reverse Protection is only
+ * switched on once it reads correct. */
+let seqSupported = null;   // from the last config_safety fetch - null until fetched
+function renderPhaseSeq() {
+  const seq = selectedMotor()?.phase_seq;
+  if (seq === "ok") {
+    setNote("phaseSeqLive", "Phase order (live): ✅ R → Y → B - correct", "success");
+  } else if (seq === "reversed") {
+    setNote("phaseSeqLive", "Phase order (live): ⚠️ REVERSED - swap any two phases at the panel. " +
+      "With Phase Reverse Protection active the motor will not start.", "error");
+  } else if (seq === "unknown") {
+    setNote("phaseSeqLive", "Phase order (live): checking… all three phases must be on.");
+  } else if (seq === "unsupported" || seqSupported === false) {
+    setNote("phaseSeqLive", "Phase order: this controller can't check it (needs the V2 hub board).");
+  } else {
+    setNote("phaseSeqLive", "Phase order: not reported - update the controller firmware to check it.");
   }
 }
 
@@ -374,7 +407,11 @@ function selectMotor(n) {
   setNote("controlNote", "");
   setNote("calNote", "");
   setNote("safetyNote", "");
+  // The phase order shown is the newly picked motor's; its support isn't known until fetched.
+  seqSupported = null;
+  $("fs_phaseReversalProtect").value = "";
   renderCalValues();
+  renderPhaseSeq();
 }
 
 /* ================= WIRING ================= */
@@ -456,4 +493,5 @@ export function updateDeviceControl(farmerData) {
     }
   }
   renderCalValues();
+  renderPhaseSeq();
 }
