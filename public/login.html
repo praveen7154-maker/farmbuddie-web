@@ -82,7 +82,11 @@
       signInWithEmailAndPassword(auth, email, password)
         .then((cred) => {
           console.log("LOGIN SUCCESS:", cred.user.uid);
-          window.location.href = "/admin/index.html";
+          // Modern view (the default) starts on the module Home page,
+          // Classic on the Dashboard as before - see /js/admin-shell.js.
+          let view = null;
+          try { view = localStorage.getItem("fb.view"); } catch (e) { /* private mode */ }
+          window.location.href = view === "classic" ? "/admin/index.html" : "/admin/home.html";
         })
         .catch((error) => {
           console.error("LOGIN ERROR:", error);

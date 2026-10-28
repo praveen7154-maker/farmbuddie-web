@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Home | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/js/admin-shell.js"></script>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js">
+  <link rel="modulepreload" href="/js/firebase-init.js">
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="shortcut icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-mobile.css">
+  <link rel="stylesheet" href="/css/theme-dark.generated.css">
+  <link rel="stylesheet" href="/css/admin-shell.css">
+  <!-- Module clicks feel instant: Chrome/Edge prepare the admin page you
+       point at (hover / touch) in the background, so the click just shows it. -->
+  <script type="speculationrules">
+  {"prerender": [{"where": {"and": [{"href_matches": "/admin/*"}, {"not": {"selector_matches": ".logout, [href='#'], [target]"}}]},
+                  "eagerness": "moderate"}]}
+  </script>
+</head>
+
+<body class="fb-layout fbx-home-body">
+
+<!-- SIDEBAR (Classic view) -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/vps-status.html">🖥️ VPS & TBMQ</a>
+    <a href="/admin/ota.html">🚀 Firmware OTA</a>
+    <a href="/admin/event-log.html">🗃️ Event Log</a>
+    <a href="/admin/broadcast.html">📢 Message Broadcast</a>
+    <a href="/admin/pricing.html">💰 Module Pricing</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>🏠 Home</h1>
+  <span class="fb-user">Admin</span>
+</header>
+
+<div class="fbx-home" id="home">
+
+  <section class="fbx-hero" aria-labelledby="homeTitle">
+    <div class="fbx-hero-grid"></div>
+    <div class="fbx-hero-txt">
+      <span class="fbx-eyebrow"><span class="fbx-dot"></span>Admin Console</span>
+      <h1 id="homeTitle"><span id="greet">Welcome</span>, <em id="greetName">Admin</em></h1>
+      <p>Everything for Farm Buddie in one place - pick a module to get started.</p>
+    </div>
+    <div class="fbx-hero-side">
+      <div class="fbx-clock" aria-hidden="true"><b id="clockTime">--:--</b><small id="clockDate"></small></div>
+      <label class="fbx-filter">
+        <span id="filterIcon"></span>
+        <input id="moduleFilter" type="search" placeholder="Find a module…" autocomplete="off" aria-label="Find a module">
+        <kbd id="paletteKey">Ctrl K</kbd>
+      </label>
+    </div>
+  </section>
+
+  <div class="fbx-recent" id="recent" hidden>
+    <span class="fbx-recent-label"><span id="recentIcon"></span>Recent</span>
+  </div>
+
+  <div id="groups"></div>
+  <p class="fbx-empty" id="noMatch" hidden>No module matches your search.</p>
+
+  <footer class="fbx-home-foot">
+    <span>Farm Buddie Admin</span><span>·</span><span>Press <kbd id="footKey">Ctrl K</kbd> anywhere to jump to a module</span>
+  </footer>
+</div>
+
+</main>
+
+<script type="module" src="/js/home.js"></script>
+<script src="/js/admin-mobile.js" defer></script>
+</body>
+</html>
