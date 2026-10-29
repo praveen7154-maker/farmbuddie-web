@@ -1,6 +1,7 @@
 import { pool } from "./postgres.js";
 
-// Production team logins - see production.js. In Postgres on the VPS, not
+// Team logins (web panel > User Roles: the production team and the
+// onboarding team) - see production.js. In Postgres on the VPS, not
 // Firestore: the password hashes and session tokens never need to be
 // readable by the web panel or any app.
 export async function ensureProductionSchema() {
@@ -25,14 +26,18 @@ export async function ensureProductionSchema() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS production_sessions_user_idx ON production_sessions (username)`);
+  // which team: "production" (the accounts made before teams) or "onboarding"
+  await pool.query(`ALTER TABLE production_users ADD COLUMN IF NOT EXISTS team TEXT NOT NULL DEFAULT 'production'`);
 }
 
-const USER_COLS = `username, name, password_hash AS "passwordHash", active, created_by AS "createdBy",
+const USER_COLS = `username, name, team, password_hash AS "passwordHash", active, created_by AS "createdBy",
   created_at AS "createdAt", password_changed_at AS "passwordChangedAt", last_login_at AS "lastLoginAt"`;
 
 export const pgProductionStore = {
-  async listUsers() {
-    const { rows } = await pool.query(`SELECT ${USER_COLS} FROM production_users ORDER BY created_at`);
+  async listUsers(team = null) {
+    const { rows } = team
+      ? await pool.query(`SELECT ${USER_COLS} FROM production_users WHERE team = $1 ORDER BY created_at`, [team])
+      : await pool.query(`SELECT ${USER_COLS} FROM production_users ORDER BY created_at`);
     return rows;
   },
   async getUser(username) {
@@ -40,10 +45,15 @@ export const pgProductionStore = {
     return rows[0] || null;
   },
   /** false if the username is already taken (the primary key decides - no race). */
-  async createUser({ username, name, passwordHash, createdBy }) {
+  async createUser({ username, name, passwordHash, createdBy, team = "production" }) {
     const { rowCount } = await pool.query(
-      `INSERT INTO production_users (username, name, password_hash, created_by) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (username) DO NOTHING`, [username, name, passwordHash, createdBy]);
+      `INSERT INTO production_users (username, name, password_hash, created_by, team) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (username) DO NOTHING`, [username, name, passwordHash, createdBy, team]);
+    return rowCount === 1;
+  },
+  async deleteUser(username) {
+    await pool.query(`DELETE FROM production_sessions WHERE username = $1`, [username]);
+    const { rowCount } = await pool.query(`DELETE FROM production_users WHERE username = $1`, [username]);
     return rowCount === 1;
   },
   async setPassword(username, passwordHash) {

@@ -177,9 +177,9 @@ data.forEach((f, index) => {
           📶
           </button>
 
-        <button class="icon-btn delete"
+        ${window.FBShell?.team ? "" : `<button class="icon-btn delete"
           onclick="deleteFarmer('${f.id}')"
-          title="Delete">🗑️</button>
+          title="Delete">🗑️</button>`}
 
       </td>
   `;

@@ -213,27 +213,12 @@
       <div class="pd-stock" id="pdStock"><p class="pd-count">loading…</p></div>
     </section>
 
-  <!-- ============ TEAM (admins only) ============ -->
-      <section class="pd-card pd-team" id="pdTeam" hidden aria-labelledby="pdTeamTitle">
-      <div class="pd-card-head">
-        <h2 id="pdTeamTitle"><span class="pd-ic" data-icon="user-cog"></span>Production team</h2>
-        <button type="button" class="pd-btn pd-btn-ghost pd-team-open" id="teamOpen"><span class="pd-ic" data-icon="users"></span>View team <span class="pd-badge" id="teamBadge">0</span></button>
-      </div>
-      <p class="pd-hint pd-team-hint">They sign in on the normal login page with the username below and see only this page.</p>
-      <form class="pd-newuser" id="pdNewUser" autocomplete="off" novalidate>
-        <label><span>Name</span><input id="nuName" placeholder="Murugan" maxlength="60"></label>
-        <label><span>Username <small id="nuUserState"></small></span><input id="nuUser" placeholder="murugan" maxlength="32" autocapitalize="none" spellcheck="false"></label>
-        <label><span>Password</span>
-          <span class="pd-pw">
-            <input id="nuPass" type="password" placeholder="at least 8 characters" autocomplete="new-password">
-            <button type="button" class="pd-icon-btn" id="nuShow" aria-label="Show password"><span class="pd-ic" data-icon="eye"></span></button>
-            <button type="button" class="pd-icon-btn" id="nuGen" aria-label="Make a password" title="Make a strong password"><span class="pd-ic" data-icon="wand-sparkles"></span></button>
-          </span>
-        </label>
-        <button type="submit" class="pd-btn pd-btn-primary" id="nuCreate"><span class="pd-ic" data-icon="plus"></span>Create</button>
-      </form>
-      <p class="pd-field-msg" id="nuMsg"></p>
-    </section>
+  <!-- ============ TEAM (admins only): managed in User Roles ============ -->
+    <a class="pd-card pd-team-link" id="pdTeam" href="/admin/user-roles.html" hidden>
+      <span class="pd-ic" data-icon="user-cog"></span>
+      <span><b>Production team <span class="pd-badge" id="teamBadge">0</span></b><small>Accounts, passwords, switch off and delete are in User Roles</small></span>
+      <span class="pd-ic pd-flip" data-icon="chevron-left"></span>
+    </a>
     </div>
 
   </div>
@@ -263,34 +248,6 @@
 </main>
 
 <div class="pd-toast" id="pdToast" role="status" aria-live="polite"></div>
-
-<div class="pd-modal" id="pdTeamModal" hidden>
-  <div class="pd-modal-box pd-team-box" role="dialog" aria-modal="true" aria-labelledby="teamTitle">
-    <div class="pd-team-box-head">
-      <h3 id="teamTitle"><span class="pd-ic" data-icon="user-cog"></span>Production team <small id="teamCount"></small></h3>
-      <button type="button" class="pd-icon-btn" id="teamClose" aria-label="Close"><span class="pd-ic" data-icon="x"></span></button>
-    </div>
-    <input type="search" id="teamSearch" class="pd-team-search" placeholder="Find by name or username" aria-label="Find a team member">
-    <div class="pd-users" id="pdUsers"></div>
-  </div>
-</div>
-
-<div class="pd-modal" id="pdPwModal" hidden>
-  <div class="pd-modal-box" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
-    <h3 id="pwTitle"><span class="pd-ic" data-icon="key-round"></span>New password for <span id="pwWho"></span></h3>
-    <p class="pd-hint">They are signed out everywhere and use this from now on. Only an admin can change it.</p>
-    <span class="pd-pw">
-      <input id="pwInput" type="text" autocomplete="new-password" spellcheck="false">
-      <button type="button" class="pd-icon-btn" id="pwGen" aria-label="Make a password"><span class="pd-ic" data-icon="wand-sparkles"></span></button>
-      <button type="button" class="pd-icon-btn" id="pwCopy" aria-label="Copy"><span class="pd-ic" data-icon="copy"></span></button>
-    </span>
-    <p class="pd-field-msg" id="pwMsg"></p>
-    <div class="pd-actions">
-      <button type="button" class="pd-btn pd-btn-primary" id="pwSave">Change password</button>
-      <button type="button" class="pd-btn pd-btn-ghost" id="pwCancel">Cancel</button>
-    </div>
-  </div>
-</div>
 
 <script src="/js/lazy-xlsx.js"></script>
 <script type="module" src="/js/production.js"></script>

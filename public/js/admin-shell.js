@@ -35,6 +35,30 @@
     root.classList.add("fbx-staff");
   }
 
+  // An onboarding team member (User Roles; signed in on the login page with
+  // a username - a Firebase sign-in our server made, with no email): the
+  // farmer pages only. The Firestore rules are what really keep them out of
+  // everything else; this keeps the menus to what they can use, and any
+  // other page sends them back to Farmer Onboarding.
+  var TEAM_PAGES = ["farmer-onboarding", "farmer-database", "add-farm", "farmer-edit", "farmer-view"];
+  var TEAM = STAFF ? null : (function () {
+    try {
+      var t = JSON.parse(localStorage.getItem("fb.team") || "null");
+      return t && t.team === "onboarding" ? t : null;
+    } catch (e) { return null; }
+  })();
+  var LEAVING = false;      // on the way to another page: build nothing here
+  if (TEAM) {
+    HOME = "/admin/farmer-onboarding.html";
+    root.classList.add("fbx-team");
+    var page = (/\/admin\/?([^\/?#]*?)(?:\.html)?$/.exec(location.pathname) || [])[1];
+    if (page !== undefined && TEAM_PAGES.indexOf(page || "index") < 0) {
+      LEAVING = true;
+      root.style.visibility = "hidden";
+      location.replace(HOME);
+    }
+  }
+
   function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function save(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
   function sload(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
@@ -48,7 +72,7 @@
     if (t === "dark" || t === "light") return t;
     return darkQuery && darkQuery.matches ? "dark" : "light";
   }
-  function viewPref() { return !STAFF && load(KEY_VIEW) === "classic" ? "classic" : "modern"; }
+  function viewPref() { return !STAFF && !TEAM && load(KEY_VIEW) === "classic" ? "classic" : "modern"; }
 
   function applyPrefs() {
     root.setAttribute("data-theme", themePref());
@@ -58,6 +82,7 @@
 
   // ---------------------------------------------------------------- icons
   var ICONS = {
+    "trash-2": "<path d=\"M3 6h18\"/> <path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\"/> <path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\"/> <line x1=\"10\" x2=\"10\" y1=\"11\" y2=\"17\"/> <line x1=\"14\" x2=\"14\" y1=\"11\" y2=\"17\"/>",
     "fan": "<path d=\"M10.827 16.379a6.082 6.082 0 0 1-8.618-7.002l5.412 1.45a6.082 6.082 0 0 1 7.002-8.618l-1.45 5.412a6.082 6.082 0 0 1 8.618 7.002l-5.412-1.45a6.082 6.082 0 0 1-7.002 8.618l1.45-5.412Z\"/> <path d=\"M12 12v.01\"/>",
     "droplet": "<path d=\"M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z\"/>",
     "valve-disc": "<circle cx=\"12\" cy=\"12\" r=\"9\"/> <path d=\"M7 17 17 7\"/> <path d=\"M2 12h1M21 12h1\"/>",
@@ -142,7 +167,7 @@
     { id: "ota", label: "Firmware OTA", icon: "rocket", group: "Devices",
       desc: "Signed firmware uploads and rollouts", tone: "violet" },
     { id: "production", label: "Production", icon: "factory", group: "Devices",
-      desc: "Daily MCU entry and the production team", tone: "lime" },
+      desc: "Daily MCU and node entry, labels, SIM and node stock", tone: "lime" },
     { id: "event-log", label: "Event Log", icon: "scroll-text", group: "Devices",
       desc: "Device events, faults and history", tone: "amber" },
     { id: "distributor-database", label: "Distributor Database", icon: "building-2", group: "Business",
@@ -152,9 +177,12 @@
     { id: "pricing", label: "Module Pricing", icon: "indian-rupee", group: "Business",
       desc: "Prices for modules and add-ons", tone: "amber" },
     { id: "vps-status", label: "VPS & TBMQ", icon: "server", group: "System",
-      desc: "Server, bridge and MQTT broker health", tone: "sky" }
+      desc: "Server, bridge and MQTT broker health", tone: "sky" },
+    { id: "user-roles", label: "User Roles", icon: "user-cog", group: "System",
+      desc: "Production and onboarding team accounts", tone: "violet" }
   ];
   if (STAFF) MODULES = MODULES.filter(function (m) { return m.id === "production"; });
+  if (TEAM) MODULES = MODULES.filter(function (m) { return m.id === "farmer-onboarding" || m.id === "farmer-database"; });
   var BY_ID = {};
   MODULES.forEach(function (m) { m.href = "/admin/" + m.id + ".html"; BY_ID[m.id] = m; });
 
@@ -254,7 +282,10 @@
       return;
     }
     firebase().then(function (f) { return f.mod.signOut(f.auth); })
-      .then(function () { window.location.replace("/login.html"); })
+      .then(function () {
+        try { localStorage.removeItem("fb.team"); } catch (e) { /* private mode */ }
+        window.location.replace("/login.html");
+      })
       .catch(function (err) {
         if (btn) btn.disabled = false;
         console.error("Sign out failed:", err);
@@ -501,9 +532,10 @@
     if (who) who.textContent = user.displayName || email.split("@")[0];
     header.querySelector(".fbx-profile").title = email;
     if (user.staff) {
+      var team = user.teamName || "Production team";
       var role = header.querySelector(".fbx-pm-user b");
-      if (role) role.textContent = user.displayName || "Production team";
-      header.querySelectorAll(".fbx-email").forEach(function (el) { el.textContent = "@" + email + " · Production team"; });
+      if (role) role.textContent = user.displayName || team;
+      header.querySelectorAll(".fbx-email").forEach(function (el) { el.textContent = "@" + email + " · " + team; });
     }
   }
 
@@ -530,6 +562,17 @@
       var after = menu.querySelector('a[href="/admin/controller-database.html"]');
       menu.insertBefore(p, after ? after.nextSibling : null);
     }
+    if (!menu.querySelector('a[href="/admin/user-roles.html"]')) {
+      var ur = document.createElement("a");
+      ur.href = "/admin/user-roles.html";
+      ur.textContent = "👥 User Roles";
+      if (here === "user-roles") {
+        menu.querySelectorAll("a.active").forEach(function (x) { x.classList.remove("active"); });
+        ur.className = "active";
+      }
+      var logout = menu.querySelector(".logout, #logoutBtn");
+      menu.insertBefore(ur, logout || null);
+    }
   }
 
   // ------------------------------------------------------- command palette
@@ -539,7 +582,7 @@
     var items = STAFF ? [] : [{ label: "Home", hint: "All modules", icon: "house", href: HOME }];
     MODULES.forEach(function (m) { items.push({ label: m.label, hint: m.desc, icon: m.icon, href: m.href, tone: m.tone }); });
     items.push({ label: dark ? "Switch to light theme" : "Switch to dark theme", hint: "Theme", icon: dark ? "sun" : "moon", run: function () { toggleTheme(); } });
-    if (!STAFF) items.push({ label: classic ? "Switch to Modern view" : "Switch to Classic view", hint: "Layout", icon: classic ? "layout-grid" : "panel-left",
+    if (!STAFF && !TEAM) items.push({ label: classic ? "Switch to Modern view" : "Switch to Classic view", hint: "Layout", icon: classic ? "layout-grid" : "panel-left",
       run: function () { setView(classic ? "modern" : "classic"); } });
     items.push({ label: "Sign out", hint: "End this session", icon: "log-out", run: function () { signOutNow(); } });
     return items;
@@ -623,7 +666,7 @@
 
   // ------------------------------------------------------------------ init
   function init() {
-    if (header) return;
+    if (header || LEAVING) return;
     buildHeader();
     addSidebarHome();
     recordRecent();
@@ -631,6 +674,10 @@
     var later = window.requestIdleCallback || function (f) { setTimeout(f, 300); };
     if (STAFF) {
       showUser({ email: STAFF.username, displayName: STAFF.name, staff: true });
+      return;
+    }
+    if (TEAM) {
+      showUser({ email: TEAM.username, displayName: TEAM.name, staff: true, teamName: "Onboarding team" });
       return;
     }
     later(function () {
@@ -641,7 +688,7 @@
   }
 
   // For the Home page's own script.
-  window.FBShell = { modules: MODULES, icon: icon, esc: esc, openPalette: openPalette, KEY_RECENT: KEY_RECENT, staff: STAFF };
+  window.FBShell = { modules: MODULES, icon: icon, esc: esc, openPalette: openPalette, KEY_RECENT: KEY_RECENT, staff: STAFF, team: TEAM };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();

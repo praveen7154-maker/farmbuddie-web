@@ -518,3 +518,14 @@ html[data-theme="dark"] .pd-status.on { color: #ad98f2; background: rgba(173, 15
 /* no serial to show: the server isn't updated / can't be reached - the reason, in red */
 .pd-trouble .pd-node-range { font-family: var(--fbx-font); font-size: 12.5px; color: var(--fbx-danger); }
 .pd-trouble .pd-node-sn { color: var(--fbx-faint); font-size: 15px; }
+
+/* the production team: a link to User Roles (admins) */
+.pd-team-link {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center;
+  padding: 16px 20px; text-decoration: none; color: var(--fbx-text); transition: box-shadow 0.2s, transform 0.2s;
+}
+.pd-team-link:hover { transform: translateY(-1px); box-shadow: var(--fbx-shadow), inset 0 0 0 1px var(--fbx-accent); }
+.pd-team-link > .pd-ic:first-child { width: 38px; height: 38px; border-radius: 11px; color: var(--fbx-accent); background: var(--fbx-accent-soft); }
+.pd-team-link b { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.pd-team-link small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--fbx-muted); }
+.pd-team-link > .pd-ic:last-child { color: var(--fbx-faint); }

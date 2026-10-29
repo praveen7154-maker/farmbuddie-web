@@ -32,7 +32,7 @@ import { findDistributor, distributorFarms, loadReferrals, loadRedemptions } fro
 import { requireAdmin } from "../adminAuth.js";
 import { createProductionModule, PROD_TOKEN_PREFIX } from "./production.js";
 import { pgProductionStore } from "./productionStore.js";
-import { firestoreControllers, firestoreNodes } from "./productionFirebase.js";
+import { firestoreControllers, firestoreNodes, firebaseTeamAuth } from "./productionFirebase.js";
 import { createPricingModule } from "./pricing.js";
 import { pgPricingStore } from "./pricingStore.js";
 import { createAdminGateModule } from "./adminGate.js";
@@ -103,7 +103,7 @@ app.use("/admin-gate", cors({ origin: (origin, cb) => cb(null, true) }), adminGa
 
 // Production team logins (web panel > Production) - see production.js.
 // Sign-in sits before the auth below, rate limited like the distributors'.
-export const production = createProductionModule({ store: pgProductionStore, controllers: firestoreControllers, nodes: firestoreNodes });
+export const production = createProductionModule({ store: pgProductionStore, controllers: firestoreControllers, nodes: firestoreNodes, teamAuth: firebaseTeamAuth });
 app.use("/production/login", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false }));
 app.use("/production", cors({ origin: (origin, cb) => cb(null, true) }), production.publicRouter);
 
@@ -155,6 +155,7 @@ app.use("/distributors", requireAdmin, distributors.adminRouter);
 app.use("/admin-gate", requireAdmin, adminGate.adminRouter);
 app.use("/production", production.router);
 app.use("/production-users", requireAdmin, production.adminRouter);
+app.use("/team-users", requireAdmin, production.adminRouter);      // web panel > User Roles (same accounts)
 
 // Module Pricing (web panel > Module Pricing, Irrigo Admin > Price List /
 // Price Calculator) - see pricing.js. Its own role checks inside.

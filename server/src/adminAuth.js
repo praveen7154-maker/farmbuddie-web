@@ -23,3 +23,23 @@ export function requireAdmin(req, res, next) {
   if (!isAdmin(req.decodedToken)) return res.status(403).json({ error: "Admin identity required" });
   next();
 }
+
+// /provision/device: the onboarding pages give a newly mapped controller its
+// MQTT login right after the farm is saved - an active onboarding team
+// member (isActive: teamAccess.js's isActiveOnboarding) may do that;
+// changing (rotating) a device's password stays admin-only.
+export function requireAdminOrOnboarding(isActive) {
+  return async (req, res, next) => {
+    if (isAdmin(req.decodedToken)) return next();
+    try {
+      if (await isActive(req.decodedToken)) {
+        if (req.body?.rotate) return res.status(403).json({ error: "Only an admin can change a device's password" });
+        return next();
+      }
+    } catch (err) {
+      console.error("[team] onboarding access check failed:", err);
+      return res.status(500).json({ error: "Couldn't check your access - try again" });
+    }
+    return res.status(403).json({ error: "Admin identity required" });
+  };
+}

@@ -6,18 +6,23 @@ import {
   NODE_TYPES, nodeStem
 } from "../src/bridge/production.js";
 import { NODE_TYPES as WEB_NODE_TYPES } from "../../public/js/node-types.js";
+import { requireAdminOrOnboarding } from "../src/adminAuth.js";
 
 function fakeStore() {
   const users = new Map();
   const sessions = new Map();
   return {
     users, sessions,
-    async listUsers() { return [...users.values()]; },
+    async listUsers(team = null) { return [...users.values()].filter((u) => !team || u.team === team); },
     async getUser(u) { return users.get(u) || null; },
-    async createUser({ username, name, passwordHash, createdBy }) {
+    async createUser({ username, name, passwordHash, createdBy, team = "production" }) {
       if (users.has(username)) return false;
-      users.set(username, { username, name, passwordHash, createdBy, active: true, createdAt: new Date() });
+      users.set(username, { username, name, team, passwordHash, createdBy, active: true, createdAt: new Date() });
       return true;
+    },
+    async deleteUser(u) {
+      for (const [h, s] of sessions) if (s.username === u) sessions.delete(h);
+      return users.delete(u);
     },
     async setPassword(u, h) { users.get(u).passwordHash = h; },
     async setActive(u, a) { users.get(u).active = a; },
@@ -134,13 +139,27 @@ function fakeNodes(clock) {
 
 const NOW = Date.UTC(2026, 9, 29, 6, 30);   // 29 Oct 2026, 12:00 IST
 
-async function withServer(fn) {
+// The onboarding team's Firebase side: what was asked of it.
+function fakeTeamAuth() {
+  const calls = [];
+  const access = new Map();
+  return {
+    calls, access,
+    async customToken(uid, claims) { calls.push(["token", uid, claims]); return `custom-token-for-${uid}`; },
+    async setAccess(uid, a) { calls.push(["access", uid, a.active]); access.set(uid, a.active); },
+    async signOut(uid) { calls.push(["signOut", uid]); },
+    async remove(uid) { calls.push(["remove", uid]); access.delete(uid); },
+    async countOnboarded(uid) { return uid === "onboarding:priya" ? 4 : 0; }
+  };
+}
+
+async function withServer(fn, { teamAuth = fakeTeamAuth() } = {}) {
   let t = NOW;
   const clock = () => t;
   const store = fakeStore();
   const controllers = fakeControllers(clock);
   const nodes = fakeNodes(clock);
-  const mod = createProductionModule({ store, controllers, nodes, now: clock });
+  const mod = createProductionModule({ store, controllers, nodes, teamAuth, now: clock });
   const app = express();
   app.use("/production", mod.publicRouter);
   // server.js's verifyCaller, reduced: "admin:<email>" stands for a Firebase admin login.
@@ -159,6 +178,7 @@ async function withServer(fn) {
   });
   app.use("/production", mod.router);
   app.use("/production-users", (req, res, next) => (req.decodedToken?.email ? next() : res.status(403).json({ error: "admin only" })), mod.adminRouter);
+  app.use("/team-users", (req, res, next) => (req.decodedToken?.email ? next() : res.status(403).json({ error: "admin only" })), mod.adminRouter);
   app.get("/farmers", (req, res) => res.json({ secret: true }));
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -171,7 +191,7 @@ async function withServer(fn) {
     return { status: r.status, body: await r.json().catch(() => null) };
   };
   try {
-    await fn({ call, store, controllers, nodes, advance: (ms) => { t += ms; } });
+    await fn({ call, store, controllers, nodes, teamAuth, advance: (ms) => { t += ms; } });
   } finally {
     server.close();
   }
@@ -472,4 +492,96 @@ test("nodes: made in a batch, next serial shown, no serial twice, own entries fo
     r = await call("/production/nodes", { method: "POST", token: ravi, body: { type: "SOLENOID_VALVE" } });
     assert.equal(r.body.nodes[0].serialNumber, "FBSVN10004");
   });
+});
+
+test("teams: an onboarding account signs in to Firebase (custom token), never gets a production session", async () => {
+  await withServer(async ({ call, store, teamAuth }) => {
+    let r = await call("/team-users", { method: "POST", token: ADMIN, body: { team: "onboarding", username: "Priya", name: "Priya S", password: "onboard-123" } });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.user.team, "onboarding");
+    assert.deepEqual(teamAuth.calls.at(-1), ["access", "onboarding:priya", true], "teamAccess on at once");
+    await call("/team-users", { method: "POST", token: ADMIN, body: { username: "ravi", name: "Ravi", password: "line1-pass" } });
+    assert.equal(store.users.get("ravi").team, "production", "no team given: production (as before)");
+    r = await call("/team-users", { method: "POST", token: ADMIN, body: { team: "sales", username: "x1y", name: "X", password: "longenough" } });
+    assert.equal(r.status, 400, "unknown team refused");
+    r = await call("/team-users", { method: "POST", token: ADMIN, body: { team: "onboarding", username: "ravi", name: "R", password: "longenough" } });
+    assert.equal(r.status, 409, "usernames unique across both teams");
+
+    r = await call("/team-users?team=onboarding", { token: ADMIN });
+    assert.deepEqual(r.body.users.map((u) => [u.username, u.team, u.farms]), [["priya", "onboarding", 4]], "one team, with farms onboarded");
+    r = await call("/team-users?team=production", { token: ADMIN });
+    assert.deepEqual(r.body.users.map((u) => u.username), ["ravi"]);
+    assert.equal((await call("/team-users", { token: ADMIN })).body.users.length, 2, "no team: everyone");
+
+    r = await call("/production/login", { method: "POST", body: { username: "priya", password: "onboard-123" } });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.kind, "firebase");
+    assert.equal(r.body.customToken, "custom-token-for-onboarding:priya");
+    assert.equal(r.body.token, undefined, "no fbp_ session");
+    assert.deepEqual(teamAuth.calls.find((c) => c[0] === "token"), ["token", "onboarding:priya", { team: "onboarding", username: "priya" }]);
+    assert.equal(store.sessions.size, 0);
+    r = await call("/production/login", { method: "POST", body: { username: "ravi", password: "line1-pass" } });
+    assert.equal(r.body.team, "production");
+    assert.ok(r.body.token.startsWith(PROD_TOKEN_PREFIX));
+
+    // switched off: refused at sign-in, Firebase access off; on again: back
+    await call("/team-users/priya/active", { method: "POST", token: ADMIN, body: { active: false } });
+    assert.equal(teamAuth.access.get("onboarding:priya"), false);
+    assert.equal((await call("/production/login", { method: "POST", body: { username: "priya", password: "onboard-123" } })).status, 401);
+    await call("/team-users/priya/active", { method: "POST", token: ADMIN, body: { active: true } });
+    assert.equal(teamAuth.access.get("onboarding:priya"), true);
+    await call("/team-users/priya/password", { method: "POST", token: ADMIN, body: { password: "new-onboard-9" } });
+    assert.deepEqual(teamAuth.calls.at(-1), ["signOut", "onboarding:priya"], "new password: signed out everywhere");
+  });
+});
+
+test("teams: delete - the account, its sessions, its Firebase sign-in", async () => {
+  await withServer(async ({ call, store, teamAuth }) => {
+    await call("/team-users", { method: "POST", token: ADMIN, body: { username: "ravi", name: "Ravi", password: "line1-pass" } });
+    await call("/team-users", { method: "POST", token: ADMIN, body: { team: "onboarding", username: "priya", name: "Priya", password: "onboard-123" } });
+    const tok = (await call("/production/login", { method: "POST", body: { username: "ravi", password: "line1-pass" } })).body.token;
+    assert.equal((await call("/production/me", { token: tok })).status, 200);
+    assert.equal((await call("/team-users/ravi", { method: "DELETE", token: tok })).status, 403, "staff can't delete");
+    let r = await call("/team-users/ravi", { method: "DELETE", token: ADMIN });
+    assert.equal(r.status, 200);
+    assert.equal(store.users.has("ravi"), false);
+    assert.equal((await call("/production/me", { token: tok })).status, 401, "signed out at once");
+    assert.equal((await call("/production/login", { method: "POST", body: { username: "ravi", password: "line1-pass" } })).status, 401, "can't sign in");
+    r = await call("/team-users/priya", { method: "DELETE", token: ADMIN });
+    assert.equal(r.status, 200);
+    assert.deepEqual(teamAuth.calls.at(-1), ["remove", "onboarding:priya"], "Firebase sign-in + teamAccess removed");
+    assert.equal((await call("/team-users/nobody", { method: "DELETE", token: ADMIN })).status, 404);
+    assert.equal((await call("/team-users", { token: ADMIN })).body.users.length, 0);
+    // the username is free again
+    assert.equal((await call("/team-users", { method: "POST", token: ADMIN, body: { username: "ravi", name: "Ravi K", password: "line2-pass" } })).status, 201);
+  });
+});
+
+test("teams: no Firebase on the server - onboarding accounts refused, production unaffected", async () => {
+  await withServer(async ({ call }) => {
+    assert.equal((await call("/team-users", { method: "POST", token: ADMIN, body: { team: "onboarding", username: "priya", name: "P", password: "longenough" } })).status, 503);
+    assert.equal((await call("/team-users", { method: "POST", token: ADMIN, body: { username: "ravi", name: "R", password: "longenough" } })).status, 201);
+  }, { teamAuth: null });
+});
+
+test("/provision/device: admin, or an active onboarding member (issue only - no rotate)", async () => {
+  const active = new Set(["onboarding:priya"]);
+  const mw = requireAdminOrOnboarding(async (t) => t?.team === "onboarding" && active.has(t.uid));
+  const run = async (decodedToken, body = {}) => {
+    let status = 200, nextCalled = false;
+    const res = { status(s) { status = s; return this; }, json() { return this; } };
+    await mw({ decodedToken, body }, res, () => { nextCalled = true; });
+    return nextCalled ? "next" : status;
+  };
+  assert.equal(await run({ email: "owner@farmbuddie.com" }, { rotate: true }), "next", "admin: anything");
+  assert.equal(await run({ uid: "onboarding:priya", team: "onboarding" }), "next", "onboarding: issue");
+  assert.equal(await run({ uid: "onboarding:priya", team: "onboarding" }, { rotate: true }), 403, "onboarding: no rotate");
+  active.delete("onboarding:priya");
+  assert.equal(await run({ uid: "onboarding:priya", team: "onboarding" }), 403, "switched off: refused");
+  assert.equal(await run({ uid: "f1", phone_number: "+919000000000" }), 403, "a farmer: refused");
+  assert.equal(await run({ uid: "x", team: "onboarding" }), 403, "a made-up claim without teamAccess: refused");
+  const broken = requireAdminOrOnboarding(async () => { throw new Error("db down"); });
+  let st = 0;
+  await broken({ decodedToken: { uid: "onboarding:priya", team: "onboarding" }, body: {} }, { status(s) { st = s; return this; }, json() { return this; } }, () => {});
+  assert.equal(st, 500);
 });

@@ -23,8 +23,21 @@ import { hashPassword, passwordMatches } from "./distributors.js";
 // token ("fbp_...") only this server understands, and the server's caller
 // check (server.js) lets it reach /production and nothing else. Only an
 // admin sets or changes their passwords.
+//
+// Teams (web panel > User Roles): the same accounts, each in one team.
+//   production - the above.
+//   onboarding - farmer onboarding, Add Farm, Edit Farm, Farmer Database:
+//                pages that use the database directly, so they DO get a
+//                Firebase sign-in - a custom token minted here, uid
+//                "onboarding:<username>", claim team: "onboarding", no
+//                email (so never an admin anywhere). The Firestore rules
+//                give that claim only what those pages need, and only
+//                while teamAccess/<uid> says active - switching a person
+//                off or deleting them cuts them off at once.
 
 export const PROD_TOKEN_PREFIX = "fbp_";
+export const TEAMS = ["production", "onboarding"];
+export const teamUid = (username) => `onboarding:${username}`;
 export const VARIANTS = ["IRRIGO", "IRRIGO_PLUS", "IRRIGO_SMART_PLUS"];
 const USERNAME_RE = /^[a-z][a-z0-9._-]{2,31}$/;
 const MIN_PASSWORD = 8;
@@ -151,9 +164,15 @@ export const istDay = (ms) => new Date(ms + IST_MS).toISOString().slice(0, 10);
  *                    list({ from, to, createdById }) -> [{ id, ...doc, createdAtMs }]
  *                    countBy(createdById) -> number
  *                    stock() -> { MOTOR: { available, assigned, total }, ... }
+ *   teamAuth     - productionFirebase.js (or a fake), for the onboarding team:
+ *                    customToken(uid, claims) -> string (a Firebase custom token)
+ *                    setAccess(uid, { active, username, name }) (teamAccess/<uid> + the Firebase user enabled / disabled, signed out when off)
+ *                    signOut(uid) (every session of theirs ends)
+ *                    remove(uid) (teamAccess/<uid> + the Firebase user gone)
+ *                    countOnboarded(uid) -> number (farms they saved)
  *   now          - () => ms
  */
-export function createProductionModule({ store, controllers, nodes, now = () => Date.now() }) {
+export function createProductionModule({ store, controllers, nodes, teamAuth = null, now = () => Date.now() }) {
   const failures = new Map();
   const locked = (u) => {
     const f = failures.get(u);
@@ -184,7 +203,7 @@ export function createProductionModule({ store, controllers, nodes, now = () => 
     const session = await store.getSession(sessionHash);
     if (!session) return null;
     const user = await store.getUser(session.username);
-    if (!user || !user.active) return null;
+    if (!user || !user.active || (user.team || "production") !== "production") return null;
     return { uid: `production:${user.username}`, productionUser: user.username, name: user.name, sessionHash };
   }
 
@@ -204,11 +223,21 @@ export function createProductionModule({ store, controllers, nodes, now = () => 
         return res.status(401).json({ error: user && !user.active ? "This account is switched off - ask the admin" : "Wrong username or password" });
       }
       failures.delete(username);
+      if (user.team === "onboarding") {
+        // A Firebase sign-in for the onboarding pages (the browser signs in with it).
+        if (!teamAuth) return res.status(503).json({ error: "Onboarding sign-in isn't set up on this server" });
+        const uid = teamUid(username);
+        await teamAuth.setAccess(uid, { active: true, username, name: user.name });
+        const customToken = await teamAuth.customToken(uid, { team: "onboarding", username });
+        await store.touchLogin(username);
+        console.log(`[team] ${username} (onboarding) signed in`);
+        return res.json({ kind: "firebase", team: "onboarding", customToken, username, name: user.name });
+      }
       const token = PROD_TOKEN_PREFIX + crypto.randomBytes(32).toString("base64url");
       await store.createSession(sha256(token), username, new Date(now() + SESSION_HOURS * 3600 * 1000));
       await store.touchLogin(username);
       console.log(`[production] ${username} signed in`);
-      return res.json({ token, username, name: user.name, expiresInHours: SESSION_HOURS });
+      return res.json({ team: "production", token, username, name: user.name, expiresInHours: SESSION_HOURS });
     } catch (err) {
       console.error("[production] login failed:", err);
       return res.status(500).json({ error: "Sign-in failed - try again" });
@@ -441,35 +470,47 @@ export function createProductionModule({ store, controllers, nodes, now = () => 
   const adminRouter = express.Router();
   adminRouter.use(express.json({ limit: "16kb" }));
   const actor = (req) => String(req.decodedToken?.email || "admin").toLowerCase();
-  const userView = (u, entries, nodeEntries) => ({
-    username: u.username, name: u.name, active: u.active, createdBy: u.createdBy, createdAt: u.createdAt,
-    passwordChangedAt: u.passwordChangedAt || null, lastLoginAt: u.lastLoginAt || null,
-    ...(entries !== undefined ? { entries } : {}), ...(nodeEntries !== undefined ? { nodeEntries } : {})
+  const userView = (u, counts = {}) => ({
+    username: u.username, name: u.name, team: u.team || "production", active: u.active, createdBy: u.createdBy, createdAt: u.createdAt,
+    passwordChangedAt: u.passwordChangedAt || null, lastLoginAt: u.lastLoginAt || null, ...counts
   });
+  const isOnboarding = (u) => u?.team === "onboarding";
 
+  // ?team=production|onboarding - one team; none - everyone.
   adminRouter.get("/", wrap(async (req, res) => {
-    const users = await store.listUsers();
-    const [counts, nodeCounts] = await Promise.all([
-      Promise.all(users.map((u) => controllers.countBy(u.username).catch(() => null))),
-      Promise.all(users.map((u) => nodes.countBy(u.username).catch(() => null)))
-    ]);
-    res.json({ users: users.map((u, i) => userView(u, counts[i], nodeCounts[i])) });
+    const team = TEAMS.includes(req.query.team) ? req.query.team : null;
+    const users = await store.listUsers(team);
+    const counts = await Promise.all(users.map(async (u) => {
+      if (isOnboarding(u)) {
+        return { farms: teamAuth ? await teamAuth.countOnboarded(teamUid(u.username)).catch(() => null) : null };
+      }
+      const [entries, nodeEntries] = await Promise.all([
+        controllers.countBy(u.username).catch(() => null),
+        nodes.countBy(u.username).catch(() => null)
+      ]);
+      return { entries, nodeEntries };
+    }));
+    res.json({ users: users.map((u, i) => userView(u, counts[i])) });
   }));
 
   adminRouter.post("/", wrap(async (req, res) => {
     const username = normalizeUsername(req.body?.username);
     const name = String(req.body?.name || "").trim().slice(0, 60);
     const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const team = req.body?.team === undefined ? "production" : String(req.body.team);
+    if (!TEAMS.includes(team)) return res.status(400).json({ error: "Choose the team" });
     if (!USERNAME_RE.test(username)) {
       return res.status(400).json({ error: "Username: 3-32 characters, starting with a letter - letters, digits, . _ - (no spaces, no @)" });
     }
     if (!name) return res.status(400).json({ error: "Enter the person's name" });
     if (password.length < MIN_PASSWORD) return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters` });
     if (normalizeUsername(password) === username) return res.status(400).json({ error: "Password can't be the username" });
-    const created = await store.createUser({ username, name, passwordHash: await hashPassword(password), createdBy: actor(req) });
+    if (team === "onboarding" && !teamAuth) return res.status(503).json({ error: "Onboarding sign-in isn't set up on this server" });
+    const created = await store.createUser({ username, name, team, passwordHash: await hashPassword(password), createdBy: actor(req) });
     if (!created) return res.status(409).json({ error: `Username "${username}" is already taken` });
-    console.log(`[production] user ${username} created by ${actor(req)}`);
-    res.status(201).json({ user: userView(await store.getUser(username), 0, 0) });
+    if (team === "onboarding") await teamAuth.setAccess(teamUid(username), { active: true, username, name });
+    console.log(`[team] ${team} user ${username} created by ${actor(req)}`);
+    res.status(201).json({ user: userView(await store.getUser(username), team === "onboarding" ? { farms: 0 } : { entries: 0, nodeEntries: 0 }) });
   }));
 
   adminRouter.post("/:username/password", wrap(async (req, res) => {
@@ -477,21 +518,38 @@ export function createProductionModule({ store, controllers, nodes, now = () => 
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (password.length < MIN_PASSWORD) return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters` });
     if (normalizeUsername(password) === username) return res.status(400).json({ error: "Password can't be the username" });
-    if (!await store.getUser(username)) return res.status(404).json({ error: "No such user" });
+    const user = await store.getUser(username);
+    if (!user) return res.status(404).json({ error: "No such user" });
     await store.setPassword(username, await hashPassword(password));
     await store.deleteSessions(username);      // signed out everywhere - the new password from now on
+    if (isOnboarding(user) && teamAuth) await teamAuth.signOut(teamUid(username));
     failures.delete(username);
-    console.log(`[production] password of ${username} changed by ${actor(req)}`);
+    console.log(`[team] password of ${username} changed by ${actor(req)}`);
     res.json({ ok: true });
   }));
 
   adminRouter.post("/:username/active", wrap(async (req, res) => {
     const username = normalizeUsername(req.params.username);
     const active = req.body?.active === true;
-    if (!await store.getUser(username)) return res.status(404).json({ error: "No such user" });
+    const user = await store.getUser(username);
+    if (!user) return res.status(404).json({ error: "No such user" });
     await store.setActive(username, active);
     if (!active) await store.deleteSessions(username);
-    console.log(`[production] ${username} ${active ? "switched on" : "switched off"} by ${actor(req)}`);
+    if (isOnboarding(user) && teamAuth) await teamAuth.setAccess(teamUid(username), { active, username, name: user.name });
+    console.log(`[team] ${username} ${active ? "switched on" : "switched off"} by ${actor(req)}`);
+    res.json({ ok: true });
+  }));
+
+  // Gone for good: the account, its sessions and (onboarding) its Firebase
+  // sign-in. What they entered stays, with their name on it.
+  adminRouter.delete("/:username", wrap(async (req, res) => {
+    const username = normalizeUsername(req.params.username);
+    const user = await store.getUser(username);
+    if (!user) return res.status(404).json({ error: "No such user" });
+    if (isOnboarding(user) && teamAuth) await teamAuth.remove(teamUid(username));
+    await store.deleteUser(username);
+    failures.delete(username);
+    console.log(`[team] ${user.team || "production"} user ${username} deleted by ${actor(req)}`);
     res.json({ ok: true });
   }));
 

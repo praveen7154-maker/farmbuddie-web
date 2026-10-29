@@ -22,3 +22,16 @@ export function staffSession() {
 export function clearStaffSession() {
   try { localStorage.removeItem(KEY); } catch (e) { /* private mode */ }
 }
+
+// An onboarding team member's sign-in is a Firebase one (a custom token our
+// server made); this only remembers which team, for the menus
+// (admin-shell.js) - the Firestore rules decide what they can really do.
+const TEAM_KEY = "fb.team";
+
+export function saveTeamSession({ team, username, name }) {
+  try { localStorage.setItem(TEAM_KEY, JSON.stringify({ team, username, name })); } catch (e) { /* private mode */ }
+}
+
+export function clearTeamSession() {
+  try { localStorage.removeItem(TEAM_KEY); } catch (e) { /* private mode */ }
+}

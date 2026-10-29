@@ -4,7 +4,7 @@
 // the production team and admins. The server does the real work and
 // every check (server/src/bridge/production.js): same records and same
 // "nothing used twice" rules as the MCU / Controller page's Excel upload,
-// plus who entered each one. Admins also manage the team's accounts here.
+// plus who entered each one. The team's accounts are in User Roles.
 import { auth } from "/js/firebase-init.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 import { BRIDGE_BASE_URL } from "/js/config.js";
@@ -94,7 +94,7 @@ async function start() {
   setupForm();
   setupNodes();
   setupList(admin);
-  if (admin) setupTeam();
+  if (admin) { $("pdTeam").hidden = false; loadWho(); }
   setupMode();
   await Promise.all([loadSummary(), loadEntries()]);
   focusFirst();
@@ -139,7 +139,7 @@ function applyMode() {
   $("pdSpark").setAttribute("aria-label", `${node ? "Nodes" : "Controllers"} made per day, last 7 days`);
   $("pdHello").textContent = node
     ? (admin ? "Choose the node type - the serial is made and its QR label printed." : `Hello ${me.name} - choose the node type, the serial is made for you.`)
-    : (admin ? "Enter controllers yourself, or manage the production team below." : `Hello ${me.name} - scan or type each new controller. Every field is checked as you go.`);
+    : (admin ? "Enter controllers yourself - every field is checked as you go." : `Hello ${me.name} - scan or type each new controller. Every field is checked as you go.`);
   nodeSaveText();
   if (!node) $("pdSaveText").textContent = "Add controller";
 }
@@ -946,198 +946,18 @@ async function exportExcel() {
 }
 
 // ---------------------------------------------------------------- team (admins)
-let users = [];
-
-function makePassword() {
-  // Easy to read out and type: no 0/O/1/l/I.
-  const L = "abcdefghjkmnpqrstuvwxyz", U = "ABCDEFGHJKLMNPQRSTUVWXYZ", D = "23456789";
-  const r = (s) => s[crypto.getRandomValues(new Uint32Array(1))[0] % s.length];
-  return `${r(U)}${r(L)}${r(L)}${r(L)}-${r(D)}${r(D)}${r(D)}${r(D)}-${r(U)}${r(L)}`;
-}
-const suggestUsername = (name) => {
-  const parts = name.toLowerCase().normalize("NFKD").replace(/[^a-z\s]/g, "").trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return "";
-  return (parts[0] + (parts[1] ? "." + parts[1][0] : "")).slice(0, 32);
-};
-const USER_RE = /^[a-z][a-z0-9._-]{2,31}$/;
-
-function setupTeam() {
-  $("pdTeam").hidden = false;
-  const name = $("nuName"), user = $("nuUser"), pass = $("nuPass");
-  let userEdited = false;
-  name.addEventListener("input", () => { if (!userEdited) { user.value = suggestUsername(name.value); userState(); } });
-  user.addEventListener("input", () => { userEdited = true; user.value = user.value.toLowerCase().replace(/\s/g, ""); userState(); });
-  $("nuGen").addEventListener("click", () => { pass.value = makePassword(); pass.type = "text"; });
-  $("nuShow").addEventListener("click", () => { pass.type = pass.type === "password" ? "text" : "password"; });
-  $("pdNewUser").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const msg = $("nuMsg");
-    msg.textContent = "";
-    const body = { name: name.value.trim(), username: user.value.trim(), password: pass.value };
-    if (!body.name) { msg.textContent = "Enter the person's name"; name.focus(); return; }
-    if (!USER_RE.test(body.username)) { msg.textContent = "Username: 3-32 characters, starting with a letter - letters, digits, . _ -"; user.focus(); return; }
-    if (users.some((u) => u.username === body.username)) { msg.textContent = `"${body.username}" is already taken`; user.focus(); return; }
-    if (body.password.length < 8) { msg.textContent = "Password: at least 8 characters (the wand makes one)"; pass.focus(); return; }
-    const btn = $("nuCreate");
-    btn.disabled = true;
-    try {
-      await api("/production-users", { method: "POST", body });
-      $("pdNewUser").reset();
-      userEdited = false;
-      $("nuUserState").textContent = "";
-      await loadUsers();
-      showCredentials(body.name, body.username, body.password);   // the popup, on the new person
-      toast(`${body.name} can sign in now`);
-    } catch (err) {
-      msg.textContent = err.message;
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  function userState() {
-    const s = $("nuUserState"), v = user.value;
-    if (!v) { s.textContent = ""; s.className = ""; return; }
-    if (!USER_RE.test(v)) { s.textContent = "3-32, a-z 0-9 . _ -"; s.className = "bad"; return; }
-    const taken = users.some((u) => u.username === v);
-    s.textContent = taken ? "taken" : "available";
-    s.className = taken ? "bad" : "ok";
-  }
-
-  // Team popup
-  const team = $("pdTeamModal");
-  $("teamOpen").addEventListener("click", () => openTeam());
-  $("teamClose").addEventListener("click", () => { team.hidden = true; });
-  team.addEventListener("mousedown", (e) => { if (e.target === team) team.hidden = true; });
-  $("teamSearch").addEventListener("input", renderUsers);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !team.hidden && $("pdPwModal").hidden) team.hidden = true; });
-
-  // Change password
-  let pwFor = null;
-  const modal = $("pdPwModal");
-  const closeModal = () => { modal.hidden = true; pwFor = null; };
-  $("pwCancel").addEventListener("click", closeModal);
-  modal.addEventListener("mousedown", (e) => { if (e.target === modal) closeModal(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) closeModal(); });
-  $("pwGen").addEventListener("click", () => { $("pwInput").value = makePassword(); });
-  $("pwCopy").addEventListener("click", () => copy($("pwInput").value));
-  $("pwSave").addEventListener("click", async () => {
-    const pw = $("pwInput").value;
-    if (pw.length < 8) { $("pwMsg").textContent = "At least 8 characters"; return; }
-    try {
-      await api(`/production-users/${encodeURIComponent(pwFor.username)}/password`, { method: "POST", body: { password: pw } });
-      const u = pwFor;
-      closeModal();
-      await loadUsers();
-      showCredentials(u.name, u.username, pw);
-      toast(`New password set for ${u.name}`);
-    } catch (err) {
-      $("pwMsg").textContent = err.message;
-    }
-  });
-
-  $("pdUsers").addEventListener("click", async (e) => {
-    const b = e.target.closest("button[data-act]");
-    if (!b) return;
-    const u = users.find((x) => x.username === b.dataset.user);
-    if (!u) return;
-    if (b.dataset.act === "copy") {
-      const pw = freshCreds.get(u.username);
-      navigator.clipboard?.writeText(signInText(u.username, pw)).then(
-        () => toast(pw ? `Copied ${u.name}'s sign-in` : "Copied the link and username - the password can't be shown again: use Password to set a new one"),
-        () => toast("Couldn't copy - select and copy by hand", "bad"));
-    } else if (b.dataset.act === "password") {
-      pwFor = u;
-      $("pwWho").textContent = u.name;
-      $("pwInput").value = makePassword();
-      $("pwMsg").textContent = "";
-      modal.hidden = false;
-      $("pwInput").focus();
-      $("pwInput").select();
-    } else if (b.dataset.act === "active") {
-      const on = !u.active;
-      if (!on && !confirm(`Switch off ${u.name}? They are signed out at once and can't sign in until you switch them on again.`)) return;
-      try {
-        await api(`/production-users/${encodeURIComponent(u.username)}/active`, { method: "POST", body: { active: on } });
-        toast(`${u.name} ${on ? "can sign in again" : "is switched off"}`);
-        loadUsers();
-      } catch (err) {
-        toast(err.message, "bad");
-      }
-    }
-  });
-  loadUsers();
-}
-
-// Sign-in details of people created / given a new password on this page.
-// Passwords are kept only as hashes on the server, so this is the only
-// place they can be read back - until this page is closed.
-const freshCreds = new Map();   // username -> password
-const signInText = (u, pw) => `Farm Buddie Production sign-in\n${location.origin}/login.html\nUsername: ${u}` + (pw ? `\nPassword: ${pw}` : "");
-
-function showCredentials(name, username, password) {
-  freshCreds.set(username, password);
-  openTeam(username);
-}
-
-function copy(text) {
-  navigator.clipboard?.writeText(text).then(() => toast("Copied"), () => toast("Couldn't copy - select and copy by hand", "bad"));
-}
-
-async function loadUsers() {
+// The team's accounts are managed in User Roles (/admin/user-roles.html);
+// here a link to it, and the entries filter lists them.
+async function loadWho() {
   try {
-    users = (await api("/production-users")).users;
+    const users = (await api("/production-users?team=production")).users;
+    $("teamBadge").textContent = users.length;
+    const sel = $("pdWho");
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">Everyone</option><option value="${esc(me.username)}">Me (${esc(me.username)})</option>` +
+      users.map((u) => `<option value="${esc(u.username)}">${esc(u.name)} (${esc(u.username)})</option>`).join("");
+    sel.value = keep;
   } catch (err) {
-    $("pdUsers").innerHTML = `<p class="pd-empty">${esc(err.message)}</p>`;
-    return;
+    console.warn("team:", err);
   }
-  // the entries filter lists them too
-  const sel = $("pdWho");
-  const keep = sel.value;
-  sel.innerHTML = `<option value="">Everyone</option><option value="${esc(me.username)}">Me (${esc(me.username)})</option>` +
-    users.map((u) => `<option value="${esc(u.username)}">${esc(u.name)} (${esc(u.username)})</option>`).join("");
-  sel.value = keep;
-  renderTeamSummary();
-  renderUsers();
-}
-
-// On the card: who's in the team at a glance + "View team"; the full list
-// (with password / switch off) opens in a popup, so the page doesn't grow.
-// The card only shows how many there are; the list is in the popup.
-function renderTeamSummary() {
-  const active = users.filter((u) => u.active).length;
-  $("teamBadge").textContent = users.length;
-  $("teamOpen").title = users.length ? `${users.length} member${users.length === 1 ? "" : "s"}, ${active} active` : "No team members yet";
-}
-
-function openTeam(highlight) {
-  $("pdTeamModal").hidden = false;
-  $("teamSearch").value = "";
-  renderUsers(typeof highlight === "string" ? highlight : null);
-  const row = typeof highlight === "string" && document.querySelector(`.pd-user[data-user="${CSS.escape(highlight)}"]`);
-  if (row) row.scrollIntoView({ block: "nearest" }); else $("teamSearch").focus();
-}
-
-function renderUsers(highlight = null) {
-  const q = ($("teamSearch")?.value || "").trim().toLowerCase();
-  const list = q ? users.filter((u) => `${u.name} ${u.username}`.toLowerCase().includes(q)) : users;
-  $("teamCount").textContent = `${users.length}`;
-  if (!list.length) {
-    $("pdUsers").innerHTML = `<p class="pd-empty">${users.length ? "Nobody matches." : "No production team accounts yet."}</p>`;
-    return;
-  }
-  $("pdUsers").innerHTML = list.map((u) => `
-    <article class="pd-user${u.active ? "" : " off"}${u.username === highlight ? " pd-new" : ""}" data-user="${esc(u.username)}">
-      <span class="pd-avatar">${esc((u.name || u.username).charAt(0).toUpperCase())}</span>
-      <div class="pd-user-main"><b>${esc(u.name)}</b><span>@${esc(u.username)}${u.active ? "" : " · switched off"}</span></div>
-      <div class="pd-user-stat"><b>${u.entries ?? "–"}<i>/</i>${u.nodeEntries ?? "–"}</b><small>controllers / nodes</small></div>
-      <div class="pd-user-meta"><small>Last sign-in</small>${u.lastLoginAt ? `${fmtDate(u.lastLoginAt)}, ${fmtTime(u.lastLoginAt)}` : "never"}</div>
-      <div class="pd-user-meta"><small>Created by</small>${esc(u.createdBy || "-")}</div>
-      ${freshCreds.has(u.username) ? `<div class="pd-user-cred">${icon("key-round")}<span>Username <code>${esc(u.username)}</code></span><span>Password <code>${esc(freshCreds.get(u.username))}</code></span><small>shown until this page is closed</small></div>` : ""}
-      <div class="pd-user-actions">
-        <button type="button" class="pd-btn pd-btn-ghost" data-act="copy" data-user="${esc(u.username)}" title="Login link, username${freshCreds.has(u.username) ? " and password" : ""}">${icon("copy")}Copy sign-in</button>
-        <button type="button" class="pd-btn pd-btn-ghost" data-act="password" data-user="${esc(u.username)}">${icon("key-round")}Password</button>
-        <button type="button" class="pd-btn ${u.active ? "pd-btn-ghost" : "pd-btn-primary"}" data-act="active" data-user="${esc(u.username)}">${icon("power")}${u.active ? "Switch off" : "Switch on"}</button>
-      </div>
-    </article>`).join("");
 }

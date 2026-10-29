@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>User Roles | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/js/admin-shell.js"></script>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js">
+  <link rel="modulepreload" href="/js/firebase-init.js">
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-mobile.css">
+  <link rel="stylesheet" href="/css/theme-dark.generated.css">
+  <link rel="stylesheet" href="/css/admin-shell.css">
+  <link rel="stylesheet" href="/css/production.css">
+  <link rel="stylesheet" href="/css/user-roles.css">
+</head>
+
+<body class="fb-layout fbx-prod-body">
+
+<!-- SIDEBAR (Classic view) -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/vps-status.html">🖥️ VPS & TBMQ</a>
+    <a href="/admin/ota.html">🚀 Firmware OTA</a>
+    <a href="/admin/event-log.html">🗃️ Event Log</a>
+    <a href="/admin/broadcast.html">📢 Message Broadcast</a>
+    <a href="/admin/pricing.html">💰 Module Pricing</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>👥 User Roles</h1>
+  <span class="fb-user">Admin</span>
+</header>
+
+<div class="pd ur" id="ur" aria-busy="true">
+
+  <section class="pd-hero">
+    <div class="pd-hero-grid" aria-hidden="true"></div>
+    <div class="pd-hero-txt">
+      <span class="fbx-eyebrow"><span class="fbx-dot"></span>Admin · Access</span>
+      <h1 class="pd-title">User Roles</h1>
+      <p>Team accounts: they sign in on the normal login page with a username, and see only their team's pages.</p>
+    </div>
+    <div class="pd-stats">
+      <div class="pd-stat pd-stat-main"><small>Production team</small><b id="urCountProduction">–</b></div>
+      <div class="pd-stat"><small>Onboarding team</small><b id="urCountOnboarding">–</b></div>
+      <div class="pd-stat"><small>Switched off</small><b id="urCountOff">–</b></div>
+    </div>
+  </section>
+
+  <div class="ur-grid">
+    <section class="pd-card pd-team ur-team" data-team="production" data-tone="amber" aria-labelledby="urTitleProduction">
+      <div class="pd-card-head">
+        <h2 id="urTitleProduction"><span class="pd-ic ur-ic" data-icon="factory"></span>Production team</h2>
+        <button type="button" class="pd-btn pd-btn-ghost pd-team-open" data-open="production"><span class="pd-ic" data-icon="users"></span>View team <span class="pd-badge" data-badge="production">0</span></button>
+      </div>
+      <div class="ur-access"><small>Can use</small><span><span class="pd-ic" data-icon="factory"></span>Production</span></div>
+      <form class="pd-newuser" data-form="production" autocomplete="off" novalidate></form>
+      <p class="pd-field-msg" data-msg="production"></p>
+    </section>
+
+    <section class="pd-card pd-team ur-team" data-team="onboarding" data-tone="sky" aria-labelledby="urTitleOnboarding">
+      <div class="pd-card-head">
+        <h2 id="urTitleOnboarding"><span class="pd-ic ur-ic" data-icon="user-plus"></span>Onboarding team</h2>
+        <button type="button" class="pd-btn pd-btn-ghost pd-team-open" data-open="onboarding"><span class="pd-ic" data-icon="users"></span>View team <span class="pd-badge" data-badge="onboarding">0</span></button>
+      </div>
+      <div class="ur-access"><small>Can use</small>
+        <span><span class="pd-ic" data-icon="user-plus"></span>Farmer Onboarding</span>
+        <span><span class="pd-ic" data-icon="plus"></span>Add Farm</span>
+        <span><span class="pd-ic" data-icon="user-cog"></span>Edit Farm</span>
+        <span><span class="pd-ic" data-icon="users"></span>Farmer Database</span>
+      </div>
+      <form class="pd-newuser" data-form="onboarding" autocomplete="off" novalidate></form>
+      <p class="pd-field-msg" data-msg="onboarding"></p>
+    </section>
+  </div>
+
+</div>
+
+</main>
+
+<div class="pd-toast" id="pdToast" role="status" aria-live="polite"></div>
+
+<div class="pd-modal" id="urTeamModal" hidden>
+  <div class="pd-modal-box pd-team-box" role="dialog" aria-modal="true" aria-labelledby="urTeamTitle">
+    <div class="pd-team-box-head">
+      <h3 id="urTeamTitle"><span class="pd-ic" data-icon="users"></span><span id="urTeamName">Team</span> <small id="urTeamCount"></small></h3>
+      <button type="button" class="pd-icon-btn" id="urTeamClose" aria-label="Close"><span class="pd-ic" data-icon="x"></span></button>
+    </div>
+    <input type="search" id="urTeamSearch" class="pd-team-search" placeholder="Find by name or username" aria-label="Find a team member">
+    <div class="pd-users" id="urUsers"></div>
+  </div>
+</div>
+
+<div class="pd-modal" id="urPwModal" hidden>
+  <div class="pd-modal-box" role="dialog" aria-modal="true" aria-labelledby="urPwTitle">
+    <h3 id="urPwTitle"><span class="pd-ic" data-icon="key-round"></span><span>New password for <span id="urPwWho"></span></span></h3>
+    <p class="pd-hint">They are signed out everywhere and use this from now on. Only an admin can change it.</p>
+    <span class="pd-pw">
+      <input id="urPwInput" type="text" autocomplete="new-password" spellcheck="false">
+      <button type="button" class="pd-icon-btn" id="urPwGen" aria-label="Make a password"><span class="pd-ic" data-icon="wand-sparkles"></span></button>
+      <button type="button" class="pd-icon-btn" id="urPwCopy" aria-label="Copy"><span class="pd-ic" data-icon="copy"></span></button>
+    </span>
+    <p class="pd-field-msg" id="urPwMsg"></p>
+    <div class="pd-actions">
+      <button type="button" class="pd-btn pd-btn-primary" id="urPwSave">Change password</button>
+      <button type="button" class="pd-btn pd-btn-ghost" id="urPwCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="pd-modal" id="urDelModal" hidden>
+  <div class="pd-modal-box" role="alertdialog" aria-modal="true" aria-labelledby="urDelTitle" aria-describedby="urDelText">
+    <h3 id="urDelTitle" class="ur-del-title"><span class="pd-ic" data-icon="trash-2"></span><span>Delete <span id="urDelWho"></span>?</span></h3>
+    <p class="pd-hint" id="urDelText"></p>
+    <div class="pd-actions">
+      <button type="button" class="pd-btn ur-btn-danger" id="urDelYes"><span class="pd-ic" data-icon="trash-2"></span>Delete for good</button>
+      <button type="button" class="pd-btn pd-btn-ghost" id="urDelNo">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/js/user-roles.js"></script>
+<script src="/js/admin-mobile.js" defer></script>
+</body>
+</html>

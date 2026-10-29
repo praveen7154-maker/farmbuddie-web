@@ -1,5 +1,5 @@
 import { FieldValue, FieldPath } from "firebase-admin/firestore";
-import { db } from "../firebaseAdmin.js";
+import { db, auth } from "../firebaseAdmin.js";
 import { UNIQUE_FIELDS } from "./production.js";
 import { createFirestoreNodes } from "./productionNodesStore.js";
 
@@ -142,3 +142,36 @@ export const firestoreControllers = {
 // ---- nodes ("nodes", one document per node, id = its serial number) ----
 // See productionNodesStore.js.
 export const firestoreNodes = createFirestoreNodes({ db, FieldValue, FieldPath });
+
+// ---- the onboarding team's Firebase sign-in (production.js "teamAuth") ----
+// teamAccess/<uid>: what the Firestore rules check on every read / write of
+// an onboarding team member - off (or gone) means no access at once, not
+// when their sign-in runs out.
+const teamAccess = (uid) => db.collection("teamAccess").doc(uid);
+const ignoreMissing = (err) => { if (err?.code !== "auth/user-not-found") throw err; };
+
+export const firebaseTeamAuth = {
+  customToken: (uid, claims) => auth.createCustomToken(uid, claims),
+
+  async setAccess(uid, { active, username, name }) {
+    await teamAccess(uid).set({ team: "onboarding", active: !!active, username, name: name || username, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    // The Firebase user appears at the first sign-in; before that there's nothing to switch.
+    await auth.updateUser(uid, { disabled: !active }).catch(ignoreMissing);
+    if (!active) await auth.revokeRefreshTokens(uid).catch(ignoreMissing);
+  },
+
+  async signOut(uid) {
+    await auth.revokeRefreshTokens(uid).catch(ignoreMissing);
+  },
+
+  async remove(uid) {
+    await teamAccess(uid).delete();
+    await auth.deleteUser(uid).catch(ignoreMissing);
+  },
+
+  // Farms they saved (onboarding / Add Farm write createdBy = their uid).
+  async countOnboarded(uid) {
+    const snap = await db.collection("farmers").where("createdBy", "==", uid).count().get();
+    return snap.data().count;
+  }
+};

@@ -56,10 +56,10 @@
   <!-- Firebase Login Logic (CORRECT VERSION) -->
   <script type="module">
     import { auth } from "/js/firebase-init.js";
-    import { signInWithEmailAndPassword, signOut }
+    import { signInWithEmailAndPassword, signInWithCustomToken, signOut }
       from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
     import { BRIDGE_BASE_URL } from "/js/config.js";
-    import { saveStaffSession, clearStaffSession } from "/js/production-session.js";
+    import { saveStaffSession, clearStaffSession, saveTeamSession, clearTeamSession } from "/js/production-session.js";
 
     const emailInput = document.getElementById("email");
     const passwordInput = document.getElementById("password");
@@ -83,9 +83,9 @@
       loginBtn.disabled = true;
       loginBtn.textContent = "Signing in...";
 
-      // No "@": a production team member (an account the admin made on
-      // the Production page) - signed in by our server, not Firebase, and
-      // taken straight to the Production module.
+      // No "@": a team member (an account the admin made in User Roles) -
+      // checked by our server: the production team goes to the Production
+      // module, the onboarding team to Farmer Onboarding.
       if (!email.includes("@")) {
         staffLogin(email, passwordInput.value);
         return;
@@ -95,6 +95,7 @@
         .then((cred) => {
           console.log("LOGIN SUCCESS:", cred.user.uid);
           clearStaffSession();
+          clearTeamSession();
           // Modern view (the default) starts on the module Home page,
           // Classic on the Dashboard as before - see /js/admin-shell.js.
           let view = null;
@@ -122,6 +123,15 @@
         });
         const body = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(body.error || "Sign-in failed - try again");
+        if (body.kind === "firebase") {
+          // The onboarding team: a Firebase sign-in our server made for them.
+          clearStaffSession();
+          await signInWithCustomToken(auth, body.customToken);
+          saveTeamSession(body);
+          window.location.href = "/admin/farmer-onboarding.html";
+          return;
+        }
+        clearTeamSession();
         saveStaffSession(body);
         window.location.href = "/admin/production.html";
       } catch (err) {

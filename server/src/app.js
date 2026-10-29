@@ -11,7 +11,8 @@ import { provisionBootstrapRouter } from "./routes/provisionBootstrap.js";
 import { provisionBindRouter } from "./routes/provisionBind.js";
 import { fcmTokenRouter } from "./routes/fcmToken.js";
 import { statusRouter } from "./routes/status.js";
-import { requireAdmin } from "./adminAuth.js";
+import { requireAdmin, requireAdminOrOnboarding } from "./adminAuth.js";
+import { isActiveOnboarding } from "./teamAccess.js";
 
 export const app = express();
 
@@ -48,7 +49,9 @@ app.use(
   cors({ origin: config.adminOrigins }),
   provisionLimiter,
   verifyFirebaseToken,
-  requireAdmin,   // CORS alone doesn't stop a non-browser caller - any signed-in phone could rotate a hub's password
+  // CORS alone doesn't stop a non-browser caller - any signed-in phone could
+  // rotate a hub's password. An admin, or the onboarding team (issue only).
+  requireAdminOrOnboarding(isActiveOnboarding),
   provisionDeviceRouter
 );
 
