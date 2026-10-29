@@ -1,6 +1,7 @@
 import { FieldValue, FieldPath } from "firebase-admin/firestore";
 import { db } from "../firebaseAdmin.js";
-import { UNIQUE_FIELDS, NODE_TYPES, NODE_FIRST, NODE_LAST } from "./production.js";
+import { UNIQUE_FIELDS } from "./production.js";
+import { createFirestoreNodes } from "./productionNodesStore.js";
 
 // Firestore side of production.js: the same "controllers" collection the
 // MCU / Controller page's Excel upload writes, same fields.
@@ -139,75 +140,5 @@ export const firestoreControllers = {
 };
 
 // ---- nodes ("nodes", one document per node, id = its serial number) ----
-// The farm pages (onboarding, Add Farm, Edit) offer the "available" ones of
-// a type and mark them "assigned" to the farm, as with controllers.
-const nodesCol = () => db.collection("nodes");
-// The last running number given out per serial stem ("FBMN26" -> 10003).
-const nodeCounter = (stem) => db.collection("counters").doc(`nodes_${stem}`);
-
-// The highest running number already used with this stem - for a stem
-// without a counter yet (or one that was lost).
-async function highestNumber(get, stem) {
-  const snap = await get(nodesCol()
-    .where(FieldPath.documentId(), ">=", stem)
-    .where(FieldPath.documentId(), "<", stem + "~")
-    .orderBy(FieldPath.documentId(), "desc").limit(20));
-  const nums = snap.docs.map((d) => d.id.slice(stem.length)).filter((x) => /^\d{5}$/.test(x)).map(Number);
-  return nums.length ? Math.max(...nums) : NODE_FIRST - 1;
-}
-
-export const firestoreNodes = {
-  // The counter and the new documents in one transaction: two saves at the
-  // same moment get different numbers (the second one retries), and
-  // create() refuses a serial that somehow exists already.
-  async createMany({ stem, count, doc }) {
-    return db.runTransaction(async (t) => {
-      const ref = nodeCounter(stem);
-      const ctr = await t.get(ref);
-      let last = Math.max(NODE_FIRST - 1, ctr.exists ? Number(ctr.get("last")) || 0 : 0, await highestNumber((q) => t.get(q), stem));
-      if (last + count > NODE_LAST) throw Object.assign(new Error("full"), { full: true });
-      const out = [];
-      for (let i = 1; i <= count; i++) {
-        const serialNumber = stem + (last + i);
-        t.create(nodesCol().doc(serialNumber), { ...doc, serialNumber, createdAt: FieldValue.serverTimestamp() });
-        out.push({ id: serialNumber, ...doc, serialNumber });
-      }
-      t.set(ref, { last: last + count, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      return out;
-    });
-  },
-
-  async nextNumbers(stems) {
-    const snaps = await db.getAll(...stems.map(nodeCounter));
-    const out = {};
-    await Promise.all(stems.map(async (stem, i) => {
-      const fromCounter = snaps[i].exists ? Number(snaps[i].get("last")) || 0 : 0;
-      out[stem] = Math.max(fromCounter, await highestNumber((q) => q.get(), stem)) + 1;
-    }));
-    return out;
-  },
-
-  async list({ from, to, createdById = null }) {
-    const snap = await nodesCol().where("createdAt", ">=", new Date(from)).where("createdAt", "<", new Date(to)).get();
-    return snap.docs
-      .map((d) => ({ id: d.id, ...d.data(), createdAtMs: ms(d.get("createdAt")) }))
-      .filter((n) => !createdById || n.createdBy?.id === createdById);
-  },
-
-  async countBy(createdById) {
-    const snap = await nodesCol().where("createdBy.id", "==", createdById).count().get();
-    return snap.data().count;
-  },
-
-  async stock() {
-    const count = async (q) => (await q.count().get()).data().count;
-    const rows = await Promise.all(NODE_TYPES.map(async ({ type }) => {
-      const [total, available] = await Promise.all([
-        count(nodesCol().where("type", "==", type)),
-        count(nodesCol().where("type", "==", type).where("status", "==", "available"))
-      ]);
-      return [type, { available, assigned: total - available, total }];
-    }));
-    return Object.fromEntries(rows);
-  }
-};
+// See productionNodesStore.js.
+export const firestoreNodes = createFirestoreNodes({ db, FieldValue, FieldPath });
