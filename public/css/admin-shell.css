@@ -173,11 +173,12 @@ html[data-theme="dark"] .fbx-logo {
 .fbx-brand-txt { display: flex; flex-direction: column; line-height: 1.1; }
 .fbx-brand-txt b { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 
-/* "Farm Buddie" and the Home greeting: colour flowing slowly through the
+/* "Farm Buddie", the Home greeting and clock: colour flowing slowly through the
    brand greens, teal and sky. The gradient repeats its first colour at the
    end, so moving it one full width loops without a jump. */
 .fbx-brand-txt b,
-.fbx-hero h1 {
+.fbx-hero h1,
+.fbx-clock b {
   --fbx-flow: #15803d, #0f9488, #2a7dbf, #5b9a1c, #15803d;
   background-image: linear-gradient(90deg, var(--fbx-flow));
   background-size: 200% 100%;
@@ -188,7 +189,8 @@ html[data-theme="dark"] .fbx-logo {
   animation: fbx-flow 9s linear infinite;
 }
 html[data-theme="dark"] .fbx-brand-txt b,
-html[data-theme="dark"] .fbx-hero h1 {
+html[data-theme="dark"] .fbx-hero h1,
+html[data-theme="dark"] .fbx-clock b {
   --fbx-flow: #5bd498, #48c9bc, #74b6ec, #a2d462, #5bd498;
 }
 @keyframes fbx-flow {
