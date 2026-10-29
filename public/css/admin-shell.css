@@ -421,6 +421,9 @@ html[data-view="modern"] .fb-nav-backdrop { display: none !important; }
 html[data-view="modern"] .fb-layout { display: block; }
 html[data-view="modern"] .fb-main { width: 100%; min-width: 0; }
 html[data-view="modern"].fbx-has-header .fb-user { display: none; }
+/* the title bar admin-mobile.js adds to pages without one (Device View):
+   only there to hold the Classic menu button - the header names the page */
+html[data-view="modern"].fbx-has-header .fb-topbar-auto { display: none; }
 
 /* Classic: the sidebar as it was, plus Home; the header stays for the
    theme / view switches and the breadcrumbs */

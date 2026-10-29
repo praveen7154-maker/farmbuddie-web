@@ -19,16 +19,33 @@
   align-items: center;
 }
 
+/* Event Log (a link) and Back (a button) - same size and shape */
 .back-industrial {
-  background: rgba(0,0,0,0.05);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
   border: none;
-  padding: 6px 14px;
   border-radius: 20px;
+  background: rgba(0,0,0,0.05);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .header-actions { display: flex; gap: 8px; align-items: center; }
-a.back-industrial { color: inherit; text-decoration: none; font-size: 13px; }
+a.back-industrial { text-decoration: none; }
+
+/* Phones: title (with the Online pill) on one line, the buttons under it */
+@media (max-width: 600px) {
+  .device-header-industrial { flex-wrap: wrap; gap: 10px; }
+  .title-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; font-size: 18px; }
+  .header-actions { width: 100%; }
+}
 a.back-industrial[hidden] { display: none; }
 
 /* CARD */

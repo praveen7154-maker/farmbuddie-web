@@ -20,7 +20,7 @@
       // Pages without a top bar get a minimal one so the menu is reachable.
       var main = document.querySelector(".fb-main") || body;
       var bar = document.createElement("header");
-      bar.className = "fb-topbar";
+      bar.className = "fb-topbar fb-topbar-auto";   // admin-shell.css hides it in Modern view (the header names the page)
       bar.appendChild(btn);
       var title = document.createElement("h1");
       title.textContent = document.title.split("|")[0].trim();

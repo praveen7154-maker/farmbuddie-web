@@ -112,6 +112,11 @@
 .ota-card [hidden], #tamilFields[hidden], #farmPicker[hidden] { display: none !important; }
 
 @media (max-width: 960px) {
-  .bc-compose { grid-template-columns: 1fr; }
-  .bc-preview-wrap { position: static; max-width: 380px; }
+  /* minmax(0, ...): a plain 1fr column grows to its widest content and
+     pushed the form and the phone preview out past the card on phones */
+  .bc-compose { grid-template-columns: minmax(0, 1fr); }
+  .bc-preview-wrap { position: static; width: 100%; max-width: 380px; min-width: 0; }
+  .bc-form { min-width: 0; }
+  .bc-template { max-width: 100%; }
+  .bc-toggle { align-items: flex-start; flex-wrap: wrap; }
 }
