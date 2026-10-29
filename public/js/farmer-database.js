@@ -1,7 +1,6 @@
 import { auth, db } from "/js/firebase-init.js";
 import { valveConfigExportColumns } from "/js/valve-config.js";
-import { nodeTypeName } from "/js/node-types.js";
-import { saveNodeMapping } from "/js/node-mapping.js";
+import { saveNodeMapping, nodeMappingExportText } from "/js/node-mapping.js";
 import { isDeviceOnline } from "/js/device-status-render.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
@@ -402,7 +401,7 @@ window.downloadAllFarmersExcel = async function () {
         /* ===== VALVE CONFIG ===== */
 
         ...valveConfigExportColumns(f.valveConfig),
-        "Nodes": (f.nodes || []).map((n) => `${nodeTypeName(n.type)} ${n.serialNumber}`).join(", "),
+        "Nodes": nodeMappingExportText(f.nodes),
 
         /* ===== TNEB SERVICE ===== */
 

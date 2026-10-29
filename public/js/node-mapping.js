@@ -220,6 +220,8 @@ export function createNodeMapping(container, db) {
     },
     /** Before saving: still free right now? -> an error message or null. */
     async check(farmerDocId = null) {
+      // a hub-only farm (no node rows): nothing to check, nothing read
+      if (!this.read().nodes.length) return null;
       await load();
       const { nodes, error } = this.read();
       if (error) return error;
@@ -237,6 +239,7 @@ export function createNodeMapping(container, db) {
     async save({ farmerDocId, farmBuddieId }) {
       const { nodes, error } = this.read();
       if (error) throw new Error(error);
+      if (!nodes.length && !previous.length) return nodes;     // hub only, and nothing to free: no write
       await saveNodeMapping(db, { farmerDocId, farmBuddieId, nodes, previous });
       previous = nodes.map((n) => ({ ...n }));
       own = previous.map((n) => ({ ...n }));
@@ -294,11 +297,18 @@ export async function saveNodeMapping(db, { farmerDocId, farmBuddieId, nodes, pr
   });
 }
 
-/** View pages: the farm's nodes as an info grid ("" when none). */
+/** View pages (and their PDF / print): the farm's nodes as an info grid. */
 export function nodeMappingViewHtml(nodes) {
   const list = Array.isArray(nodes) ? nodes.filter((n) => n && n.serialNumber) : [];
-  if (!list.length) return "";
   return `
     <div class="section-title">🔗 Node Mapping</div>
-    <div class="info-grid">${list.map((n) => `<div class="info-item"><b>${esc(nodeTypeName(n.type))}:</b> ${esc(n.serialNumber)}</div>`).join("")}</div>`;
+    <div class="info-grid">${list.length
+      ? list.map((n) => `<div class="info-item"><b>${esc(nodeTypeName(n.type))}:</b> ${esc(n.serialNumber)}</div>`).join("")
+      : `<div class="info-item full">No nodes - hub only</div>`}</div>`;
+}
+
+/** Excel: one column with every node ("Motor node FBMN2610001, ..."), "None" for a hub-only farm. */
+export function nodeMappingExportText(nodes) {
+  const list = Array.isArray(nodes) ? nodes.filter((n) => n && n.serialNumber) : [];
+  return list.length ? list.map((n) => `${nodeTypeName(n.type)} ${n.serialNumber}`).join(", ") : "None";
 }
