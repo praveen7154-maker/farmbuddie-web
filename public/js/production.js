@@ -152,6 +152,10 @@ async function loadSummary() {
   try {
     const s = await api(`/production/summary?kind=${want}`);
     if (want !== kind()) return;            // switched mode meanwhile
+    // A bridge server from before nodes answers with the controllers' numbers
+    // (no next serials) - say so instead of waiting for serials that never come.
+    if (want === "node" && s.kind !== "node") { nodeTrouble(OLD_SERVER); return; }
+    if (want === "node") nodeTrouble("");
     countTo($("pdMine"), s.mineToday);
     countTo($("pdTeamToday"), s.teamToday);
     countTo($("pdMineTotal"), s.mineTotal);
@@ -173,6 +177,7 @@ async function loadSummary() {
     b.textContent = nextUniqueId ? `Next free: ${nextUniqueId}` : "";
   } catch (err) {
     console.warn("summary:", err);
+    if (want === "node" && want === kind()) nodeTrouble(`Couldn't get the next serials: ${err.message}`);
   }
 }
 const toneOf = (v) => ({ IRRIGO: "green", IRRIGO_PLUS: "sky", IRRIGO_SMART_PLUS: "violet" }[v] || "teal");
@@ -621,6 +626,14 @@ let nodeType = null;
 let nextSerials = {};
 let nodeQty = 1;
 let qrShown = "";
+let nodeProblem = "";          // why there's no serial to show (server not updated / unreachable)
+const OLD_SERVER = "The server isn't updated for nodes yet - rebuild the bridge on the VPS (docker compose up -d --build bridge), then reload this page.";
+
+function nodeTrouble(msg) {
+  nodeProblem = msg;
+  $("pdNodeMake")?.classList.toggle("pd-trouble", !!msg);
+  showNode();
+}
 
 function setupNodes() {
   const box = $("pdNodeTypes");
@@ -689,12 +702,13 @@ function showNode() {
     if (nextSerials[b.dataset.type]) b.querySelector("[data-next]").textContent = nextSerials[b.dataset.type];
   });
   const t = NODE_TYPES.find((x) => x.type === nodeType);
-  const next = t ? nextSerials[t.type] : null;
+  const next = t && !nodeProblem ? nextSerials[t.type] : null;
   $("pdNodeLabel").dataset.tone = t ? nodeTone(t.type) : "";
   $("pdNodeTypeName").textContent = t ? t.name.toUpperCase() : "Choose the node type";
   $("pdNodeSerial").textContent = next || (t ? "…" : "— — —");
   $("pdNodeSn").textContent = next || (t ? "…" : "—");
-  $("pdNodeRange").textContent = next && nodeQty > 1 ? `${nodeQty} nodes: ${next} → ${serialPlus(next, nodeQty - 1)}` : next ? "the next free serial of this type" : "";
+  $("pdNodeRange").textContent = nodeProblem || (next && nodeQty > 1 ? `${nodeQty} nodes: ${next} → ${serialPlus(next, nodeQty - 1)}` : next ? "the next free serial of this type" : "");
+  if (nodeProblem) { $("pdNodeSn").textContent = "not available"; $("pdNodeSerial").textContent = "— — —"; }
   nodeSaveText();
   drawQr(next || "");
 }
@@ -752,7 +766,8 @@ async function saveNodes() {
     showNode();
     loadSummary();
   } catch (err) {
-    toast(err.message, "bad");
+    toast(err.status === 404 ? OLD_SERVER : err.message, "bad");
+    if (err.status === 404) nodeTrouble(OLD_SERVER);
   } finally {
     saving = false;
     btn.disabled = false;
@@ -838,6 +853,11 @@ async function loadEntries() {
     const q = new URLSearchParams({ day: currentDay, kind: want, ...(who ? { by: who } : {}) });
     const r = await api(`/production/entries?${q}`);
     if (want !== kind()) return;            // switched mode meanwhile
+    if (want === "node" && r.kind !== "node") {         // a server from before nodes: those would be controllers
+      entries = []; listKind = want;
+      box.innerHTML = `<p class="pd-empty">${esc(OLD_SERVER)}</p>`;
+      return;
+    }
     entries = r.entries;
     listKind = want;
     renderEntries();
