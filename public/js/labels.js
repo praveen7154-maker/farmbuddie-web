@@ -3,7 +3,7 @@
 // ... set to 2 x 1 in labels). By default two of each: one for the module
 // box, one for the carton.
 //
-//   FARM BUDDIE · IRRIGO PLUS            ID 0007
+//               FARM BUDDIE · IRRIGO PLUS
 //   ||| ||||| || |||| ||| || ||||| || | ||| ||
 //              IRRIGOPLUS26PP10001
 //
@@ -14,8 +14,7 @@ import { bars128 } from "/js/barcode128.js";
 
 const LABEL_W = 50.8, LABEL_H = 25.4;          // mm
 const QUIET = 2.0;                              // mm of white each side of the bars (scanners need it)
-// Short enough for the label's top line next to the ID.
-const VARIANT_NAMES = { IRRIGO: "IRRIGO", IRRIGO_PLUS: "IRRIGO PLUS", IRRIGO_SMART_PLUS: "SMART PLUS" };
+const VARIANT_NAMES = { IRRIGO: "IRRIGO", IRRIGO_PLUS: "IRRIGO PLUS", IRRIGO_SMART_PLUS: "IRRIGO SMART PLUS" };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -32,7 +31,7 @@ function barcodeSvg(text) {
 export function labelsHtml(controllers, copies = 2) {
   const one = (c) => `
     <section class="label">
-      <header><span><b>FARM BUDDIE</b> · ${esc(VARIANT_NAMES[c.variant] || c.variant || "")}</span><span>${c.uniqueId ? `ID <b>${esc(c.uniqueId)}</b>` : ""}</span></header>
+      <header><b>FARM BUDDIE</b>${c.variant ? ` · ${esc(VARIANT_NAMES[c.variant] || c.variant)}` : ""}</header>
       ${barcodeSvg(c.serialNumber)}
       <div class="sn">${esc(c.serialNumber)}</div>
     </section>`;
@@ -48,10 +47,8 @@ export function labelsHtml(controllers, copies = 2) {
       overflow: hidden; page-break-after: always; break-after: page;
     }
     .label:last-child { page-break-after: auto; break-after: auto; }
-    header { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 1.5mm;
-      font-size: 6.4pt; line-height: 1; letter-spacing: 0.03em; white-space: nowrap; }
-    header span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    header span:last-child { flex: none; }
+    header { width: 100%; text-align: center; font-size: 6.4pt; line-height: 1; letter-spacing: 0.06em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     header b { font-weight: 800; }
     .bc { display: block; height: 12.2mm; }
     .sn { font: 700 9.5pt/1 "Consolas", "Roboto Mono", "DejaVu Sans Mono", monospace; letter-spacing: 0.08em; white-space: nowrap; }
