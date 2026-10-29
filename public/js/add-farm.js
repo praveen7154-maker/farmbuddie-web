@@ -253,7 +253,7 @@ async function selectFarmer(docId, data) {
   const el = document.getElementById(id);
   if (el) {
     el.disabled = true;
-    el.style.backgroundColor = "#f3f3f3"; // optional visual cue
+    // looks locked through the stylesheets (light and dark) - no inline colour
   }
 });
 

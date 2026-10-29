@@ -41,8 +41,8 @@ document.getElementById("logoutBtn")?.addEventListener("click", () => {
 const msg = sessionStorage.getItem("distSuccess");
 if (msg) {
   const successBox = document.createElement("div");
-  successBox.style.background = "#e6f9f0";
-  successBox.style.color = "#065f46";
+  successBox.style.background = "var(--fbx-accent-soft, #e6f9f0)";
+  successBox.style.color = "var(--fbx-accent, #065f46)";
   successBox.style.padding = "12px 18px";
   successBox.style.borderRadius = "12px";
   successBox.style.marginBottom = "20px";

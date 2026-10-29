@@ -16,7 +16,7 @@
   --fbx-line-strong: #cfddd5;
   --fbx-text: #15241d;
   --fbx-muted: #5d6f67;
-  --fbx-faint: #8a9a93;
+  --fbx-faint: #6b7d74;
   --fbx-accent: #1f9d5c;
   --fbx-accent-2: #16834b;
   --fbx-accent-soft: #e3f4ea;
@@ -793,10 +793,29 @@ html[data-theme="dark"] .fb-main :where(input:not([type="checkbox"], [type="radi
 }
 html[data-theme="dark"] .fb-main input::placeholder,
 html[data-theme="dark"] .fb-main textarea::placeholder { color: var(--fbx-faint); }
+/* Locked fields (disabled / read-only - e.g. Add Farm's farmer identity,
+   Edit's locked MCU): a dark, dashed "locked" look with text that can be
+   read - over any light background a page's code or old CSS sets, and over
+   Chrome's own pale disabled text colour. */
 html[data-theme="dark"] .fb-main input:disabled,
 html[data-theme="dark"] .fb-main select:disabled,
-html[data-theme="dark"] .fb-main textarea:disabled { opacity: 0.6; }
-html[data-theme="dark"] .fb-main input[readonly] { background-color: var(--fbx-surface); }
+html[data-theme="dark"] .fb-main textarea:disabled,
+html[data-theme="dark"] .fb-main input[readonly]:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="dark"] .fb-main textarea[readonly] {
+  opacity: 1 !important;
+  background-color: var(--fbx-surface-2) !important;
+  background-image: none !important;
+  color: var(--fbx-muted) !important;
+  -webkit-text-fill-color: var(--fbx-muted) !important;
+  border-color: var(--fbx-line-strong) !important;
+  border-style: dashed !important;
+}
+html[data-theme="dark"] .fb-main input:disabled::placeholder,
+html[data-theme="dark"] .fb-main textarea:disabled::placeholder { color: var(--fbx-faint); -webkit-text-fill-color: var(--fbx-faint); }
+/* light theme: the same fields keep their text readable too */
+html[data-theme="light"] .fb-main input:disabled,
+html[data-theme="light"] .fb-main select:disabled,
+html[data-theme="light"] .fb-main textarea:disabled { color: #4b5b54; -webkit-text-fill-color: #4b5b54; opacity: 1; }
 html[data-theme="dark"] .fb-main option { background: var(--fbx-surface); color: var(--fbx-text); }
 html[data-theme="dark"] .fb-main input[type="file"] { color: var(--fbx-muted); }
 html[data-theme="dark"] .fb-main input[type="file"]::file-selector-button {
@@ -939,3 +958,22 @@ html[data-view="classic"] .fbx-brand-txt { display: none; }
 @media print {
   .fbx-header, .fbx-palette { display: none !important; }
 }
+
+/* Dark theme: greyed-out (disabled) buttons stay faded but readable, and
+   small badges keep their text readable on the brighter dark-theme greens */
+html[data-theme="dark"] .fb-main button:disabled,
+html[data-theme="dark"] .fb-main .fb-btn-primary:disabled { opacity: 0.7 !important; }
+html[data-theme="dark"] .farm-badge { background: #1d7a43; color: #ffffff; }
+html[data-theme="dark"] .pd-badge { color: #0c1a12; }
+html[data-theme="dark"] .fb-page-btn { color: var(--fbx-text); }
+html[data-theme="dark"] .fb-page-btn.active { color: #ffffff; }
+
+/* Light theme: the same - faded disabled buttons still readable, badges dark enough */
+html[data-theme="light"] .fb-main button:disabled,
+html[data-theme="light"] .fb-main .fb-btn-primary:disabled { opacity: 0.75 !important; }
+html[data-theme="light"] .fb-page-btn { color: #2f3d37; }
+html[data-theme="light"] .farm-badge.farm-2 { color: #00775f; }
+html[data-theme="light"] .farm-badge.farm-3 { color: #157a70; }
+html[data-theme="light"] .farm-badge.farm-4 { color: #1b7a43; }
+html[data-theme="light"] .farm-badge.farm-5 { color: #0b7a5e; }
+html[data-theme="light"] .fbx-card-tag { color: #5d6f66; }
