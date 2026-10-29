@@ -114,22 +114,37 @@
           <span class="pd-input"><input name="imeiNumber" inputmode="numeric" maxlength="20" placeholder="15 digits"><i class="pd-state"></i></span>
           <span class="pd-field-msg"></span>
         </label>
-        <label class="pd-field" data-field="simMsisdn">
-          <span class="pd-label">SIM MSISDN</span>
-          <span class="pd-input"><input name="simMsisdn" inputmode="numeric" maxlength="20" placeholder="SIM mobile number"><i class="pd-state"></i></span>
+        <div class="pd-field pd-sim" data-field="simNumber">
+          <span class="pd-label">SIM <em>*</em> <span class="pd-sim-count" id="pdSimCount"></span></span>
+          <div class="pd-combo">
+            <span class="pd-input"><input id="pdSimSearch" name="simSearch" role="combobox" aria-expanded="false" aria-controls="pdSimList" aria-autocomplete="list"
+              autocomplete="off" inputmode="numeric" spellcheck="false" placeholder="Choose - type or scan the SIM number"><i class="pd-state"></i></span>
+            <ul class="pd-sim-list" id="pdSimList" role="listbox" hidden></ul>
+          </div>
+          <input type="hidden" name="simNumber">
+          <span class="pd-field-msg"></span>
+        </div>
+        <label class="pd-field pd-locked">
+          <span class="pd-label">SIM MSISDN <span class="pd-lock" data-icon="lock" title="Comes from the chosen SIM"></span></span>
+          <span class="pd-input"><input name="simMsisdn" readonly tabindex="-1" placeholder="from the chosen SIM"></span>
           <span class="pd-field-msg"></span>
         </label>
-        <label class="pd-field" data-field="simNumber">
-          <span class="pd-label">SIM Number (ICCID)</span>
-          <span class="pd-input"><input name="simNumber" inputmode="numeric" maxlength="24" placeholder="89919..."><i class="pd-state"></i></span>
-          <span class="pd-field-msg"></span>
-        </label>
-        <label class="pd-field" data-field="simImsi">
-          <span class="pd-label">SIM IMSI</span>
-          <span class="pd-input"><input name="simImsi" inputmode="numeric" maxlength="20" placeholder="15 digits"><i class="pd-state"></i></span>
+        <label class="pd-field pd-locked">
+          <span class="pd-label">SIM IMSI <span class="pd-lock" data-icon="lock" title="Comes from the chosen SIM"></span></span>
+          <span class="pd-input"><input name="simImsi" readonly tabindex="-1" placeholder="from the chosen SIM"></span>
           <span class="pd-field-msg"></span>
         </label>
       </form>
+
+      <div class="pd-siminv">
+        <span class="pd-ic" data-icon="microchip"></span>
+        <div><b>SIM inventory</b><small id="pdSimInv">loading…</small></div>
+        <label class="pd-btn pd-btn-ghost pd-upload" title="The operator's SIM list (CSV or Excel) - only MSISDN, SIM number and IMSI are kept">
+          <span class="pd-ic" data-icon="upload"></span>Upload SIM list
+          <input type="file" id="pdSimFile" accept=".csv,.xlsx,.xls,text/csv" hidden>
+        </label>
+      </div>
+      <div class="pd-credentials pd-simresult" id="pdSimResult" hidden></div>
 
       <div class="pd-print">
         <label class="pd-switch-row"><input type="checkbox" id="pdAutoPrint"><span class="pd-switch"><i></i></span>

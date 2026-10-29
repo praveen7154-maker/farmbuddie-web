@@ -50,6 +50,8 @@ export const FIELDS = [
 export const UNIQUE_FIELDS = FIELDS.map((f) => f.key);
 
 const clean = (v) => String(v ?? "").replace(/\s+/g, "").trim();
+// "'8991940912940333745" (the operator's CSV keeps Excel from mangling it) -> digits
+const digitsOf = (v) => String(v ?? "").replace(/[^\d]/g, "");
 
 /** Normalizes what was typed; returns { values, problems: { field: message } }. */
 export function checkFields(input) {
@@ -110,6 +112,10 @@ export const istDay = (ms) => new Date(ms + IST_MS).toISOString().slice(0, 10);
  *                    countBy(createdById) -> number
  *                    nextUniqueId() -> "0042"
  *                    lastSerials() -> { IRRIGO: "IRRIGO26AA10041", ... } (newest per variant)
+ *                    simInventory() -> [{ iccid, msisdn, imsi, status, uniqueId, controllerId }]
+ *                    usedSimNumbers() -> Map(iccid -> { controllerId, uniqueId })
+ *                    markSimAssigned(iccid, { controllerId, uniqueId })
+ *                    addSims(rows, by, fileName) -> { added: [iccid], existing: [iccid] }
  *   now          - () => ms
  */
 export function createProductionModule({ store, controllers, now = () => Date.now() }) {
@@ -253,6 +259,9 @@ export function createProductionModule({ store, controllers, now = () => Date.no
 
   router.post("/controllers", wrap(async (req, res) => {
     const { values, problems } = checkFields(req.body);
+    // The SIM comes from the SIM inventory (the page's dropdown): its MSISDN
+    // and IMSI are filled in from there, whatever was sent.
+    if (!values.simNumber) problems.simNumber = "Choose the SIM from the available SIMs";
     if (Object.keys(problems).length) return res.status(400).json({ error: "Fix the marked fields", problems });
     const doc = {
       variant: values.variant,
@@ -269,12 +278,62 @@ export function createProductionModule({ store, controllers, now = () => Date.no
     };
     try {
       const saved = await serial(() => controllers.create(doc));
+      const stored = saved.doc || doc;
       console.log(`[production] controller ${doc.uniqueId} (${doc.serialNumber}) added by ${req.who.type} ${req.who.id}`);
-      res.status(201).json({ ok: true, id: saved.id, controller: view({ ...doc, id: saved.id, createdAtMs: now() }) });
+      res.status(201).json({ ok: true, id: saved.id, controller: view({ ...stored, id: saved.id, createdAtMs: now() }) });
     } catch (err) {
+      if (err?.simError) return res.status(409).json({ error: err.simError, problems: { simNumber: err.simError } });
       if (err?.clashes) return res.status(409).json({ error: "Already used by another controller", clashes: err.clashes });
       throw err;
     }
+  }));
+
+  // ---------------- SIM inventory ----------------
+  // The SIMs bought for controllers (the operator's SIM list - only the
+  // MSISDN, SIM number / ICCID and IMSI are kept). The entry form offers the
+  // available ones; a SIM given to a controller drops out of the list.
+  async function simState() {
+    const [inv, used] = await Promise.all([controllers.simInventory(), controllers.usedSimNumbers()]);
+    const available = [];
+    let assigned = 0;
+    for (const s of inv) {
+      const u = used.get(s.iccid);
+      if (s.status === "assigned" || u) {
+        assigned++;
+        // used by a controller made outside this page (Excel upload): note it
+        if (s.status !== "assigned" && u) controllers.markSimAssigned(s.iccid, u).catch((e) => console.warn("[production] sim mark failed:", e.message));
+      } else {
+        available.push({ iccid: s.iccid, msisdn: s.msisdn, imsi: s.imsi });
+      }
+    }
+    available.sort((a, b) => (a.iccid < b.iccid ? -1 : a.iccid > b.iccid ? 1 : 0));
+    return { available, counts: { available: available.length, assigned, total: inv.length } };
+  }
+
+  router.get("/sims", wrap(async (req, res) => res.json(await simState())));
+
+  router.post("/sims", wrap(async (req, res) => {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
+    if (!rows || !rows.length) return res.status(400).json({ error: "No SIM rows in the file" });
+    if (rows.length > 5000) return res.status(400).json({ error: "At most 5000 SIMs per upload" });
+    const used = await controllers.usedSimNumbers();
+    const good = [], invalid = [], seen = new Set();
+    rows.forEach((r, i) => {
+      const iccid = digitsOf(r?.iccid), msisdn = digitsOf(r?.msisdn), imsi = digitsOf(r?.imsi);
+      let why = "";
+      if (!/^\d{18,22}$/.test(iccid)) why = "SIM number (ICCID) must be 18-22 digits";
+      else if (!/^\d{8,15}$/.test(msisdn)) why = "MSISDN must be 8-15 digits";
+      else if (!/^\d{14,15}$/.test(imsi)) why = "IMSI must be 15 digits";
+      else if (seen.has(iccid)) why = "the same SIM twice in the file";
+      if (why) { invalid.push({ row: i + 2, iccid, reason: why }); return; }
+      seen.add(iccid);
+      good.push({ iccid, msisdn, imsi, usedBy: used.get(iccid) || null });
+    });
+    const fileName = String(req.body?.fileName || "").slice(0, 120) || null;
+    const { added, existing } = good.length ? await controllers.addSims(good, `${req.who.type}:${req.who.id}`, fileName) : { added: [], existing: [] };
+    const alreadyOnController = good.filter((g) => g.usedBy && added.includes(g.iccid)).length;
+    console.log(`[production] ${added.length} SIMs uploaded by ${req.who.type} ${req.who.id} (${existing.length} already there, ${invalid.length} invalid)`);
+    res.json({ added: added.length, existing: existing.length, alreadyOnController, invalid: invalid.slice(0, 50), invalidCount: invalid.length, ...(await simState()) });
   }));
 
   router.post("/logout", wrap(async (req, res) => {

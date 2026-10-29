@@ -41,16 +41,38 @@ function fakeControllers(clock) {
     }
     return out;
   };
+  const sims = new Map();
   return {
     docs,
+    sims,
     clashes,
     async create(doc) {
+      let sim = null;
+      if (doc.simNumber) {
+        sim = sims.get(doc.simNumber);
+        if (!sim) throw Object.assign(new Error("sim"), { simError: "This SIM isn't in the SIM inventory - upload it first" });
+        if (sim.status === "assigned") throw Object.assign(new Error("sim"), { simError: `This SIM is already on controller ${sim.uniqueId}` });
+        doc = { ...doc, simMsisdn: sim.msisdn, simImsi: sim.imsi };
+      }
       const c = await clashes(doc);
       await new Promise((r) => setTimeout(r, 20));
       if (c.length) throw Object.assign(new Error("clash"), { clashes: c });
       const id = `c${++n}`;
       docs.push({ ...doc, id, createdAtMs: clock() });
-      return { id };
+      if (sim) Object.assign(sim, { status: "assigned", controllerId: id, uniqueId: doc.uniqueId });
+      return { id, doc };
+    },
+    async simInventory() { return [...sims.values()].map((x) => ({ ...x })); },
+    async usedSimNumbers() { return new Map(docs.filter((d) => d.simNumber).map((d) => [d.simNumber, { controllerId: d.id, uniqueId: d.uniqueId }])); },
+    async markSimAssigned(iccid, u) { Object.assign(sims.get(iccid), { status: "assigned", ...u }); },
+    async addSims(rows) {
+      const added = [], existing = [];
+      for (const r of rows) {
+        if (sims.has(r.iccid)) { existing.push(r.iccid); continue; }
+        sims.set(r.iccid, { iccid: r.iccid, msisdn: r.msisdn, imsi: r.imsi, status: r.usedBy ? "assigned" : "available", uniqueId: r.usedBy?.uniqueId || null });
+        added.push(r.iccid);
+      }
+      return { added, existing };
     },
     async list({ from, to, createdById = null }) {
       return docs.filter((d) => d.createdAtMs >= from && d.createdAtMs < to && (!createdById || d.createdBy?.id === createdById));
@@ -113,7 +135,11 @@ async function withServer(fn) {
 }
 
 const ADMIN = "admin:owner@farmbuddie.com";
-const GOOD = { variant: "IRRIGO", serialNumber: "irrigo26aa10001", uniqueId: "7", imeiNumber: "490154203237518", simMsisdn: "5754000000001", simNumber: "8991940912940333745", simImsi: "404000000000001" };
+// As in the operator's CSV: ICCID / IMSI with a leading ' (Excel guard).
+const SIMS = Array.from({ length: 6 }, (_, i) => ({ msisdn: `57541826998${40 + i}`, iccid: `'89919409129403337${60 + i}`, imsi: `'4049409403337${60 + i}` }));
+const ICCID = (i) => `89919409129403337${60 + i}`;
+const uploadSims = (call, token = ADMIN) => call("/production/sims", { method: "POST", token, body: { rows: SIMS, fileName: "sims.csv" } });
+const GOOD = { variant: "IRRIGO", serialNumber: "irrigo26aa10001", uniqueId: "7", imeiNumber: "490154203237518", simMsisdn: "", simNumber: "8991940912940333760", simImsi: "" };
 
 test("fields are normalized and checked like the Excel upload", () => {
   const { values, problems } = checkFields(GOOD);
@@ -173,6 +199,7 @@ test("staff sign in, reach only /production, and only see their own entries", as
     const ravi = r.body.token;
     assert.ok(ravi.startsWith(PROD_TOKEN_PREFIX));
     const meena = (await call("/production/login", { method: "POST", body: { username: "meena", password: "line2-pass" } })).body.token;
+    assert.equal((await uploadSims(call, ravi)).status, 200, "staff can upload the SIM list too");
 
     r = await call("/production/me", { token: ravi });
     assert.equal(r.body.role, "staff");
@@ -187,10 +214,10 @@ test("staff sign in, reach only /production, and only see their own entries", as
     assert.deepEqual(r.body.controller.createdBy, { type: "staff", id: "ravi", name: "Ravi" });
     assert.equal(r.body.controller.uniqueId, "0007");
     r = await call("/production/controllers", { method: "POST", token: meena,
-      body: { ...GOOD, serialNumber: "IRRIGO26AA10002", uniqueId: "0008", imeiNumber: "356938035643809", simMsisdn: "", simNumber: "", simImsi: "" } });
+      body: { ...GOOD, serialNumber: "IRRIGO26AA10002", uniqueId: "0008", imeiNumber: "356938035643809", simNumber: ICCID(1) } });
     assert.equal(r.status, 201);
     r = await call("/production/controllers", { method: "POST", token: ADMIN,
-      body: { ...GOOD, variant: "IRRIGO_PLUS", serialNumber: "IRRIGOPLUS26PP1", uniqueId: "0009", imeiNumber: "353918052512345", simMsisdn: "", simNumber: "", simImsi: "" } });
+      body: { ...GOOD, variant: "IRRIGO_PLUS", serialNumber: "IRRIGOPLUS26PP1", uniqueId: "0009", imeiNumber: "353918052512345", simNumber: ICCID(2) } });
     assert.equal(r.status, 201);
     assert.equal(r.body.controller.createdBy.type, "admin");
     assert.equal(r.body.controller.createdBy.id, "owner@farmbuddie.com");
@@ -228,14 +255,17 @@ test("nothing duplicated: every unique field, and two saves at the same moment",
   await withServer(async ({ call }) => {
     await call("/production-users", { method: "POST", token: ADMIN, body: { username: "ravi", name: "Ravi", password: "line1-pass" } });
     const tok = (await call("/production/login", { method: "POST", body: { username: "ravi", password: "line1-pass" } })).body.token;
+    await uploadSims(call);
     assert.equal((await call("/production/controllers", { method: "POST", token: tok, body: GOOD })).status, 201);
-    const other = { variant: "IRRIGO", serialNumber: "NEWSERIAL01", uniqueId: "0100", imeiNumber: "356938035643809", simMsisdn: "5754000000099", simNumber: "8991940912940339999", simImsi: "404000000000099" };
-    for (const [field, value] of [["serialNumber", GOOD.serialNumber], ["uniqueId", "0007"], ["imeiNumber", GOOD.imeiNumber],
-      ["simMsisdn", GOOD.simMsisdn], ["simNumber", GOOD.simNumber], ["simImsi", GOOD.simImsi]]) {
+    const other = { variant: "IRRIGO", serialNumber: "NEWSERIAL01", uniqueId: "0100", imeiNumber: "356938035643809", simNumber: ICCID(3) };
+    for (const [field, value] of [["serialNumber", GOOD.serialNumber], ["uniqueId", "0007"], ["imeiNumber", GOOD.imeiNumber]]) {
       const r = await call("/production/controllers", { method: "POST", token: tok, body: { ...other, [field]: value } });
       assert.equal(r.status, 409, `${field} reused: refused`);
       assert.equal(r.body.clashes[0].field, field);
     }
+    let s = await call("/production/controllers", { method: "POST", token: tok, body: { ...other, simNumber: GOOD.simNumber } });
+    assert.equal(s.status, 409, "SIM already on a controller: refused");
+    assert.match(s.body.error, /already on controller 0007/);
     let r = await call("/production/check", { method: "POST", token: tok, body: { ...other, imeiNumber: GOOD.imeiNumber } });
     assert.deepEqual(r.body.clashes.map((c) => c.field), ["imeiNumber"], "live check names the clash");
     assert.equal(r.body.clashes[0].uniqueId, "0007");
@@ -246,7 +276,7 @@ test("nothing duplicated: every unique field, and two saves at the same moment",
     assert.equal(r.status, 400);
     assert.ok(r.body.problems.imeiNumber);
 
-    const same = { ...other, serialNumber: "RACE0001", uniqueId: "0200", imeiNumber: "353918052599999", simMsisdn: "", simNumber: "", simImsi: "" };
+    const same = { ...other, serialNumber: "RACE0001", uniqueId: "0200", imeiNumber: "353918052599999", simNumber: ICCID(4) };
     const both = await Promise.all([
       call("/production/controllers", { method: "POST", token: tok, body: same }),
       call("/production/controllers", { method: "POST", token: ADMIN, body: same })
@@ -279,5 +309,47 @@ test("admin changes a password; switches a user off; lockout after wrong passwor
     assert.equal(r.status, 429, "locked after 8 wrong passwords");
     advance(16 * 60 * 1000);
     assert.equal((await call("/production/login", { method: "POST", body: { username: "ravi", password: "new-pass-22" } })).status, 200, "unlocked after 15 min");
+  });
+});
+
+test("SIM inventory: upload, the dropdown list, SIM details only from the inventory", async () => {
+  await withServer(async ({ call, controllers }) => {
+    let r = await call("/production/sims", { method: "POST", token: ADMIN, body: { fileName: "x.csv", rows: [
+      ...SIMS,
+      { msisdn: "123", iccid: "'8991940912940333799", imsi: "'404940940333799" },          // bad MSISDN
+      { msisdn: "5754182699999", iccid: "12345", imsi: "'404940940333798" },                  // bad ICCID
+      { msisdn: SIMS[0].msisdn, iccid: SIMS[0].iccid, imsi: SIMS[0].imsi }                    // twice in the file
+    ] } });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.added, 6);
+    assert.equal(r.body.invalidCount, 3);
+    assert.equal(r.body.counts.available, 6);
+    assert.equal(controllers.sims.get(ICCID(0)).iccid, ICCID(0), "the ' from the CSV is dropped");
+    r = await call("/production/sims", { method: "POST", token: ADMIN, body: { rows: SIMS } });
+    assert.deepEqual([r.body.added, r.body.existing], [0, 6], "uploading the same list again adds nothing");
+
+    // the page sends a typed MSISDN / IMSI: ignored - the inventory's are stored
+    r = await call("/production/controllers", { method: "POST", token: ADMIN, body: { ...GOOD, simNumber: ICCID(0), simMsisdn: "99999999", simImsi: "111111111111111" } });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.controller.simMsisdn, "5754182699840");
+    assert.equal(r.body.controller.simImsi, "404940940333760");
+    r = await call("/production/sims", { token: ADMIN });
+    assert.equal(r.body.counts.available, 5, "used SIM left the list");
+    assert.equal(r.body.counts.assigned, 1);
+    assert.ok(!r.body.available.some((x) => x.iccid === ICCID(0)));
+
+    r = await call("/production/controllers", { method: "POST", token: ADMIN, body: { ...GOOD, serialNumber: "S2", uniqueId: "0011", imeiNumber: "356938035643809", simNumber: "" } });
+    assert.equal(r.status, 400, "no SIM chosen: refused");
+    assert.ok(r.body.problems.simNumber);
+    r = await call("/production/controllers", { method: "POST", token: ADMIN, body: { ...GOOD, serialNumber: "SERIAL0003", uniqueId: "0012", imeiNumber: "353918052512345", simNumber: "8991940912940339999" } });
+    assert.equal(r.status, 409, "a SIM not in the inventory: refused");
+    assert.match(r.body.error, /isn't in the SIM inventory/);
+
+    // a controller made by the Excel upload with an inventory SIM: that SIM leaves the list too
+    controllers.docs.push({ id: "x1", uniqueId: "0500", simNumber: ICCID(5), createdAtMs: 0 });
+    r = await call("/production/sims", { token: ADMIN });
+    assert.ok(!r.body.available.some((x) => x.iccid === ICCID(5)));
+    assert.equal(r.body.counts.available, 4);
+    assert.equal(controllers.sims.get(ICCID(5)).status, "assigned", "and is marked assigned");
   });
 });

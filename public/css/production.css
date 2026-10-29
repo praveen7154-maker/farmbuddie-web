@@ -311,3 +311,42 @@ html[data-theme] .pd-newuser input, html[data-theme] .pd-modal input {
 @media (prefers-reduced-motion: reduce) {
   .pd *, .pd-hero::before { animation: none !important; transition: none !important; }
 }
+
+/* ---------- SIM picker + inventory ---------- */
+.pd-sim, .pd-field[data-field="imeiNumber"] { grid-column: 1 / -1; }
+.pd-combo { position: relative; }
+.pd-sim-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30; list-style: none; margin: 0; padding: 6px;
+  max-height: 280px; overflow: auto; border-radius: 14px; background: var(--fbx-surface);
+  box-shadow: var(--fbx-shadow-lg), inset 0 0 0 1px var(--fbx-line); animation: fbx-pop 0.18s var(--fbx-ease);
+}
+.pd-sim-list[hidden] { display: none; }
+.pd-sim-list li[data-i] { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 10px; cursor: pointer; }
+.pd-sim-list li[aria-selected="true"] { background: var(--fbx-accent-soft); }
+.pd-sim-list li b { font: 600 14px ui-monospace, "SF Mono", Consolas, monospace; letter-spacing: 0.03em; color: var(--fbx-text); }
+.pd-sim-list li span { font: 500 12px ui-monospace, "SF Mono", Consolas, monospace; color: var(--fbx-muted); }
+.pd-sim-list mark { background: color-mix(in srgb, var(--fbx-accent) 28%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.pd-sim-none { padding: 12px; text-align: center; color: var(--fbx-muted); font-size: 13px; }
+.pd-sim-count { margin-left: auto; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 650; color: var(--fbx-accent); background: var(--fbx-accent-soft); }
+.pd-sim-count.low { color: #b7850f; background: rgba(212, 160, 23, 0.14); }
+.pd-sim-count.out { color: var(--fbx-danger); background: var(--fbx-danger-soft); }
+.pd-locked .pd-lock { display: inline-grid; color: var(--fbx-faint); }
+.pd-locked .pd-lock .fbx-i { width: 13px; height: 13px; }
+html[data-theme] .pd-locked .pd-input input { background: transparent; box-shadow: inset 0 0 0 1px var(--fbx-line); border-style: dashed; color: var(--fbx-text); cursor: default; }
+.pd-locked .pd-input input:focus { box-shadow: inset 0 0 0 1px var(--fbx-line); }
+.pd-siminv {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; border-radius: 14px;
+  background: var(--fbx-surface-2); box-shadow: inset 0 0 0 1px var(--fbx-line);
+}
+.pd-siminv > .pd-ic { width: 34px; height: 34px; flex: none; border-radius: 10px; color: var(--fbx-accent); background: var(--fbx-accent-soft); }
+.pd-siminv > div { flex: 1; min-width: 0; }
+.pd-siminv b { display: block; font-size: 13.5px; }
+.pd-siminv small { font-size: 12.5px; color: var(--fbx-muted); }
+.pd-siminv small b { display: inline; font-size: 13px; color: var(--fbx-accent); }
+.pd-out { color: var(--fbx-danger) !important; }
+.pd-upload { height: 38px; padding: 0 14px; font-size: 13px; cursor: pointer; }
+.pd-simresult { margin-top: 8px; }
+@media (max-width: 760px) {
+  .pd-siminv { flex-wrap: wrap; }
+  .pd-upload { width: 100%; }
+}

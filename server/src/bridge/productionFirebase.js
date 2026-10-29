@@ -6,6 +6,7 @@ import { UNIQUE_FIELDS } from "./production.js";
 // MCU / Controller page's Excel upload writes, same fields.
 
 const col = () => db.collection("controllers");
+const sims = () => db.collection("simInventory");
 const ms = (ts) => (ts && typeof ts.toMillis === "function" ? ts.toMillis() : null);
 
 async function clashesIn(get, values) {
@@ -29,15 +30,79 @@ export const firestoreControllers = {
 
   // Checked and written in one transaction: the reads lock what they saw,
   // so a second save of the same IMEI/SIM in between makes this one retry
-  // and then see it.
+  // and then see it. With a SIM: it must be in the SIM inventory and not
+  // given to a controller yet; its MSISDN and IMSI come from the inventory
+  // (never from what was typed), and it is marked assigned in the same go.
   async create(doc) {
     return db.runTransaction(async (t) => {
+      let simRef = null;
+      if (doc.simNumber) {
+        simRef = sims().doc(doc.simNumber);
+        const sim = await t.get(simRef);
+        if (!sim.exists) throw Object.assign(new Error("sim"), { simError: "This SIM isn't in the SIM inventory - upload it first" });
+        if (sim.get("status") === "assigned") {
+          throw Object.assign(new Error("sim"), { simError: `This SIM is already on controller ${sim.get("uniqueId") || sim.get("controllerId")}` });
+        }
+        doc = { ...doc, simMsisdn: sim.get("msisdn") || "", simImsi: sim.get("imsi") || "" };
+      }
       const clashes = await clashesIn((q) => t.get(q), doc);
       if (clashes.length) throw Object.assign(new Error("clash"), { clashes });
       const ref = col().doc();
       t.create(ref, { ...doc, createdAt: FieldValue.serverTimestamp() });
-      return { id: ref.id };
+      if (simRef) {
+        t.update(simRef, { status: "assigned", controllerId: ref.id, uniqueId: doc.uniqueId, assignedAt: FieldValue.serverTimestamp() });
+      }
+      return { id: ref.id, doc };
     });
+  },
+
+  // ---- SIM inventory ("simInventory", one document per SIM, id = its ICCID) ----
+  async simInventory() {
+    const snap = await sims().get();
+    return snap.docs.map((d) => ({
+      iccid: d.id, msisdn: d.get("msisdn") || "", imsi: d.get("imsi") || "", status: d.get("status") || "available",
+      uniqueId: d.get("uniqueId") || null, controllerId: d.get("controllerId") || null
+    }));
+  },
+
+  // SIM numbers already on a controller (an Excel upload doesn't go
+  // through the inventory, so this catches those too).
+  async usedSimNumbers() {
+    const snap = await col().select("simNumber", "uniqueId").get();
+    const used = new Map();
+    for (const d of snap.docs) {
+      const n = d.get("simNumber");
+      if (n) used.set(String(n), { controllerId: d.id, uniqueId: d.get("uniqueId") || null });
+    }
+    return used;
+  },
+
+  async markSimAssigned(iccid, { controllerId, uniqueId }) {
+    await sims().doc(iccid).update({ status: "assigned", controllerId, uniqueId: uniqueId || null, assignedAt: FieldValue.serverTimestamp() });
+  },
+
+  /** Adds new SIMs; ones already in the inventory are left as they are. -> { added: [iccid], existing: [iccid] } */
+  async addSims(rows, by, fileName) {
+    const added = [], existing = [];
+    for (let i = 0; i < rows.length; i += 400) {
+      const chunk = rows.slice(i, i + 400);
+      const refs = chunk.map((r) => sims().doc(r.iccid));
+      const snaps = await db.getAll(...refs);
+      const batch = db.batch();
+      snaps.forEach((snap, k) => {
+        const r = chunk[k];
+        if (snap.exists) { existing.push(r.iccid); return; }
+        batch.create(refs[k], {
+          iccid: r.iccid, msisdn: r.msisdn, imsi: r.imsi,
+          status: r.usedBy ? "assigned" : "available",
+          controllerId: r.usedBy?.controllerId || null, uniqueId: r.usedBy?.uniqueId || null,
+          uploadedBy: by, uploadedAt: FieldValue.serverTimestamp(), file: fileName || null
+        });
+        added.push(r.iccid);
+      });
+      await batch.commit();
+    }
+    return { added, existing };
   },
 
   async list({ from, to, createdById = null }) {

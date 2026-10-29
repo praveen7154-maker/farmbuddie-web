@@ -14,7 +14,10 @@ const shell = window.FBShell;
 const icon = shell.icon;
 const esc = shell.esc;
 const $ = (id) => document.getElementById(id);
-const FIELDS = ["serialNumber", "uniqueId", "imeiNumber", "simMsisdn", "simNumber", "simImsi"];
+// Checked and marked on the form; MSISDN and IMSI aren't typed - they come
+// with the SIM chosen from the SIM inventory.
+const FIELDS = ["serialNumber", "uniqueId", "imeiNumber", "simNumber"];
+const TYPED = ["serialNumber", "uniqueId", "imeiNumber"];
 const VARIANT_NAMES = { IRRIGO: "Irrigo", IRRIGO_PLUS: "Irrigo Plus", IRRIGO_SMART_PLUS: "Irrigo Smart Plus" };
 const FIELD_NAMES = { serialNumber: "Serial Number", uniqueId: "Unique ID", imeiNumber: "IMEI", simMsisdn: "SIM MSISDN", simNumber: "SIM Number", simImsi: "SIM IMSI" };
 const IST_MS = 330 * 60 * 1000;
@@ -180,11 +183,210 @@ function autoSerial() {
   scheduleCheck();
 }
 
+// ---------------------------------------------------------------- SIMs
+// The available SIMs from the SIM inventory (server: /production/sims). The
+// SIM field is a search list: type any part of the SIM number, MSISDN or
+// IMSI - or scan the SIM card's barcode, which picks it (and saves, as the
+// last field). The chosen SIM's MSISDN and IMSI fill the two locked fields.
+let sims = [];
+let simCounts = { available: 0, assigned: 0, total: 0 };
+let simShown = [];
+let simActive = -1;
+const groupIccid = (n) => String(n).replace(/(\d{4})(?=\d)/g, "$1 ");
+
+async function loadSims() {
+  try {
+    const r = await api("/production/sims");
+    sims = r.available;
+    showSimCounts(r.counts);
+    if (!$("pdSimList").hidden) filterSims();
+  } catch (err) {
+    $("pdSimInv").textContent = "Couldn't load the SIM inventory: " + err.message;
+  }
+}
+
+function showSimCounts(c) {
+  simCounts = c;
+  $("pdSimInv").innerHTML = c.total
+    ? `<b class="${c.available ? "" : "pd-out"}">${c.available}</b> available &middot; ${c.assigned} on controllers &middot; ${c.total} in total`
+    : "No SIMs yet - upload the operator's SIM list";
+  const badge = $("pdSimCount");
+  badge.textContent = `${c.available} available`;
+  badge.className = `pd-sim-count${c.available ? (c.available < 10 ? " low" : "") : " out"}`;
+  $("pdSimSearch").placeholder = c.available ? "Choose - type or scan the SIM number" : "No SIMs available - upload the SIM list";
+}
+
+function filterSims() {
+  const q = $("pdSimSearch").value.replace(/\D/g, "");
+  simShown = (q ? sims.filter((x) => x.iccid.includes(q) || x.msisdn.includes(q) || x.imsi.includes(q)) : sims).slice(0, 60);
+  simActive = simShown.length ? 0 : -1;
+  const list = $("pdSimList");
+  if (!simShown.length) {
+    list.innerHTML = `<li class="pd-sim-none">${sims.length ? "No available SIM matches" : "No SIMs available - upload the SIM list"}</li>`;
+  } else {
+    const mark = (text) => {
+      const t = esc(text);
+      if (!q) return t;
+      const i = text.indexOf(q);
+      return i < 0 ? t : `${esc(text.slice(0, i))}<mark>${esc(q)}</mark>${esc(text.slice(i + q.length))}`;
+    };
+    list.innerHTML = simShown.map((x, i) => `<li role="option" id="pdSim${i}" data-i="${i}" aria-selected="${i === simActive}">
+      <b>${mark(x.iccid)}</b><span>MSISDN ${mark(x.msisdn)} &middot; IMSI ${mark(x.imsi)}</span></li>`).join("") +
+      (sims.length > simShown.length && !q ? `<li class="pd-sim-none">${sims.length - simShown.length} more - type part of the number</li>` : "");
+  }
+  openSims(true);
+}
+
+function openSims(open) {
+  $("pdSimList").hidden = !open;
+  $("pdSimSearch").setAttribute("aria-expanded", String(open));
+  if (open && simActive >= 0) $("pdSimSearch").setAttribute("aria-activedescendant", `pdSim${simActive}`);
+}
+
+function moveSim(d) {
+  if (!simShown.length) return;
+  simActive = (simActive + d + simShown.length) % simShown.length;
+  document.querySelectorAll("#pdSimList [data-i]").forEach((li) => li.setAttribute("aria-selected", String(+li.dataset.i === simActive)));
+  document.getElementById(`pdSim${simActive}`)?.scrollIntoView({ block: "nearest" });
+  $("pdSimSearch").setAttribute("aria-activedescendant", `pdSim${simActive}`);
+}
+
+function chooseSim(x) {
+  const el = $("pdForm").elements;
+  el.simNumber.value = x.iccid;
+  el.simMsisdn.value = x.msisdn;
+  el.simImsi.value = x.imsi;
+  $("pdSimSearch").value = x.iccid;
+  openSims(false);
+  touched.add("simNumber");
+  scheduleCheck();
+}
+
+function clearSim() {
+  const el = $("pdForm").elements;
+  el.simNumber.value = el.simMsisdn.value = el.simImsi.value = "";
+}
+
+function setupSims() {
+  const search = $("pdSimSearch");
+  search.addEventListener("focus", filterSims);
+  search.addEventListener("input", () => {
+    search.value = search.value.replace(/[^\d ]/g, "");
+    if ($("pdForm").elements.simNumber.value && search.value !== $("pdForm").elements.simNumber.value) { clearSim(); render(); }
+    filterSims();
+  });
+  search.addEventListener("blur", () => setTimeout(() => openSims(false), 150));
+  search.addEventListener("keydown", (e) => {
+    const chosen = $("pdForm").elements.simNumber.value;
+    if (e.key === "ArrowDown") { e.preventDefault(); if ($("pdSimList").hidden) filterSims(); else moveSim(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); moveSim(-1); }
+    else if (e.key === "Escape") { openSims(false); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) { save(); return; }
+      const q = search.value.replace(/\D/g, "");
+      if (chosen && q === chosen) { save(); return; }                  // already chosen: Enter saves
+      const exact = sims.find((x) => x.iccid === q || x.msisdn === q || x.imsi === q);
+      if (exact) { chooseSim(exact); save(); return; }                  // a scanned SIM: pick it and save
+      if (simActive >= 0 && simShown[simActive]) chooseSim(simShown[simActive]);
+    }
+  });
+  $("pdSimList").addEventListener("mousedown", (e) => {
+    const li = e.target.closest("[data-i]");
+    if (!li) return;
+    e.preventDefault();                                                  // keep the cursor in the field
+    chooseSim(simShown[+li.dataset.i]);
+  });
+
+  $("pdSimFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (file) uploadSims(file);
+  });
+  loadSims();
+}
+
+// The operator's SIM list (Airtel's CSV: MOBILE_NUMBER, SIM_NO, SIM_IMSI ...)
+// or our own columns (SIM MSISDN, SIM Number, SIM IMSI) - CSV or Excel.
+// Only those three are sent; everything else in the file is ignored.
+const SIM_COLUMNS = {
+  msisdn: ["MOBILENUMBER", "SIMMSISDN", "MSISDN", "MOBILENO"],
+  iccid: ["SIMNO", "SIMNUMBER", "ICCID", "SIMICCID"],
+  imsi: ["SIMIMSI", "IMSI"]
+};
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((x) => x.trim()));
+}
+
+async function readSimFile(file) {
+  let table;
+  if (/\.xlsx?$/i.test(file.name)) {
+    const XLSX = await window.loadXlsx();
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    table = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" });
+  } else {
+    table = parseCsv(await file.text());
+  }
+  if (!table.length) throw new Error("The file is empty");
+  const head = table[0].map((h) => String(h).toUpperCase().replace(/[^A-Z]/g, ""));
+  const col = Object.fromEntries(Object.entries(SIM_COLUMNS).map(([k, names]) => [k, head.findIndex((h) => names.includes(h))]));
+  const missing = Object.entries(col).filter(([, i]) => i < 0).map(([k]) => ({ msisdn: "SIM MSISDN / MOBILE_NUMBER", iccid: "SIM Number / SIM_NO", imsi: "SIM IMSI / SIM_IMSI" }[k]));
+  if (missing.length) throw new Error(`Column not found: ${missing.join(", ")}`);
+  return table.slice(1).map((r) => ({ msisdn: String(r[col.msisdn] ?? ""), iccid: String(r[col.iccid] ?? ""), imsi: String(r[col.imsi] ?? "") }))
+    .filter((r) => (r.msisdn + r.iccid + r.imsi).trim());
+}
+
+async function uploadSims(file) {
+  const box = $("pdSimResult");
+  try {
+    const rows = await readSimFile(file);
+    if (!rows.length) throw new Error("No SIM rows in the file");
+    const r = await api("/production/sims", { method: "POST", body: { rows, fileName: file.name } });
+    sims = r.available;
+    showSimCounts(r.counts);
+    const parts = [`<b>${r.added}</b> new SIM${r.added === 1 ? "" : "s"} added`];
+    if (r.existing) parts.push(`${r.existing} already in the list`);
+    if (r.alreadyOnController) parts.push(`${r.alreadyOnController} already on a controller (not offered)`);
+    if (r.invalidCount) parts.push(`<span class="pd-out">${r.invalidCount} skipped</span>`);
+    box.hidden = false;
+    box.innerHTML = `${icon("microchip")}<div><b>${esc(file.name)}</b><p>${parts.join(" &middot; ")}</p>` +
+      (r.invalid?.length ? `<small>${r.invalid.slice(0, 5).map((x) => `row ${x.row}: ${esc(x.reason)}`).join("; ")}${r.invalidCount > 5 ? " ..." : ""}</small>` : "") +
+      `</div><span></span><button type="button" class="pd-icon-btn" id="simResClose" aria-label="Close">${icon("x")}</button>`;
+    $("simResClose").addEventListener("click", () => { box.hidden = true; });
+    toast(`${r.added} SIMs added - ${r.counts.available} available`);
+  } catch (err) {
+    toast("SIM list not uploaded: " + err.message, "bad");
+  }
+}
+
 // ---------------------------------------------------------------- the form
-const inputs = () => FIELDS.map((f) => $("pdForm").elements[f]);
-const values = () => Object.fromEntries([["variant", variant], ...FIELDS.map((f) => [f, $("pdForm").elements[f].value])]);
+// In Enter order: the typed fields, then the SIM picker.
+const inputs = () => [...TYPED.map((f) => $("pdForm").elements[f]), $("pdSimSearch")];
+const values = () => {
+  const el = $("pdForm").elements;
+  return { variant, ...Object.fromEntries(TYPED.map((f) => [f, el[f].value])), simNumber: el.simNumber.value, simMsisdn: el.simMsisdn.value, simImsi: el.simImsi.value };
+};
 let touched = new Set();
 let lastCheck = null;
+// What the last refused save said about fields that are still empty (the
+// SIM not chosen ...) - kept until they're filled, whatever checks run after.
+let saveProblems = {};
 let checkTimer = null;
 let checkSeq = 0;
 let saving = false;
@@ -195,7 +397,8 @@ function focusFirst() {
 }
 
 function setupForm() {
-  inputs().forEach((input, i) => {
+  setupSims();
+  inputs().slice(0, TYPED.length).forEach((input, i) => {
     input.addEventListener("input", () => {
       if (input.name === "uniqueId" || input.inputMode === "numeric") input.value = input.value.replace(/[^\d]/g, "");
       touched.add(input.name);
@@ -249,11 +452,15 @@ async function runCheck() {
 
 // Each field: empty / ok / wrong format / already used / (IMEI) check digit hint.
 function render(showAll = false) {
-  const c = lastCheck || { problems: {}, clashes: [] };
+  const base = lastCheck || { problems: {}, clashes: [] };
+  const el = $("pdForm").elements;
+  const still = Object.fromEntries(Object.entries(saveProblems).filter(([f]) => el[f] && !el[f].value));
+  const c = { ...base, problems: { ...(base.problems || {}), ...still } };
+  if (Object.keys(still).length) showAll = true;
   const clashBy = Object.fromEntries((c.clashes || []).map((x) => [x.field, x]));
   for (const f of FIELDS) {
     const el = document.querySelector(`.pd-field[data-field="${f}"]`);
-    const input = $("pdForm").elements[f];
+    const input = $("pdForm").elements[f];   // simNumber: the chosen SIM (hidden field)
     const msg = el.querySelector(".pd-field-msg");
     const show = showAll || touched.has(f);
     let state = "", text = "";
@@ -292,16 +499,20 @@ async function save() {
       entries.unshift(r.controller);
       renderEntries(r.controller.id);
     }
+    sims = sims.filter((x) => x.iccid !== r.controller.simNumber);   // gone from the list at once
+    showSimCounts({ ...simCounts, available: sims.length, assigned: simCounts.assigned + 1 });
     resetForm(false);
     loadSummary();
+    loadSims();
   } catch (err) {
     if (err.data?.problems || err.data?.clashes) {
+      saveProblems = err.data.problems || {};
       lastCheck = { problems: err.data.problems || {}, clashes: err.data.clashes || [], values: lastCheck?.values };
       FIELDS.forEach((f) => touched.add(f));
       render(true);
       const firstBad = FIELDS.find((f) => document.querySelector(`.pd-field[data-field="${f}"]`).dataset.state === "bad" ||
         document.querySelector(`.pd-field[data-field="${f}"]`).dataset.state === "clash");
-      if (firstBad) $("pdForm").elements[firstBad].focus();
+      if (firstBad) (firstBad === "simNumber" ? $("pdSimSearch") : $("pdForm").elements[firstBad]).focus();
       toast(err.data.clashes?.length ? `${FIELD_NAMES[err.data.clashes[0].field]} is already on another controller` : "Fix the marked fields", "bad");
     } else {
       toast(err.message, "bad");
@@ -315,6 +526,8 @@ async function save() {
 
 function resetForm(keepFocus) {
   $("pdForm").reset();
+  saveProblems = {};
+  clearSim();
   lastAutoSerial = "";
   touched = new Set();
   lastCheck = null;
