@@ -74,7 +74,21 @@ html[data-theme="dark"] .pd-title { --fbx-flow: #5bd498, #48c9bc, #74b6ec, #a2d4
   border-radius: 20px; padding: 20px 22px; background: var(--fbx-surface);
   box-shadow: var(--fbx-shadow-sm), inset 0 0 0 1px var(--fbx-line);
 }
-.pd-team { margin-top: 18px; }
+.pd-side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.pd > .pd-list { margin-top: 18px; }
+/* the team and entries cards lay themselves out by their own width */
+.pd-team, .pd-list { container-type: inline-size; }
+
+/* SIM inventory card */
+.pd-simstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pd-simstat { padding: 12px 14px; border-radius: 14px; background: var(--fbx-surface-2); box-shadow: inset 0 0 0 1px var(--fbx-line); }
+.pd-simstat b { display: block; font-size: 26px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pd-simstat small { font-size: 12px; color: var(--fbx-muted); }
+.pd-simstat-main { background: var(--fbx-accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fbx-accent) 30%, transparent); }
+.pd-simstat-main b { color: var(--fbx-accent); }
+.pd-simbar { height: 6px; margin-top: 12px; border-radius: 999px; overflow: hidden; background: var(--fbx-accent-soft); }
+.pd-simbar i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #34b874, #2a7dbf); transition: width 0.8s var(--fbx-ease); }
+.pd-simcard .pd-count { margin-bottom: 0; }
 .pd-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .pd-card-head h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--fbx-text); }
 .pd-card-head h2 .pd-ic { width: 34px; height: 34px; border-radius: 10px; color: var(--fbx-accent); background: var(--fbx-accent-soft); }
@@ -281,6 +295,25 @@ html[data-theme] .pd-newuser input, html[data-theme] .pd-modal input {
 .pd-modal-box .pd-hint { display: block; margin-bottom: 14px; }
 .pd-modal-box input { font-family: ui-monospace, Consolas, monospace !important; letter-spacing: 0.04em; }
 
+/* ---------- cards in the narrow column ---------- */
+@container (max-width: 720px) {
+  .pd-newuser { grid-template-columns: 1fr 1fr; }
+  .pd-newuser > button { grid-column: 1 / -1; }
+  .pd-user { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .pd-user-meta { display: none; }
+  .pd-user-actions { grid-column: 1 / -1; }
+  .pd-user-actions .pd-btn { flex: 1; }
+  .pd-entry-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  .pd-entry-main { grid-column: 1 / -1; grid-row: 2; }
+  .pd-credentials { grid-template-columns: minmax(0, 1fr) auto; }
+  .pd-credentials > .fbx-i { display: none; }
+  .pd-credentials #credCopy { grid-row: 2; justify-self: start; }
+}
+@container (max-width: 460px) {
+  .pd-newuser { grid-template-columns: minmax(0, 1fr); }
+  .pd-entry-main { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
   .pd-grid { grid-template-columns: minmax(0, 1fr); }
@@ -334,19 +367,11 @@ html[data-theme] .pd-newuser input, html[data-theme] .pd-modal input {
 .pd-locked .pd-lock .fbx-i { width: 13px; height: 13px; }
 html[data-theme] .pd-locked .pd-input input { background: transparent; box-shadow: inset 0 0 0 1px var(--fbx-line); border-style: dashed; color: var(--fbx-text); cursor: default; }
 .pd-locked .pd-input input:focus { box-shadow: inset 0 0 0 1px var(--fbx-line); }
-.pd-siminv {
-  display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; border-radius: 14px;
-  background: var(--fbx-surface-2); box-shadow: inset 0 0 0 1px var(--fbx-line);
-}
-.pd-siminv > .pd-ic { width: 34px; height: 34px; flex: none; border-radius: 10px; color: var(--fbx-accent); background: var(--fbx-accent-soft); }
-.pd-siminv > div { flex: 1; min-width: 0; }
-.pd-siminv b { display: block; font-size: 13.5px; }
-.pd-siminv small { font-size: 12.5px; color: var(--fbx-muted); }
-.pd-siminv small b { display: inline; font-size: 13px; color: var(--fbx-accent); }
 .pd-out { color: var(--fbx-danger) !important; }
 .pd-upload { height: 38px; padding: 0 14px; font-size: 13px; cursor: pointer; }
 .pd-simresult { margin-top: 8px; }
 @media (max-width: 760px) {
-  .pd-siminv { flex-wrap: wrap; }
+  .pd-simcard .pd-card-head { flex-direction: column; align-items: stretch; }
   .pd-upload { width: 100%; }
+  .pd-simstat b { font-size: 22px; }
 }

@@ -85,6 +85,8 @@ async function start() {
     ? "Enter controllers yourself, or manage the production team below."
     : `Hello ${me.name} - scan or type each new controller. Every field is checked as you go.`;
   $("pdListName").textContent = admin ? "Entries" : "My entries";
+  // No team card for the production team: their entries go beside the form instead.
+  if (!admin) $("pdSide").appendChild($("pdListCard"));
   $("pd").removeAttribute("aria-busy");
   setupVariants();
   setupPrint();
@@ -207,9 +209,15 @@ async function loadSims() {
 
 function showSimCounts(c) {
   simCounts = c;
-  $("pdSimInv").innerHTML = c.total
-    ? `<b class="${c.available ? "" : "pd-out"}">${c.available}</b> available &middot; ${c.assigned} on controllers &middot; ${c.total} in total`
-    : "No SIMs yet - upload the operator's SIM list";
+  countTo($("pdSimAvail"), c.available);
+  countTo($("pdSimUsed"), c.assigned);
+  countTo($("pdSimTotal"), c.total);
+  $("pdSimAvail").classList.toggle("pd-out", !c.available);
+  $("pdSimBar").style.width = `${c.total ? Math.round((c.assigned / c.total) * 100) : 0}%`;
+  $("pdSimInv").textContent = !c.total ? "No SIMs yet - upload the operator's SIM list (CSV or Excel)."
+    : !c.available ? "All SIMs are used - upload the next SIM list."
+    : c.available < 10 ? `Only ${c.available} SIM${c.available === 1 ? "" : "s"} left - time to order more.`
+    : `${Math.round((c.assigned / c.total) * 100)}% used.`;
   const badge = $("pdSimCount");
   badge.textContent = `${c.available} available`;
   badge.className = `pd-sim-count${c.available ? (c.available < 10 ? " low" : "") : " out"}`;

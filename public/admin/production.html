@@ -136,16 +136,6 @@
         </label>
       </form>
 
-      <div class="pd-siminv">
-        <span class="pd-ic" data-icon="microchip"></span>
-        <div><b>SIM inventory</b><small id="pdSimInv">loading…</small></div>
-        <label class="pd-btn pd-btn-ghost pd-upload" title="The operator's SIM list (CSV or Excel) - only MSISDN, SIM number and IMSI are kept">
-          <span class="pd-ic" data-icon="upload"></span>Upload SIM list
-          <input type="file" id="pdSimFile" accept=".csv,.xlsx,.xls,text/csv" hidden>
-        </label>
-      </div>
-      <div class="pd-credentials pd-simresult" id="pdSimResult" hidden></div>
-
       <div class="pd-print">
         <label class="pd-switch-row"><input type="checkbox" id="pdAutoPrint"><span class="pd-switch"><i></i></span>
           <span><b><span class="pd-ic" data-icon="printer"></span>Print labels after saving</b><small>2 &times; 1 inch, serial barcode - module box + carton</small></span></label>
@@ -162,8 +152,54 @@
       </div>
     </section>
 
+    <!-- ============ SIM INVENTORY + TEAM ============ -->
+    <div class="pd-side" id="pdSide">
+    <section class="pd-card pd-simcard" aria-labelledby="pdSimTitle">
+      <div class="pd-card-head">
+        <h2 id="pdSimTitle"><span class="pd-ic" data-icon="microchip"></span>SIM inventory</h2>
+        <label class="pd-btn pd-btn-ghost pd-upload" title="The operator's SIM list (CSV or Excel) - only MSISDN, SIM number and IMSI are kept">
+          <span class="pd-ic" data-icon="upload"></span>Upload SIM list
+          <input type="file" id="pdSimFile" accept=".csv,.xlsx,.xls,text/csv" hidden>
+        </label>
+      </div>
+      <div class="pd-simstats">
+        <div class="pd-simstat pd-simstat-main"><b id="pdSimAvail">–</b><small>available</small></div>
+        <div class="pd-simstat"><b id="pdSimUsed">–</b><small>on controllers</small></div>
+        <div class="pd-simstat"><b id="pdSimTotal">–</b><small>in total</small></div>
+      </div>
+      <div class="pd-simbar" aria-hidden="true"><i id="pdSimBar"></i></div>
+      <p class="pd-count" id="pdSimInv">loading…</p>
+      <div class="pd-credentials pd-simresult" id="pdSimResult" hidden></div>
+    </section>
+
+  <!-- ============ TEAM (admins only) ============ -->
+      <section class="pd-card pd-team" id="pdTeam" hidden aria-labelledby="pdTeamTitle">
+      <div class="pd-card-head">
+        <h2 id="pdTeamTitle"><span class="pd-ic" data-icon="user-cog"></span>Production team</h2>
+        <span class="pd-hint">They sign in on the normal login page with the username below and see only this page.</span>
+      </div>
+      <form class="pd-newuser" id="pdNewUser" autocomplete="off" novalidate>
+        <label><span>Name</span><input id="nuName" placeholder="Murugan" maxlength="60"></label>
+        <label><span>Username <small id="nuUserState"></small></span><input id="nuUser" placeholder="murugan" maxlength="32" autocapitalize="none" spellcheck="false"></label>
+        <label><span>Password</span>
+          <span class="pd-pw">
+            <input id="nuPass" type="password" placeholder="at least 8 characters" autocomplete="new-password">
+            <button type="button" class="pd-icon-btn" id="nuShow" aria-label="Show password"><span class="pd-ic" data-icon="eye"></span></button>
+            <button type="button" class="pd-icon-btn" id="nuGen" aria-label="Make a password" title="Make a strong password"><span class="pd-ic" data-icon="wand-sparkles"></span></button>
+          </span>
+        </label>
+        <button type="submit" class="pd-btn pd-btn-primary" id="nuCreate"><span class="pd-ic" data-icon="plus"></span>Create</button>
+      </form>
+      <p class="pd-field-msg" id="nuMsg"></p>
+      <div class="pd-credentials" id="pdCredentials" hidden></div>
+      <div class="pd-users" id="pdUsers"></div>
+    </section>
+    </div>
+
+  </div>
+
     <!-- ============ ENTRIES ============ -->
-    <section class="pd-card pd-list" aria-labelledby="pdListTitle">
+    <section class="pd-card pd-list" id="pdListCard" aria-labelledby="pdListTitle">
       <div class="pd-card-head">
         <h2 id="pdListTitle"><span class="pd-ic" data-icon="list-checks"></span><span id="pdListName">My entries</span></h2>
         <div class="pd-day">
@@ -181,30 +217,7 @@
       <p class="pd-count" id="pdCount"></p>
       <div class="pd-entries" id="pdEntries"></div>
     </section>
-  </div>
 
-  <!-- ============ TEAM (admins only) ============ -->
-  <section class="pd-card pd-team" id="pdTeam" hidden aria-labelledby="pdTeamTitle">
-    <div class="pd-card-head">
-      <h2 id="pdTeamTitle"><span class="pd-ic" data-icon="user-cog"></span>Production team</h2>
-      <span class="pd-hint">They sign in on the normal login page with the username below and see only this page.</span>
-    </div>
-    <form class="pd-newuser" id="pdNewUser" autocomplete="off" novalidate>
-      <label><span>Name</span><input id="nuName" placeholder="Ravi Kumar" maxlength="60"></label>
-      <label><span>Username <small id="nuUserState"></small></span><input id="nuUser" placeholder="ravi" maxlength="32" autocapitalize="none" spellcheck="false"></label>
-      <label><span>Password</span>
-        <span class="pd-pw">
-          <input id="nuPass" type="password" placeholder="at least 8 characters" autocomplete="new-password">
-          <button type="button" class="pd-icon-btn" id="nuShow" aria-label="Show password"><span class="pd-ic" data-icon="eye"></span></button>
-          <button type="button" class="pd-icon-btn" id="nuGen" aria-label="Make a password" title="Make a strong password"><span class="pd-ic" data-icon="wand-sparkles"></span></button>
-        </span>
-      </label>
-      <button type="submit" class="pd-btn pd-btn-primary" id="nuCreate"><span class="pd-ic" data-icon="plus"></span>Create</button>
-    </form>
-    <p class="pd-field-msg" id="nuMsg"></p>
-    <div class="pd-credentials" id="pdCredentials" hidden></div>
-    <div class="pd-users" id="pdUsers"></div>
-  </section>
 </div>
 
 </main>
