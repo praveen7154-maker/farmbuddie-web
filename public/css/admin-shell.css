@@ -172,6 +172,29 @@ html[data-theme="dark"] .fbx-logo {
 }
 .fbx-brand-txt { display: flex; flex-direction: column; line-height: 1.1; }
 .fbx-brand-txt b { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+
+/* "Farm Buddie" and the Home greeting: colour flowing slowly through the
+   brand greens, teal and sky. The gradient repeats its first colour at the
+   end, so moving it one full width loops without a jump. */
+.fbx-brand-txt b,
+.fbx-hero h1 {
+  --fbx-flow: #15803d, #0f9488, #2a7dbf, #5b9a1c, #15803d;
+  background-image: linear-gradient(90deg, var(--fbx-flow));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: fbx-flow 9s linear infinite;
+}
+html[data-theme="dark"] .fbx-brand-txt b,
+html[data-theme="dark"] .fbx-hero h1 {
+  --fbx-flow: #5bd498, #48c9bc, #74b6ec, #a2d462, #5bd498;
+}
+@keyframes fbx-flow {
+  from { background-position: 0% 50%; }
+  to { background-position: -200% 50%; }
+}
 .fbx-brand-txt small { font-size: 11px; color: var(--fbx-muted); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
 
 /* Breadcrumbs */
@@ -583,14 +606,7 @@ html[data-theme="dark"] .fbx-eyebrow { background: rgba(68, 196, 134, 0.1); }
   line-height: 1.15;
   color: var(--fbx-text);
 }
-.fbx-hero h1 em {
-  font-style: normal;
-  background: linear-gradient(90deg, #1f9d5c, #2bb3a0);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-html[data-theme="dark"] .fbx-hero h1 em { background-image: linear-gradient(90deg, #5bd498, #5fd2c4); }
+.fbx-hero h1 em { font-style: normal; }   /* the name flows with the rest of the line */
 .fbx-hero p { margin: 0; font-size: 14.5px; color: var(--fbx-muted); }
 .fbx-hero-side { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
 .fbx-clock { font-variant-numeric: tabular-nums; text-align: right; }
