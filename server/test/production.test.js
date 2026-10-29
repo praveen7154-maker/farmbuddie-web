@@ -56,6 +56,11 @@ function fakeControllers(clock) {
       return docs.filter((d) => d.createdAtMs >= from && d.createdAtMs < to && (!createdById || d.createdBy?.id === createdById));
     },
     async countBy(id) { return docs.filter((d) => d.createdBy?.id === id).length; },
+    async lastSerials() {
+      const out = {};
+      for (const d of [...docs].reverse()) if (!out[d.variant]) out[d.variant] = d.serialNumber;
+      return out;
+    },
     async nextUniqueId() {
       const ids = docs.map((d) => Number(d.uniqueId)).filter(Number.isFinite);
       return String((ids.length ? Math.max(...ids) : 0) + 1).padStart(4, "0");
@@ -207,6 +212,7 @@ test("staff sign in, reach only /production, and only see their own entries", as
     assert.equal(r.body.byVariant.IRRIGO, 2);
     assert.equal(r.body.byVariant.IRRIGO_PLUS, 1);
     assert.equal(r.body.nextUniqueId, "0010");
+    assert.deepEqual(r.body.lastSerials, { IRRIGO: "IRRIGO26AA10002", IRRIGO_PLUS: "IRRIGOPLUS26PP1" }, "newest serial per variant");
     assert.equal(r.body.days.length, 7);
     assert.equal(r.body.days[6].count, 3);
 

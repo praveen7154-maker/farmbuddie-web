@@ -109,6 +109,7 @@ export const istDay = (ms) => new Date(ms + IST_MS).toISOString().slice(0, 10);
  *                    list({ from, to, createdById }) -> [{ id, ...doc, createdAtMs }]
  *                    countBy(createdById) -> number
  *                    nextUniqueId() -> "0042"
+ *                    lastSerials() -> { IRRIGO: "IRRIGO26AA10041", ... } (newest per variant)
  *   now          - () => ms
  */
 export function createProductionModule({ store, controllers, now = () => Date.now() }) {
@@ -224,7 +225,9 @@ export function createProductionModule({ store, controllers, now = () => Date.no
       byVariant,
       days,
       mineTotal: await controllers.countBy(req.who.id),
-      nextUniqueId: await controllers.nextUniqueId()
+      nextUniqueId: await controllers.nextUniqueId(),
+      // the page fills a new serial in the same format, ending in the Unique ID
+      lastSerials: await controllers.lastSerials()
     });
   }));
 

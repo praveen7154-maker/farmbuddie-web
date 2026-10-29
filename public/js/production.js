@@ -94,6 +94,7 @@ async function start() {
 
 // ---------------------------------------------------------------- summary
 let nextUniqueId = null;
+let lastSerials = {};
 async function loadSummary() {
   try {
     const s = await api("/production/summary");
@@ -104,6 +105,7 @@ async function loadSummary() {
     $("pdVariantsToday").innerHTML = Object.entries(s.byVariant)
       .map(([v, n]) => `<span class="pd-vchip" data-tone="${toneOf(v)}"><i></i>${esc(VARIANT_NAMES[v] || v)} <b>${n}</b></span>`).join("");
     nextUniqueId = s.nextUniqueId;
+    lastSerials = s.lastSerials || {};
     const b = $("pdNextId");
     b.hidden = !nextUniqueId;
     b.textContent = nextUniqueId ? `Next free: ${nextUniqueId}` : "";
@@ -147,8 +149,35 @@ function setupVariants() {
     $("pdVariantMsg").textContent = "";
     try { localStorage.setItem("fb.prodVariant", v); } catch (e) { /* private mode */ }
   };
-  document.querySelectorAll("#pdVariants [data-variant]").forEach((b) => b.addEventListener("click", () => { pick(b.dataset.variant); focusFirst(); }));
+  document.querySelectorAll("#pdVariants [data-variant]").forEach((b) => b.addEventListener("click", () => { pick(b.dataset.variant); autoSerial(); focusFirst(); }));
   if (saved && VARIANT_NAMES[saved]) pick(saved);
+}
+
+// ---------------------------------------------------------------- serial from the Unique ID
+// A variant chosen + a 4-digit Unique ID -> the Serial Number in the same
+// format as the newest one of that variant, ending in this Unique ID:
+// IRRIGO26AA10002 + 0003 -> IRRIGO26AA10003. No serial of that variant yet:
+// the Excel template's format (IRRIGO26AA1 + ID, IRRIGOPLUS26PP1 + ID,
+// IRRIGOSMART26SS1 + ID, 26 = this year). Typing in Serial stops it;
+// emptying Serial lets it fill again.
+const SERIAL_START = { IRRIGO: ["IRRIGO", "AA"], IRRIGO_PLUS: ["IRRIGOPLUS", "PP"], IRRIGO_SMART_PLUS: ["IRRIGOSMART", "SS"] };
+let lastAutoSerial = "";
+
+export function serialFor(v, uid, last) {
+  const m = /^(.*\D)?(\d*?)(\d{4})$/.exec(String(last || ""));
+  if (m) return `${m[1] || ""}${m[2] || ""}${uid}`;
+  const [name, code] = SERIAL_START[v] || [v, ""];
+  return `${name}${new Date(Date.now() + IST_MS).toISOString().slice(2, 4)}${code}1${uid}`;
+}
+
+function autoSerial() {
+  const serial = $("pdForm").elements.serialNumber;
+  const uid = $("pdForm").elements.uniqueId.value;
+  if (!variant || !/^\d{4}$/.test(uid)) return;
+  if (serial.value && serial.value !== lastAutoSerial) return;      // typed by hand - leave it
+  serial.value = lastAutoSerial = serialFor(variant, uid, lastSerials[variant]);
+  touched.add("serialNumber");
+  scheduleCheck();
 }
 
 // ---------------------------------------------------------------- the form
@@ -170,6 +199,7 @@ function setupForm() {
     input.addEventListener("input", () => {
       if (input.name === "uniqueId" || input.inputMode === "numeric") input.value = input.value.replace(/[^\d]/g, "");
       touched.add(input.name);
+      if (input.name === "uniqueId") autoSerial();
       scheduleCheck();
     });
     input.addEventListener("blur", () => { if (input.value) touched.add(input.name); render(); });
@@ -194,6 +224,7 @@ function setupForm() {
     const u = $("pdForm").elements.uniqueId;
     u.value = nextUniqueId;
     touched.add("uniqueId");
+    autoSerial();
     scheduleCheck();
     ($("pdForm").elements.imeiNumber).focus();
   });
@@ -236,6 +267,7 @@ function render(showAll = false) {
       state = "ok";
       if (f === "imeiNumber" && c.imeiCheckDigitOk === false) { state = "warn"; text = "Check digit doesn't match - a typo? (saved anyway if it's right)"; }
       if (f === "uniqueId" && c.values?.uniqueId && c.values.uniqueId !== input.value) text = `Saved as ${c.values.uniqueId}`;
+      if (f === "serialNumber" && input.value === lastAutoSerial) text = "Filled in from the variant and Unique ID - change it if this board's differs";
     }
     el.dataset.state = state;
     msg.textContent = text;
@@ -283,6 +315,7 @@ async function save() {
 
 function resetForm(keepFocus) {
   $("pdForm").reset();
+  lastAutoSerial = "";
   touched = new Set();
   lastCheck = null;
   render();

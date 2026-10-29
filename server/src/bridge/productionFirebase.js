@@ -53,6 +53,17 @@ export const firestoreControllers = {
     return snap.data().count;
   },
 
+  // The newest controller's serial of each variant - the format new ones follow.
+  async lastSerials() {
+    const snap = await col().orderBy("createdAt", "desc").limit(200).get();
+    const out = {};
+    for (const d of snap.docs) {
+      const v = d.get("variant"), sn = d.get("serialNumber");
+      if (v && sn && !out[v]) out[v] = String(sn);
+    }
+    return out;
+  },
+
   // One more than the highest 4-digit Unique ID in use - a suggestion only.
   async nextUniqueId() {
     const snap = await col().orderBy("uniqueId", "desc").limit(20).get();
