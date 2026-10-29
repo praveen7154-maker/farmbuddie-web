@@ -107,11 +107,16 @@ function renderDashboard() {
 // Hub controllers and each node type: how many are free to give a farm
 // ("available") of all made. Count queries - a few reads, not one per
 // controller / node.
-const NODE_ICONS = { MOTOR: "⚙️", SOLENOID_VALVE: "💧", BUTTERFLY_VALVE: "🔘", FILTER_BACKWASH: "🧽", FERTIGATION: "🧪", WATER_LEVEL: "🌊" };
+// Same icons and colours as the node types on the Production page.
+const NODE_TONES = { MOTOR: "amber", SOLENOID_VALVE: "sky", BUTTERFLY_VALVE: "violet", FILTER_BACKWASH: "teal", FERTIGATION: "lime", WATER_LEVEL: "green" };
 const STOCK_ROWS = [
-  { name: "Hub controllers", icon: "🧠", col: "controllers", field: null, value: null },
-  ...NODE_TYPES.map((t) => ({ name: t.name.replace(/ node$/, " nodes"), icon: NODE_ICONS[t.type] || "🔹", col: "nodes", field: "type", value: t.type }))
+  { name: "Hub controllers", icon: "cpu", tone: "green", col: "controllers", field: null, value: null },
+  ...NODE_TYPES.map((t) => ({ name: t.name.replace(/ node$/, " nodes"), icon: t.icon, tone: NODE_TONES[t.type] || "teal", col: "nodes", field: "type", value: t.type }))
 ];
+const shellIcon = (name) => window.FBShell?.icon(name) || "";
+
+// The cards' icons (the shell's line icons - same set as the header and Home)
+document.querySelectorAll(".fb-stat-ic[data-icon], .fb-stock-title-ic[data-icon]").forEach((el) => { el.innerHTML = shellIcon(el.dataset.icon); });
 
 async function renderStock() {
   const grid = document.getElementById("stockGrid");
@@ -131,9 +136,8 @@ async function renderStock() {
     grid.innerHTML = rows.map((r) => {
       const pct = r.total ? Math.round((r.available / r.total) * 100) : 0;
       const out = r.total && !r.available ? " out" : "";     // made, but none left to give
-      return `<div class="fb-stock-card${r.col === "controllers" ? " main" : ""}${out}" title="${r.available} available of ${r.total} made · ${r.total - r.available} on farms">
-        <span class="fb-stock-ic" aria-hidden="true">${r.icon}</span>
-        <p>${r.name}</p>
+      return `<div class="fb-stock-card${r.col === "controllers" ? " main" : ""}${out}" data-tone="${r.tone}" title="${r.available} available of ${r.total} made · ${r.total - r.available} on farms">
+        <div class="fb-stat-head"><span class="fb-stat-ic" aria-hidden="true">${shellIcon(r.icon)}</span><p>${r.name}</p></div>
         <h2><span>${r.available}</span> <small>/ ${r.total}</small></h2>
         <i class="fb-stock-bar"><b style="width:${pct}%"></b></i>
       </div>`;
