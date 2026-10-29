@@ -1,4 +1,11 @@
-import { auth } from "/js/firebase-init.js";
+import { auth, db } from "/js/firebase-init.js";
+import {
+  collection,
+  query,
+  where,
+  getCountFromServer
+} from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+import { NODE_TYPES } from "/js/node-types.js";
 import {
   onAuthStateChanged,
   signOut
@@ -26,6 +33,7 @@ onAuthStateChanged(auth, (user) => {
 
   startDataStore(PAGE_DATA);
   renderDashboard();
+  renderStock();
 });
 
 document.getElementById("logoutBtn")?.addEventListener("click", () => {
@@ -93,6 +101,47 @@ function renderDashboard() {
   document.getElementById("inactiveDistributorCount").textContent = inactiveDist;
 
   attachCardClicks();
+}
+
+/* ================= STOCK ================= */
+// Hub controllers and each node type: how many are free to give a farm
+// ("available") of all made. Count queries - a few reads, not one per
+// controller / node.
+const NODE_ICONS = { MOTOR: "⚙️", SOLENOID_VALVE: "💧", BUTTERFLY_VALVE: "🔘", FILTER_BACKWASH: "🧽", FERTIGATION: "🧪", WATER_LEVEL: "🌊" };
+const STOCK_ROWS = [
+  { name: "Hub controllers", icon: "🧠", col: "controllers", field: null, value: null },
+  ...NODE_TYPES.map((t) => ({ name: t.name.replace(/ node$/, " nodes"), icon: NODE_ICONS[t.type] || "🔹", col: "nodes", field: "type", value: t.type }))
+];
+
+async function renderStock() {
+  const grid = document.getElementById("stockGrid");
+  if (!grid) return;
+  const count = async (row, available) => {
+    const filters = [
+      ...(row.field ? [where(row.field, "==", row.value)] : []),
+      ...(available ? [where("status", "==", "available")] : [])
+    ];
+    return (await getCountFromServer(query(collection(db, row.col), ...filters))).data().count;
+  };
+  try {
+    const rows = await Promise.all(STOCK_ROWS.map(async (row) => {
+      const [available, total] = await Promise.all([count(row, true), count(row, false)]);
+      return { ...row, available, total };
+    }));
+    grid.innerHTML = rows.map((r) => {
+      const pct = r.total ? Math.round((r.available / r.total) * 100) : 0;
+      const out = r.total && !r.available ? " out" : "";     // made, but none left to give
+      return `<div class="fb-stock-card${r.col === "controllers" ? " main" : ""}${out}" title="${r.available} available of ${r.total} made · ${r.total - r.available} on farms">
+        <span class="fb-stock-ic" aria-hidden="true">${r.icon}</span>
+        <p>${r.name}</p>
+        <h2><span>${r.available}</span> <small>/ ${r.total}</small></h2>
+        <i class="fb-stock-bar"><b style="width:${pct}%"></b></i>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    console.error("Stock count error:", err);
+    grid.innerHTML = `<p class="fb-stock-wait">Couldn't count the stock - ${err.message}</p>`;
+  }
 }
 
 /* ================= CARD CLICK ================= */

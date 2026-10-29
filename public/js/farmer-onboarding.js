@@ -1,8 +1,11 @@
 import { auth, db } from "/js/firebase-init.js";
 import { renderValveConfigSection, readValveConfig, fillValveConfig } from "/js/valve-config.js";
+import { createNodeMapping } from "/js/node-mapping.js";
 
 // Valve Configuration + Additional Features fields (IRRIGO and IRRIGO_PLUS alike)
 renderValveConfigSection();
+// Node Mapping (motor / valve / ... nodes, by serial) in the MCU card
+const nodeMapping = createNodeMapping("nodeMapping", db);
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -718,6 +721,14 @@ if (networkType === "SIM") {
 
 }
 
+/* ===== NODES: STILL FREE? ===== */
+const nodeProblem = await nodeMapping.check();
+if (nodeProblem) {
+  alert("❌ " + nodeProblem);
+  hideLoader();
+  return resetButton(btn);
+}
+
 /* ===== GET FARM NUMBER FIRST ===== */
 const selectedFarmNumber =
   document.getElementById("farmNumber")?.value || "Farm 1";
@@ -970,6 +981,16 @@ pumpServiceMapping: Array.from({ length: parseInt(motorCount || 0) })
       networkType: networkType,
       updatedAt: serverTimestamp()
     });
+
+    // The farm's nodes: taken in one go with the farm's list (node-mapping.js).
+    // The farmer is saved either way - a node taken by another farm in the
+    // last seconds is a warning, fixed from Edit Farm.
+    try {
+      await nodeMapping.save({ farmerDocId: farmerRef.id, farmBuddieId });
+    } catch (nodeErr) {
+      console.error("Node mapping error:", nodeErr);
+      alert("⚠ Farmer saved, but the nodes weren't mapped: " + nodeErr.message + "\n\nAdd them again from Edit Farm.");
+    }
 
        const now = new Date();
     const formattedTime = fmtDateTime(now);

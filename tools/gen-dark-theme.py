@@ -26,7 +26,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSS_DIR = os.path.join(ROOT, "public", "css")
 OUT = os.path.join(CSS_DIR, "theme-dark.generated.css")
-SKIP = {"theme-dark.generated.css", "admin-shell.css", "production.css"}   # these two use the shell's colour tokens
+SKIP = {"theme-dark.generated.css", "admin-shell.css", "production.css", "node-mapping.css", "dashboard-stock.css"}   # these use the shell's colour tokens
 SCOPE = 'html[data-theme="dark"]'
 
 NAMED = {

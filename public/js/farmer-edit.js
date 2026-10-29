@@ -1,10 +1,13 @@
 import { auth, db } from "/js/firebase-init.js";
 import { renderValveConfigSection, readValveConfig, fillValveConfig } from "/js/valve-config.js";
+import { createNodeMapping } from "/js/node-mapping.js";
 import { prepareUpload, applyDocumentUploadSetting, FARMER_DOCS } from "/js/upload-prep.js";
 import { DOCUMENT_UPLOADS } from "/js/config.js";
 
 // Valve Configuration + Additional Features fields (IRRIGO and IRRIGO_PLUS alike)
 renderValveConfigSection();
+// Node Mapping (motor / valve / ... nodes, by serial) in the MCU card
+const nodeMapping = createNodeMapping("nodeMapping", db);
 // Aadhaar / other document / photo uploads off until Storage is set up
 // (config.js): a "hard copy collected?" checklist instead, filled in once
 // the farmer has loaded.
@@ -343,6 +346,9 @@ if (f.pumpServiceMapping?.length) {
 
 /* ---------- VALVES + ADDITIONAL FEATURES ---------- */
 fillValveConfig(f.valveConfig);
+
+/* ---------- NODES ---------- */
+nodeMapping?.fill(f.nodes);
 
   currentFarmBuddieId = f.farmBuddieId || "";
   existingDocuments = f.documents || {};
@@ -1057,6 +1063,25 @@ showLoader("Updating Farmer...");
       service: document.getElementById(`pump${i+1}Service`)?.value
     }));
 
+/* ================= NODES ================= */
+// Checked now; written after the farm itself (one transaction: the nodes
+// taken / freed + the farm's list - node-mapping.js).
+const nodeProblem = await nodeMapping.check(docId);
+if (nodeProblem) {
+  alert("❌ " + nodeProblem);
+  hideLoader();
+  return resetUpdateButton(btn);
+}
+const saveNodes = async () => {
+  if (!nodeMapping.changed) return;
+  try {
+    await nodeMapping.save({ farmerDocId: docId, farmBuddieId: currentFarmBuddieId });
+  } catch (nodeErr) {
+    console.error("Node mapping error:", nodeErr);
+    alert("⚠ Farm saved, but the node mapping wasn't: " + nodeErr.message + "\n\nOpen Edit again and fix it.");
+  }
+};
+
 /* ================= CONTROLLER UPDATE (UPGRADE MODE) ================= */
 
 if (upgradeToggle?.checked) {
@@ -1165,6 +1190,7 @@ updatedData.sim = {
 
 // STEP 1: UPDATE FARM
   await updateDoc(doc(db, "farmers", docId), updatedData);
+  await saveNodes();
 
 // ✅ ALWAYS FETCH LATEST DATA
 const latestSnap = await getDoc(doc(db, "farmers", docId));
@@ -1244,6 +1270,7 @@ return;
 
 // STEP 1: UPDATE FARM
     await updateDoc(doc(db, "farmers", docId), updatedData);
+    await saveNodes();
 
       // ✅ ALWAYS FETCH LATEST DATA
     const latestSnap = await getDoc(doc(db, "farmers", docId));

@@ -1,0 +1,50 @@
+/* Node Mapping block (/js/node-mapping.js) inside the MCU / Device Mapping
+   card - onboarding, Add Farm, Edit Farm. The shell's colour tokens, so
+   light / dark just work. */
+.nm { margin-top: 22px; padding-top: 18px; border-top: 1px dashed var(--fbx-line, #e2ebe6); }
+.nm-head { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+.nm-head .sub-section-title { margin: 0; }
+.nm-count { font-size: 12.5px; font-weight: 600; color: var(--fbx-accent, #1f9d5c); }
+.nm-add {
+  margin-left: auto; height: 38px; padding: 0 16px; border: 0; border-radius: 10px; cursor: pointer;
+  font: 650 13.5px var(--fbx-font, inherit); color: #fff; background: linear-gradient(135deg, #22a565, #15803d);
+  box-shadow: 0 8px 18px -10px rgba(21, 128, 61, 0.7);
+}
+.nm-add:hover { filter: brightness(1.06); }
+.nm-hint { margin: 8px 0 12px; font-size: 12.5px; color: var(--fbx-muted, #5b6b63); }
+.nm-rows { display: flex; flex-direction: column; gap: 8px; }
+.nm-row {
+  display: grid; grid-template-columns: 28px minmax(170px, 0.9fr) minmax(0, 1.2fr) 38px; gap: 6px 10px; align-items: center;
+  padding: 10px 12px; border-radius: 12px; background: var(--fbx-surface-2, #f6faf8); box-shadow: inset 0 0 0 1px var(--fbx-line, #e2ebe6);
+}
+.nm-row.bad { box-shadow: inset 0 0 0 1.5px var(--fbx-danger, #c0392b); }
+.nm-n {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  font-size: 12px; font-weight: 700; color: var(--fbx-accent, #1f9d5c); background: var(--fbx-accent-soft, #e3f4ea);
+}
+html[data-theme] .nm-row select, html[data-theme] .nm-row input {
+  width: 100%; min-width: 0; height: 40px; margin: 0; padding: 0 12px; border-radius: 10px; outline: 0;
+  font-size: 13px; color: var(--fbx-text, #1d2a24); background: var(--fbx-surface, #fff);
+  border: 1px solid var(--fbx-line-strong, #cfdad5); transition: border-color 0.2s, box-shadow 0.2s;
+}
+html[data-theme] .nm-row select:focus, html[data-theme] .nm-row input:focus {
+  border-color: var(--fbx-accent, #2ea36b); box-shadow: 0 0 0 3px var(--fbx-accent-soft, rgba(46, 163, 107, 0.18));
+}
+.nm-row input { font-family: ui-monospace, "SF Mono", Consolas, monospace; letter-spacing: 0.03em; text-transform: uppercase; }
+.nm-row input::placeholder { font-family: var(--fbx-font, inherit); letter-spacing: 0; text-transform: none; }
+.nm-del {
+  display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 10px; cursor: pointer;
+  font-size: 14px; color: var(--fbx-muted, #5b6b63); background: var(--fbx-surface, #fff); box-shadow: inset 0 0 0 1px var(--fbx-line, #e2ebe6);
+}
+.nm-del:hover { color: var(--fbx-danger, #c0392b); }
+.nm-msg { grid-column: 2 / -1; font-size: 12px; color: var(--fbx-danger, #c0392b); }
+.nm-msg:empty { display: none; }
+.nm-empty { margin: 0; padding: 14px; border-radius: 12px; text-align: center; font-size: 13px; color: var(--fbx-muted, #5b6b63); background: var(--fbx-surface-2, #f6faf8); }
+.nm-empty[hidden] { display: none; }
+@media (max-width: 640px) {
+  .nm-row { grid-template-columns: 26px minmax(0, 1fr) 36px; }
+  .nm-row .nm-type { grid-column: 2; }
+  .nm-row .nm-del { grid-column: 3; grid-row: 1; }
+  .nm-row .nm-serial { grid-column: 2 / -1; }
+  .nm-add { margin-left: 0; width: 100%; }
+}

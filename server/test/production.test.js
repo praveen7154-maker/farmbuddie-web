@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import {
-  createProductionModule, checkFields, imeiCheckDigitOk, istDayRange, istDay, PROD_TOKEN_PREFIX, UNIQUE_FIELDS
+  createProductionModule, checkFields, imeiCheckDigitOk, istDayRange, istDay, PROD_TOKEN_PREFIX, UNIQUE_FIELDS,
+  NODE_TYPES, nodeStem
 } from "../src/bridge/production.js";
+import { NODE_TYPES as WEB_NODE_TYPES } from "../../public/js/node-types.js";
 
 function fakeStore() {
   const users = new Map();
@@ -90,6 +92,46 @@ function fakeControllers(clock) {
   };
 }
 
+// The nodes collection; createMany() reads the last number, waits, then
+// writes - NOT atomic on its own, like fakeControllers().
+function fakeNodes(clock) {
+  const docs = [];
+  return {
+    docs,
+    async createMany({ stem, count, doc }) {
+      const used = docs.filter((d) => d.serialNumber.startsWith(stem)).map((d) => Number(d.serialNumber.slice(stem.length)));
+      const last = used.length ? Math.max(...used) : 10000;
+      await new Promise((r) => setTimeout(r, 20));
+      if (last + count > 99999) throw Object.assign(new Error("full"), { full: true });
+      const out = [];
+      for (let i = 1; i <= count; i++) {
+        const serialNumber = stem + (last + i);
+        if (docs.some((d) => d.id === serialNumber)) throw new Error("ALREADY_EXISTS " + serialNumber);
+        docs.push({ ...doc, id: serialNumber, serialNumber, createdAtMs: clock() });
+        out.push({ ...doc, id: serialNumber, serialNumber });
+      }
+      return out;
+    },
+    async nextNumbers(stems) {
+      return Object.fromEntries(stems.map((stem) => {
+        const used = docs.filter((d) => d.serialNumber.startsWith(stem)).map((d) => Number(d.serialNumber.slice(stem.length)));
+        return [stem, (used.length ? Math.max(...used) : 10000) + 1];
+      }));
+    },
+    async list({ from, to, createdById = null }) {
+      return docs.filter((d) => d.createdAtMs >= from && d.createdAtMs < to && (!createdById || d.createdBy?.id === createdById));
+    },
+    async countBy(id) { return docs.filter((d) => d.createdBy?.id === id).length; },
+    async stock() {
+      return Object.fromEntries(NODE_TYPES.map(({ type }) => {
+        const all = docs.filter((d) => d.type === type);
+        const available = all.filter((d) => d.status === "available").length;
+        return [type, { available, assigned: all.length - available, total: all.length }];
+      }));
+    }
+  };
+}
+
 const NOW = Date.UTC(2026, 9, 29, 6, 30);   // 29 Oct 2026, 12:00 IST
 
 async function withServer(fn) {
@@ -97,7 +139,8 @@ async function withServer(fn) {
   const clock = () => t;
   const store = fakeStore();
   const controllers = fakeControllers(clock);
-  const mod = createProductionModule({ store, controllers, now: clock });
+  const nodes = fakeNodes(clock);
+  const mod = createProductionModule({ store, controllers, nodes, now: clock });
   const app = express();
   app.use("/production", mod.publicRouter);
   // server.js's verifyCaller, reduced: "admin:<email>" stands for a Firebase admin login.
@@ -128,7 +171,7 @@ async function withServer(fn) {
     return { status: r.status, body: await r.json().catch(() => null) };
   };
   try {
-    await fn({ call, store, controllers, advance: (ms) => { t += ms; } });
+    await fn({ call, store, controllers, nodes, advance: (ms) => { t += ms; } });
   } finally {
     server.close();
   }
@@ -351,5 +394,82 @@ test("SIM inventory: upload, the dropdown list, SIM details only from the invent
     assert.ok(!r.body.available.some((x) => x.iccid === ICCID(5)));
     assert.equal(r.body.counts.available, 4);
     assert.equal(controllers.sims.get(ICCID(5)).status, "assigned", "and is marked assigned");
+  });
+});
+
+test("node serials: prefix, year where the type has one, running number from 10001", () => {
+  assert.equal(nodeStem("MOTOR", NOW), "FBMN26");
+  assert.equal(nodeStem("SOLENOID_VALVE", NOW), "FBSVN");
+  assert.equal(nodeStem("BUTTERFLY_VALVE", NOW), "FBBVN");
+  assert.equal(nodeStem("WATER_LEVEL", NOW), "FBWL26");
+  assert.equal(nodeStem("MOTOR", Date.UTC(2026, 11, 31, 19, 0)), "FBMN27", "1 Jan 2027 00:30 IST is 2027");
+  assert.equal(nodeStem("NOPE", NOW), null);
+  assert.deepEqual(WEB_NODE_TYPES.map(({ type, name, prefix, year }) => ({ type, name, prefix, year })), NODE_TYPES,
+    "public/js/node-types.js has the same table");
+});
+
+test("nodes: made in a batch, next serial shown, no serial twice, own entries for staff", async () => {
+  await withServer(async ({ call, nodes, advance }) => {
+    await call("/production-users", { method: "POST", token: ADMIN, body: { username: "ravi", name: "Ravi", password: "line1-pass" } });
+    const ravi = (await call("/production/login", { method: "POST", body: { username: "ravi", password: "line1-pass" } })).body.token;
+
+    let r = await call("/production/me", { token: ravi });
+    assert.deepEqual(r.body.nodeTypes.map((t) => t.type), NODE_TYPES.map((t) => t.type));
+    r = await call("/production/summary?kind=node", { token: ravi });
+    assert.equal(r.body.nextSerials.MOTOR, "FBMN2610001");
+    assert.equal(r.body.nextSerials.SOLENOID_VALVE, "FBSVN10001");
+    assert.equal(r.body.stock.MOTOR.total, 0);
+
+    r = await call("/production/nodes", { method: "POST", token: ravi, body: { type: "MOTOR" } });
+    assert.equal(r.status, 201);
+    assert.deepEqual(r.body.nodes.map((n) => n.serialNumber), ["FBMN2610001"]);
+    assert.deepEqual(r.body.nodes[0].createdBy, { type: "staff", id: "ravi", name: "Ravi" });
+    assert.equal(r.body.nodes[0].status, "available");
+    assert.equal(r.body.nextSerials.MOTOR, "FBMN2610002", "the next one, for the form");
+    r = await call("/production/nodes", { method: "POST", token: ADMIN, body: { type: "solenoid_valve", count: 3 } });
+    assert.deepEqual(r.body.nodes.map((n) => n.serialNumber), ["FBSVN10001", "FBSVN10002", "FBSVN10003"]);
+
+    for (const body of [{ type: "PUMP" }, { type: "MOTOR", count: 0 }, { type: "MOTOR", count: 51 }, { type: "MOTOR", count: 2.5 }]) {
+      r = await call("/production/nodes", { method: "POST", token: ravi, body });
+      assert.equal(r.status, 400, JSON.stringify(body));
+    }
+
+    // two people saving at the same moment: different serials
+    const both = await Promise.all([
+      call("/production/nodes", { method: "POST", token: ravi, body: { type: "MOTOR", count: 2 } }),
+      call("/production/nodes", { method: "POST", token: ADMIN, body: { type: "MOTOR", count: 2 } })
+    ]);
+    assert.deepEqual(both.map((x) => x.status), [201, 201]);
+    const serials = both.flatMap((x) => x.body.nodes.map((n) => n.serialNumber));
+    assert.equal(new Set(serials).size, 4, "no serial given twice");
+    assert.deepEqual(serials.sort(), ["FBMN2610002", "FBMN2610003", "FBMN2610004", "FBMN2610005"]);
+
+    r = await call("/production/entries?kind=node", { token: ravi });
+    assert.equal(r.body.kind, "node");
+    assert.equal(r.body.entries.length, 3, "staff: own nodes only");
+    assert.ok(r.body.entries.every((e) => e.createdBy.id === "ravi"));
+    r = await call("/production/entries?kind=node", { token: ADMIN });
+    assert.equal(r.body.entries.length, 8);
+    r = await call("/production/entries", { token: ADMIN });
+    assert.equal(r.body.entries.length, 0, "controllers' entries don't list nodes");
+
+    nodes.docs.find((d) => d.id === "FBSVN10002").status = "assigned";
+    r = await call("/production/summary?kind=node", { token: ravi });
+    assert.equal(r.body.mineToday, 3);
+    assert.equal(r.body.teamToday, 8);
+    assert.equal(r.body.byType.MOTOR, 5);
+    assert.equal(r.body.byType.SOLENOID_VALVE, 3);
+    assert.equal(r.body.days[6].count, 8);
+    assert.deepEqual(r.body.stock.SOLENOID_VALVE, { available: 2, assigned: 1, total: 3 });
+    assert.deepEqual((await call("/production/nodes/stock", { token: ravi })).body.stock.MOTOR, { available: 5, assigned: 0, total: 5 });
+    r = await call("/production-users", { token: ADMIN });
+    assert.deepEqual(r.body.users.map((u) => [u.username, u.entries, u.nodeEntries]), [["ravi", 0, 3]]);
+
+    // a new year: the types with a year start again at 10001, valves go on
+    advance(70 * 24 * 3600 * 1000);
+    r = await call("/production/nodes", { method: "POST", token: ravi, body: { type: "MOTOR" } });
+    assert.equal(r.body.nodes[0].serialNumber, "FBMN2710001");
+    r = await call("/production/nodes", { method: "POST", token: ravi, body: { type: "SOLENOID_VALVE" } });
+    assert.equal(r.body.nodes[0].serialNumber, "FBSVN10004");
   });
 });

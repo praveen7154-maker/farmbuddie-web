@@ -1,5 +1,7 @@
 import { auth, db } from "/js/firebase-init.js";
 import { valveConfigExportColumns } from "/js/valve-config.js";
+import { nodeTypeName } from "/js/node-types.js";
+import { saveNodeMapping } from "/js/node-mapping.js";
 import { isDeviceOnline } from "/js/device-status-render.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
@@ -267,7 +269,7 @@ window.deleteFarmer = async (id) => {
 ⚠️ This farmer is assigned with device:
 
 Variant: ${variant}
-Serial Number: ${serial}
+Serial Number: ${serial}${farmer.nodes?.length ? `\nNodes: ${farmer.nodes.map((n) => n.serialNumber).join(", ")}` : ""}
 
 Customer is provided this device.
 Are you sure you want to delete this farmer permanently?
@@ -295,6 +297,12 @@ if (uniqueId) {
   }
 
 }
+
+  /* ===== FREE ITS NODES ===== */
+  // Back to "available", as the controller (node-mapping.js).
+  if (farmer.nodes?.length) {
+    await saveNodeMapping(db, { farmerDocId: id, farmBuddieId: farmer.farmBuddieId, nodes: [], previous: farmer.nodes });
+  }
 
   /* ===== DELETE FARMER ===== */
   // No manual cache/table update needed - data-store.js's own onSnapshot
@@ -394,6 +402,7 @@ window.downloadAllFarmersExcel = async function () {
         /* ===== VALVE CONFIG ===== */
 
         ...valveConfigExportColumns(f.valveConfig),
+        "Nodes": (f.nodes || []).map((n) => `${nodeTypeName(n.type)} ${n.serialNumber}`).join(", "),
 
         /* ===== TNEB SERVICE ===== */
 

@@ -1,5 +1,6 @@
 import { auth, db } from "/js/firebase-init.js";
 import { valveConfigViewHtml } from "/js/valve-config.js";
+import { nodeMappingViewHtml } from "/js/node-mapping.js";
 import { hardcopyRows, FARMER_DOCS } from "/js/upload-prep.js";
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
@@ -280,6 +281,7 @@ async function loadFarmer() {
 
     <!-- VALVE CONFIG + ADDITIONAL FEATURES (see valve-config.js) -->
     ${valveConfigViewHtml(f.valveConfig)}
+    ${nodeMappingViewHtml(f.nodes)}
 
     <!-- TIMESTAMPS -->
     <div class="section-title">⏱ Record Info</div>

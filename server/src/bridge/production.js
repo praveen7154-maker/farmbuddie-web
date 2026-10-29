@@ -53,6 +53,33 @@ const clean = (v) => String(v ?? "").replace(/\s+/g, "").trim();
 // "'8991940912940333745" (the operator's CSV keeps Excel from mangling it) -> digits
 const digitsOf = (v) => String(v ?? "").replace(/[^\d]/g, "");
 
+// ---------------------------------------------------------------- nodes
+// The field modules a hub drives - each its own board with its own serial,
+// made on the same page (Node mode). Nothing is typed: the serial is the
+// type's prefix, the two-digit year for the types that carry one, and a
+// running number from 10001 - FBMN2610001, FBSVN10001. The running number
+// starts again at 10001 each year for the types with a year.
+// Same table in public/js/node-types.js (the pages that map nodes to farms).
+export const NODE_TYPES = [
+  { type: "MOTOR", name: "Motor node", prefix: "FBMN", year: true },
+  { type: "SOLENOID_VALVE", name: "Solenoid valve node", prefix: "FBSVN", year: false },
+  { type: "BUTTERFLY_VALVE", name: "Butterfly valve node", prefix: "FBBVN", year: false },
+  { type: "FILTER_BACKWASH", name: "Filter backwash node", prefix: "FBBW", year: true },
+  { type: "FERTIGATION", name: "Fertigation node", prefix: "FBFG", year: true },
+  { type: "WATER_LEVEL", name: "Water level node", prefix: "FBWL", year: true }
+];
+export const NODE_FIRST = 10001;
+export const NODE_LAST = 99999;
+export const MAX_NODES_PER_SAVE = 50;
+const nodeType = (t) => NODE_TYPES.find((n) => n.type === t) || null;
+
+/** The serial without its running number: "FBMN26" (2026), "FBSVN". */
+export function nodeStem(type, ms) {
+  const t = nodeType(type);
+  if (!t) return null;
+  return t.prefix + (t.year ? new Date(ms + IST_MS).toISOString().slice(2, 4) : "");
+}
+
 /** Normalizes what was typed; returns { values, problems: { field: message } }. */
 export function checkFields(input) {
   const v = {
@@ -116,9 +143,17 @@ export const istDay = (ms) => new Date(ms + IST_MS).toISOString().slice(0, 10);
  *                    usedSimNumbers() -> Map(iccid -> { controllerId, uniqueId })
  *                    markSimAssigned(iccid, { controllerId, uniqueId })
  *                    addSims(rows, by, fileName) -> { added: [iccid], existing: [iccid] }
+ *   nodes        - productionFirebase.js (or a fake):
+ *                    createMany({ stem, count, doc }) -> [{ id, serialNumber, ...doc }]
+ *                      (the next running numbers of that stem, taken atomically;
+ *                       throws { full: true } past NODE_LAST)
+ *                    nextNumbers([stem]) -> { stem: 10004 } (what createMany takes next)
+ *                    list({ from, to, createdById }) -> [{ id, ...doc, createdAtMs }]
+ *                    countBy(createdById) -> number
+ *                    stock() -> { MOTOR: { available, assigned, total }, ... }
  *   now          - () => ms
  */
-export function createProductionModule({ store, controllers, now = () => Date.now() }) {
+export function createProductionModule({ store, controllers, nodes, now = () => Date.now() }) {
   const failures = new Map();
   const locked = (u) => {
     const f = failures.get(u);
@@ -208,33 +243,62 @@ export function createProductionModule({ store, controllers, now = () => Date.no
     createdAtMs: c.createdAtMs || null, createdBy: c.createdBy || null, source: c.source || null
   });
 
-  router.get("/me", (req, res) => res.json({ role: req.who.type, username: req.who.id, name: req.who.name, variants: VARIANTS }));
+  const nodeView = (n) => ({
+    id: n.id, type: n.type, serialNumber: n.serialNumber, status: n.status || "available",
+    farmerId: n.farmerId || null, createdAtMs: n.createdAtMs || null, createdBy: n.createdBy || null
+  });
 
-  // Today's (or a day's) numbers for the dashboard: mine, the whole team's,
-  // per variant, the last 7 days, and the next free Unique ID.
+  // The next serial of each node type (for the form to show before saving).
+  async function nextNodeSerials() {
+    const stems = NODE_TYPES.map((t) => nodeStem(t.type, now()));
+    const next = await nodes.nextNumbers(stems);
+    return Object.fromEntries(NODE_TYPES.map((t, i) => {
+      const n = Math.max(NODE_FIRST, next[stems[i]] || NODE_FIRST);
+      return [t.type, n > NODE_LAST ? null : stems[i] + n];
+    }));
+  }
+
+  router.get("/me", (req, res) => res.json({
+    role: req.who.type, username: req.who.id, name: req.who.name, variants: VARIANTS,
+    nodeTypes: NODE_TYPES.map(({ type, name, prefix, year }) => ({ type, name, prefix, year }))
+  }));
+
+  // Today's numbers for the dashboard: mine, the whole team's, per variant
+  // (per node type), the last 7 days - and what the form fills in next:
+  // the next free Unique ID and serial format (controllers) or the next
+  // serial of each node type. ?kind=node: the nodes'.
   router.get("/summary", wrap(async (req, res) => {
+    const node = req.query.kind === "node";
+    const src = node ? nodes : controllers;
     const today = istDay(now());
     const [, end] = istDayRange(today);
     const weekStart = end - 7 * 24 * 3600 * 1000;
-    const week = await controllers.list({ from: weekStart, to: end });
+    const week = await src.list({ from: weekStart, to: end });
     const days = [];
     for (let t = weekStart; t < end; t += 24 * 3600 * 1000) {
       const d = istDay(t);
       days.push({ day: d, count: week.filter((c) => istDay(c.createdAtMs) === d).length });
     }
     const todays = week.filter((c) => istDay(c.createdAtMs) === today);
-    const byVariant = Object.fromEntries(VARIANTS.map((v) => [v, todays.filter((c) => c.variant === v).length]));
-    res.json({
+    const out = {
+      kind: node ? "node" : "controller",
       today,
       mineToday: todays.filter((c) => c.createdBy?.id === req.who.id).length,
       teamToday: todays.length,
-      byVariant,
       days,
-      mineTotal: await controllers.countBy(req.who.id),
-      nextUniqueId: await controllers.nextUniqueId(),
+      mineTotal: await src.countBy(req.who.id)
+    };
+    if (node) {
+      out.byType = Object.fromEntries(NODE_TYPES.map((t) => [t.type, todays.filter((c) => c.type === t.type).length]));
+      out.nextSerials = await nextNodeSerials();
+      out.stock = await nodes.stock();
+    } else {
+      out.byVariant = Object.fromEntries(VARIANTS.map((v) => [v, todays.filter((c) => c.variant === v).length]));
+      out.nextUniqueId = await controllers.nextUniqueId();
       // the page fills a new serial in the same format, ending in the Unique ID
-      lastSerials: await controllers.lastSerials()
-    });
+      out.lastSerials = await controllers.lastSerials();
+    }
+    res.json(out);
   }));
 
   // A day's entries. Staff: their own only. Admin: everyone's, or one person's.
@@ -245,8 +309,9 @@ export function createProductionModule({ store, controllers, now = () => Date.no
     let createdById = null;
     if (req.who.type === "staff") createdById = req.who.id;
     else if (req.query.by) createdById = String(req.query.by).toLowerCase();
-    const list = await controllers.list({ from: range[0], to: range[1], createdById });
-    res.json({ day, entries: list.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0)).map(view) });
+    const node = req.query.kind === "node";
+    const list = await (node ? nodes : controllers).list({ from: range[0], to: range[1], createdById });
+    res.json({ day, kind: node ? "node" : "controller", entries: list.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0)).map(node ? nodeView : view) });
   }));
 
   // While typing: what's wrong, and what's already used by another controller.
@@ -287,6 +352,37 @@ export function createProductionModule({ store, controllers, now = () => Date.no
       throw err;
     }
   }));
+
+  // ---------------- nodes ----------------
+  // Nothing typed: the type and how many. Each gets the next serial of its
+  // type, taken in one database transaction (two people saving at once
+  // never get the same one); the page prints their QR labels.
+  router.post("/nodes", wrap(async (req, res) => {
+    const type = String(req.body?.type || "").trim().toUpperCase();
+    const count = Number(req.body?.count ?? 1);
+    const problems = {};
+    if (!nodeType(type)) problems.type = "Choose the node type";
+    if (!Number.isInteger(count) || count < 1 || count > MAX_NODES_PER_SAVE) problems.count = `1 to ${MAX_NODES_PER_SAVE} at a time`;
+    if (Object.keys(problems).length) return res.status(400).json({ error: problems.type || problems.count, problems });
+    const doc = {
+      type,
+      status: "available",
+      farmerId: null,
+      source: "production",
+      createdBy: { type: req.who.type, id: req.who.id, name: req.who.name }
+    };
+    try {
+      const made = await serial(() => nodes.createMany({ stem: nodeStem(type, now()), count, doc }));
+      const at = now();
+      console.log(`[production] ${made.length} ${type} node(s) ${made[0]?.serialNumber}${made.length > 1 ? ".." + made[made.length - 1].serialNumber : ""} added by ${req.who.type} ${req.who.id}`);
+      res.status(201).json({ ok: true, nodes: made.map((n) => nodeView({ ...n, createdAtMs: at })), nextSerials: await nextNodeSerials() });
+    } catch (err) {
+      if (err?.full) return res.status(409).json({ error: `No serials left for ${nodeType(type).name} this year - ask the admin` });
+      throw err;
+    }
+  }));
+
+  router.get("/nodes/stock", wrap(async (req, res) => res.json({ stock: await nodes.stock() })));
 
   // ---------------- SIM inventory ----------------
   // The SIMs bought for controllers (the operator's SIM list - only the
@@ -345,15 +441,19 @@ export function createProductionModule({ store, controllers, now = () => Date.no
   const adminRouter = express.Router();
   adminRouter.use(express.json({ limit: "16kb" }));
   const actor = (req) => String(req.decodedToken?.email || "admin").toLowerCase();
-  const userView = (u, entries) => ({
+  const userView = (u, entries, nodeEntries) => ({
     username: u.username, name: u.name, active: u.active, createdBy: u.createdBy, createdAt: u.createdAt,
-    passwordChangedAt: u.passwordChangedAt || null, lastLoginAt: u.lastLoginAt || null, ...(entries !== undefined ? { entries } : {})
+    passwordChangedAt: u.passwordChangedAt || null, lastLoginAt: u.lastLoginAt || null,
+    ...(entries !== undefined ? { entries } : {}), ...(nodeEntries !== undefined ? { nodeEntries } : {})
   });
 
   adminRouter.get("/", wrap(async (req, res) => {
     const users = await store.listUsers();
-    const counts = await Promise.all(users.map((u) => controllers.countBy(u.username).catch(() => null)));
-    res.json({ users: users.map((u, i) => userView(u, counts[i])) });
+    const [counts, nodeCounts] = await Promise.all([
+      Promise.all(users.map((u) => controllers.countBy(u.username).catch(() => null))),
+      Promise.all(users.map((u) => nodes.countBy(u.username).catch(() => null)))
+    ]);
+    res.json({ users: users.map((u, i) => userView(u, counts[i], nodeCounts[i])) });
   }));
 
   adminRouter.post("/", wrap(async (req, res) => {
@@ -369,7 +469,7 @@ export function createProductionModule({ store, controllers, now = () => Date.no
     const created = await store.createUser({ username, name, passwordHash: await hashPassword(password), createdBy: actor(req) });
     if (!created) return res.status(409).json({ error: `Username "${username}" is already taken` });
     console.log(`[production] user ${username} created by ${actor(req)}`);
-    res.status(201).json({ user: userView(await store.getUser(username), 0) });
+    res.status(201).json({ user: userView(await store.getUser(username), 0, 0) });
   }));
 
   adminRouter.post("/:username/password", wrap(async (req, res) => {

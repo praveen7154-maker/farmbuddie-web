@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="/css/main.css">
   <link rel="stylesheet" href="/css/admin-sidebar.css">
   <link rel="stylesheet" href="/css/dashboard-panel.css">
+  <link rel="stylesheet" href="/css/dashboard-stock.css">
   <link rel="stylesheet" href="/css/admin-tables.css">
   <link rel="stylesheet" href="/css/admin-mobile.css">
   <link rel="stylesheet" href="/css/theme-dark.generated.css">
@@ -104,6 +105,15 @@
   <h2 id="inactiveDistributorCount">0</h2>
 </div>
 
+</section>
+
+<!-- ================= STOCK: controllers + nodes, available / total ================= -->
+<section class="fb-stock" aria-labelledby="stockTitle">
+  <div class="fb-stock-head">
+    <h3 id="stockTitle">📦 Stock <small>available / total</small></h3>
+    <a href="/admin/production.html">Production →</a>
+  </div>
+  <div class="fb-stock-grid" id="stockGrid"><p class="fb-stock-wait">Counting…</p></div>
 </section>
 
 <!-- ================= RIGHT SIDE FARMER PANEL ================= -->

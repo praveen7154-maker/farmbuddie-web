@@ -85,12 +85,19 @@
   <div class="pd-grid">
 
     <!-- ============ NEW CONTROLLER ============ -->
-    <section class="pd-card pd-entry" aria-labelledby="pdEntryTitle">
+    <section class="pd-card pd-entry" id="pdEntry" data-mode="hub" aria-labelledby="pdEntryTitle">
       <div class="pd-card-head">
-        <h2 id="pdEntryTitle"><span class="pd-ic" data-icon="scan-line"></span>New controller</h2>
-        <span class="pd-hint">Scanner ready &middot; <kbd>Enter</kbd> next field &middot; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save</span>
+        <h2 id="pdEntryTitle"><span class="pd-ic" id="pdEntryIc" data-icon="scan-line"></span><span id="pdEntryName">New controller</span></h2>
+        <div class="pd-mode" role="radiogroup" aria-label="What you are making" id="pdMode">
+          <button type="button" role="radio" data-mode="hub" aria-checked="true"><span class="pd-ic" data-icon="cpu"></span>Hub controller</button>
+          <button type="button" role="radio" data-mode="node" aria-checked="false"><span class="pd-ic" data-icon="network"></span>Node</button>
+          <i class="pd-mode-pill" aria-hidden="true"></i>
+        </div>
       </div>
 
+      <!-- Hub controller: scan / type every field -->
+      <div class="pd-pane" id="pdHubPane">
+      <p class="pd-hint pd-entry-hint">Scanner ready &middot; <kbd>Enter</kbd> next field &middot; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save</p>
       <div class="pd-variants" role="radiogroup" aria-label="Variant" id="pdVariants">
         <button type="button" role="radio" data-variant="IRRIGO" data-tone="green">Irrigo</button>
         <button type="button" role="radio" data-variant="IRRIGO_PLUS" data-tone="sky">Irrigo Plus</button>
@@ -135,10 +142,35 @@
           <span class="pd-field-msg"></span>
         </label>
       </form>
+      </div>
+
+      <!-- Node: choose the type - the serial is made, nothing to type -->
+      <div class="pd-pane" id="pdNodePane" hidden>
+        <p class="pd-hint pd-entry-hint">Choose the node type - the next serial is made for it and printed as a QR label.</p>
+        <div class="pd-node-types" role="radiogroup" aria-label="Node type" id="pdNodeTypes"></div>
+        <p class="pd-field-msg pd-variant-msg" id="pdNodeMsg"></p>
+        <div class="pd-node-make">
+          <figure class="pd-node-label" id="pdNodeLabel" aria-label="The label that prints">
+            <div class="pd-node-qr" id="pdNodeQr"></div>
+            <figcaption><b>FARM BUDDIE</b><span id="pdNodeTypeName">Choose the node type</span><code id="pdNodeSerial">— — —</code></figcaption>
+          </figure>
+          <div class="pd-node-side">
+            <span class="pd-label">Serial number <span class="pd-lock" data-icon="lock" title="Made automatically - the next free one of this type"></span></span>
+            <output class="pd-node-sn" id="pdNodeSn">—</output>
+            <span class="pd-label">How many</span>
+            <div class="pd-stepper pd-qty">
+              <button type="button" id="pdQtyDown" aria-label="Fewer"><span class="pd-ic" data-icon="minus"></span></button>
+              <input id="pdNodeQty" type="text" inputmode="numeric" value="1" maxlength="2" aria-label="How many nodes">
+              <button type="button" id="pdQtyUp" aria-label="More"><span class="pd-ic" data-icon="plus"></span></button>
+            </div>
+            <small class="pd-node-range" id="pdNodeRange"></small>
+          </div>
+        </div>
+      </div>
 
       <div class="pd-print">
         <label class="pd-switch-row"><input type="checkbox" id="pdAutoPrint"><span class="pd-switch"><i></i></span>
-          <span><b><span class="pd-ic" data-icon="printer"></span>Print labels after saving</b><small>2 &times; 1 inch, serial barcode - module box + carton</small></span></label>
+          <span><b><span class="pd-ic" data-icon="printer"></span>Print labels after saving</b><small id="pdPrintWhat">2 &times; 1 inch, serial barcode - module box + carton</small></span></label>
         <div class="pd-stepper" aria-label="Labels per controller">
           <button type="button" id="pdCopiesDown" aria-label="Fewer"><span class="pd-ic" data-icon="minus"></span></button>
           <output id="pdCopies">2</output>
@@ -147,14 +179,14 @@
       </div>
 
       <div class="pd-actions">
-        <button type="button" class="pd-btn pd-btn-primary" id="pdSave"><span class="pd-ic" data-icon="plus"></span>Add controller</button>
+        <button type="button" class="pd-btn pd-btn-primary" id="pdSave"><span class="pd-ic" data-icon="plus"></span><span id="pdSaveText">Add controller</span></button>
         <button type="button" class="pd-btn pd-btn-ghost" id="pdClear">Clear</button>
       </div>
     </section>
 
     <!-- ============ SIM INVENTORY + TEAM ============ -->
     <div class="pd-side" id="pdSide">
-    <section class="pd-card pd-simcard" aria-labelledby="pdSimTitle">
+    <section class="pd-card pd-simcard" id="pdSimCard" aria-labelledby="pdSimTitle">
       <div class="pd-card-head">
         <h2 id="pdSimTitle"><span class="pd-ic" data-icon="microchip"></span>SIM inventory</h2>
         <label class="pd-btn pd-btn-ghost pd-upload" title="The operator's SIM list (CSV or Excel) - only MSISDN, SIM number and IMSI are kept">
@@ -170,6 +202,15 @@
       <div class="pd-simbar" aria-hidden="true"><i id="pdSimBar"></i></div>
       <p class="pd-count" id="pdSimInv">loading…</p>
       <div class="pd-credentials pd-simresult" id="pdSimResult" hidden></div>
+    </section>
+
+    <!-- ============ NODE STOCK (Node mode) ============ -->
+    <section class="pd-card pd-stockcard" id="pdStockCard" hidden aria-labelledby="pdStockTitle">
+      <div class="pd-card-head">
+        <h2 id="pdStockTitle"><span class="pd-ic" data-icon="package"></span>Node stock</h2>
+        <span class="pd-hint">available / made</span>
+      </div>
+      <div class="pd-stock" id="pdStock"><p class="pd-count">loading…</p></div>
     </section>
 
   <!-- ============ TEAM (admins only) ============ -->

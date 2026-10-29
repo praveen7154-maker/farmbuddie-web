@@ -1,5 +1,7 @@
-// Production (admin panel > Production) - daily entry of new MCU controllers,
-// for the production team and admins. The server does the real work and
+// Production (admin panel > Production) - daily entry of new MCU controllers
+// (Hub controller mode) and field nodes (Node mode: motor, valve, filter
+// backwash ... nodes - only the type is chosen, the serial is made), for
+// the production team and admins. The server does the real work and
 // every check (server/src/bridge/production.js): same records and same
 // "nothing used twice" rules as the MCU / Controller page's Excel upload,
 // plus who entered each one. Admins also manage the team's accounts here.
@@ -8,7 +10,9 @@ import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/
 import { BRIDGE_BASE_URL } from "/js/config.js";
 import { staffSession, clearStaffSession } from "/js/production-session.js";
 import { fmtTime, fmtDate } from "/js/time-format.js";
-import { printLabels } from "/js/labels.js";
+import { printLabels, printNodeLabels } from "/js/labels.js";
+import { NODE_TYPES, nodeTypeName } from "/js/node-types.js";
+import { qrSvg } from "/js/qr-lib.js";
 
 const shell = window.FBShell;
 const icon = shell.icon;
@@ -81,9 +85,6 @@ async function start() {
   }
   const admin = me.role === "admin";
   $("pdRole").textContent = admin ? "Admin · Production" : "Production team";
-  $("pdHello").textContent = admin
-    ? "Enter controllers yourself, or manage the production team below."
-    : `Hello ${me.name} - scan or type each new controller. Every field is checked as you go.`;
   $("pdListName").textContent = admin ? "Entries" : "My entries";
   // No team card for the production team: their entries go beside the form instead.
   if (!admin) $("pdSide").appendChild($("pdListCard"));
@@ -91,22 +92,78 @@ async function start() {
   setupVariants();
   setupPrint();
   setupForm();
+  setupNodes();
   setupList(admin);
   if (admin) setupTeam();
+  setupMode();
   await Promise.all([loadSummary(), loadEntries()]);
   focusFirst();
+}
+
+// ---------------------------------------------------------------- hub / node
+// The entry card's switch (top right): Hub controller - the form with every
+// field; Node - the node type and how many, the serial is made. The hero's
+// numbers, the side card (SIMs / node stock) and the entries follow it.
+let mode = (() => { try { return localStorage.getItem("fb.prodMode") === "node" ? "node" : "hub"; } catch (e) { return "hub"; } })();
+const isNode = () => mode === "node";
+const kind = () => (isNode() ? "node" : "controller");
+
+function setupMode() {
+  document.querySelectorAll("#pdMode [data-mode]").forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.mode === mode) return;
+    mode = b.dataset.mode;
+    try { localStorage.setItem("fb.prodMode", mode); } catch (e) { /* private mode */ }
+    applyMode();
+    entries = [];
+    loadSummary();
+    loadEntries();
+    focusFirst();
+  }));
+  applyMode();
+}
+
+function applyMode() {
+  const node = isNode();
+  const admin = me.role === "admin";
+  $("pdEntry").dataset.mode = mode;
+  document.querySelectorAll("#pdMode [data-mode]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.mode === mode)));
+  $("pdHubPane").hidden = node;
+  $("pdNodePane").hidden = !node;
+  $("pdEntryName").textContent = node ? "New node" : "New controller";
+  $("pdEntryIc").innerHTML = icon(node ? "qr-code" : "scan-line");
+  $("pdClear").hidden = node;
+  $("pdSimCard").hidden = node;
+  $("pdStockCard").hidden = !node;
+  $("pdPrintWhat").innerHTML = node ? "2 &times; 1 inch, QR + serial - node box + carton" : "2 &times; 1 inch, serial barcode - module box + carton";
+  $("pdSearch").placeholder = node ? "Find serial, node type…" : "Find serial, ID, IMEI, SIM…";
+  $("pdSpark").setAttribute("aria-label", `${node ? "Nodes" : "Controllers"} made per day, last 7 days`);
+  $("pdHello").textContent = node
+    ? (admin ? "Choose the node type - the serial is made and its QR label printed." : `Hello ${me.name} - choose the node type, the serial is made for you.`)
+    : (admin ? "Enter controllers yourself, or manage the production team below." : `Hello ${me.name} - scan or type each new controller. Every field is checked as you go.`);
+  nodeSaveText();
+  if (!node) $("pdSaveText").textContent = "Add controller";
 }
 
 // ---------------------------------------------------------------- summary
 let nextUniqueId = null;
 let lastSerials = {};
 async function loadSummary() {
+  const want = kind();
   try {
-    const s = await api("/production/summary");
+    const s = await api(`/production/summary?kind=${want}`);
+    if (want !== kind()) return;            // switched mode meanwhile
     countTo($("pdMine"), s.mineToday);
     countTo($("pdTeamToday"), s.teamToday);
     countTo($("pdMineTotal"), s.mineTotal);
     drawSpark(s.days);
+    if (s.kind === "node") {
+      $("pdVariantsToday").innerHTML = NODE_TYPES
+        .map((t) => `<span class="pd-vchip" data-tone="${nodeTone(t.type)}"><i></i>${esc(t.name)} <b>${s.byType?.[t.type] ?? 0}</b></span>`).join("");
+      nextSerials = s.nextSerials || {};
+      showStock(s.stock);
+      showNode();
+      return;
+    }
     $("pdVariantsToday").innerHTML = Object.entries(s.byVariant)
       .map(([v, n]) => `<span class="pd-vchip" data-tone="${toneOf(v)}"><i></i>${esc(VARIANT_NAMES[v] || v)} <b>${n}</b></span>`).join("");
     nextUniqueId = s.nextUniqueId;
@@ -119,6 +176,7 @@ async function loadSummary() {
   }
 }
 const toneOf = (v) => ({ IRRIGO: "green", IRRIGO_PLUS: "sky", IRRIGO_SMART_PLUS: "violet" }[v] || "teal");
+const nodeTone = (t) => ({ MOTOR: "amber", SOLENOID_VALVE: "sky", BUTTERFLY_VALVE: "violet", FILTER_BACKWASH: "teal", FERTIGATION: "lime", WATER_LEVEL: "green" }[t] || "teal");
 
 function countTo(el, n) {
   const from = Number(el.dataset.n || 0);
@@ -400,6 +458,10 @@ let checkSeq = 0;
 let saving = false;
 
 function focusFirst() {
+  if (isNode()) {
+    ($("pdNodeTypes").querySelector('[aria-checked="true"]') || $("pdNodeTypes").querySelector("button"))?.focus();
+    return;
+  }
   const first = inputs().find((i) => !i.value) || inputs()[0];
   first.focus();
 }
@@ -426,7 +488,7 @@ function setupForm() {
     });
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && document.activeElement?.closest("#pdForm, #pdVariants")) { e.preventDefault(); save(); }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && document.activeElement?.closest("#pdForm, #pdVariants, #pdNodePane")) { e.preventDefault(); save(); }
   });
   $("pdSave").addEventListener("click", save);
   $("pdClear").addEventListener("click", () => resetForm(true));
@@ -492,6 +554,7 @@ function render(showAll = false) {
 
 async function save() {
   if (saving) return;
+  if (isNode()) return saveNodes();
   if (!variant) { render(true); $("pdVariants").querySelector("button").focus(); return; }
   saving = true;
   const btn = $("pdSave");
@@ -548,6 +611,155 @@ function celebrate() {
   card.classList.remove("pd-saved"); void card.offsetWidth; card.classList.add("pd-saved");
 }
 
+// ---------------------------------------------------------------- nodes
+// Nothing to type: the type (a tile), how many (1-50), Generate. The card
+// shows the label that prints - QR + serial - with the next serial of that
+// type; the server gives out the real ones (the same, unless someone else
+// saved one of that type in between).
+const MAX_NODES = 50;
+let nodeType = null;
+let nextSerials = {};
+let nodeQty = 1;
+let qrShown = "";
+
+function setupNodes() {
+  const box = $("pdNodeTypes");
+  box.innerHTML = NODE_TYPES.map((t) => `
+    <button type="button" role="radio" aria-checked="false" data-type="${t.type}" data-tone="${nodeTone(t.type)}">
+      <span class="pd-node-ic">${icon(t.icon)}</span><b>${esc(t.name.replace(/ node$/, ""))}</b><small data-next>${esc(t.prefix)}${t.year ? "··" : ""}</small>
+    </button>`).join("");
+  const saved = (() => { try { return localStorage.getItem("fb.prodNodeType"); } catch (e) { return null; } })();
+  const pick = (t) => {
+    nodeType = t;
+    box.querySelectorAll("[data-type]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.type === t)));
+    $("pdNodeMsg").textContent = "";
+    try { localStorage.setItem("fb.prodNodeType", t); } catch (e) { /* private mode */ }
+    showNode();
+  };
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-type]");
+    if (b) pick(b.dataset.type);
+  });
+  // arrow keys move between the tiles (Ctrl+Enter generates, as on the form)
+  box.addEventListener("keydown", (e) => {
+    const tiles = [...box.querySelectorAll("[data-type]")];
+    const i = tiles.indexOf(document.activeElement);
+    if (i < 0) return;
+    const step = { ArrowRight: 1, ArrowDown: 3, ArrowLeft: -1, ArrowUp: -3 }[e.key];
+    if (step) {
+      e.preventDefault();
+      const next = tiles[(i + step + tiles.length) % tiles.length];
+      next.focus();
+      pick(next.dataset.type);
+    }
+  });
+  if (saved && NODE_TYPES.some((t) => t.type === saved)) pick(saved);
+
+  const qty = $("pdNodeQty");
+  const setQty = (n) => {
+    nodeQty = Math.min(MAX_NODES, Math.max(1, Math.round(Number(n)) || 1));
+    qty.value = nodeQty;
+    showNode();
+  };
+  qty.addEventListener("input", () => { qty.value = qty.value.replace(/\D/g, ""); if (qty.value) setQty(qty.value); });
+  qty.addEventListener("blur", () => setQty(qty.value));
+  qty.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); setQty(qty.value); save(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setQty(nodeQty + 1); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); setQty(nodeQty - 1); }
+  });
+  $("pdQtyDown").addEventListener("click", () => setQty(nodeQty - 1));
+  $("pdQtyUp").addEventListener("click", () => setQty(nodeQty + 1));
+}
+
+// "FBMN2610004" + 3 -> "FBMN2610006"
+const serialPlus = (sn, n) => {
+  const m = /^(.*?)(\d{5})$/.exec(sn || "");
+  return m ? m[1] + (Number(m[2]) + n) : "";
+};
+
+function nodeSaveText() {
+  if (!isNode()) return;
+  $("pdSaveText").textContent = `Generate ${nodeQty > 1 ? `${nodeQty} nodes` : "node"}`;
+}
+
+function showNode() {
+  // each tile: the serial its next node gets
+  document.querySelectorAll("#pdNodeTypes [data-type]").forEach((b) => {
+    if (nextSerials[b.dataset.type]) b.querySelector("[data-next]").textContent = nextSerials[b.dataset.type];
+  });
+  const t = NODE_TYPES.find((x) => x.type === nodeType);
+  const next = t ? nextSerials[t.type] : null;
+  $("pdNodeLabel").dataset.tone = t ? nodeTone(t.type) : "";
+  $("pdNodeTypeName").textContent = t ? t.name.toUpperCase() : "Choose the node type";
+  $("pdNodeSerial").textContent = next || (t ? "…" : "— — —");
+  $("pdNodeSn").textContent = next || (t ? "…" : "—");
+  $("pdNodeRange").textContent = next && nodeQty > 1 ? `${nodeQty} nodes: ${next} → ${serialPlus(next, nodeQty - 1)}` : next ? "the next free serial of this type" : "";
+  nodeSaveText();
+  drawQr(next || "");
+}
+
+async function drawQr(text) {
+  if (text === qrShown) return;
+  qrShown = text;
+  const box = $("pdNodeQr");
+  if (!text) { box.innerHTML = `<span class="pd-qr-empty">${icon("qr-code")}</span>`; return; }
+  try {
+    const svg = await qrSvg(text);
+    if (qrShown === text) box.innerHTML = svg;
+  } catch (err) {
+    box.innerHTML = `<span class="pd-qr-empty">${icon("qr-code")}</span>`;
+    console.warn("qr:", err);
+  }
+}
+
+function showStock(stock) {
+  if (!stock) return;
+  $("pdStock").innerHTML = NODE_TYPES.map((t) => {
+    const s = stock[t.type] || { available: 0, total: 0 };
+    const pct = s.total ? Math.round((s.available / s.total) * 100) : 0;
+    return `<div class="pd-stock-row" data-tone="${nodeTone(t.type)}">
+      <span class="pd-node-ic">${icon(t.icon)}</span>
+      <span class="pd-stock-name">${esc(t.name)}</span>
+      <span class="pd-stock-n"><b>${s.available}</b> / ${s.total}</span>
+      <span class="pd-stock-bar" title="${s.available} available of ${s.total} made"><i style="width:${pct}%"></i></span>
+    </div>`;
+  }).join("");
+}
+
+async function saveNodes() {
+  if (!nodeType) {
+    $("pdNodeMsg").textContent = "Choose the node type";
+    $("pdNodeTypes").querySelector("button").focus();
+    return;
+  }
+  saving = true;
+  const btn = $("pdSave");
+  btn.disabled = true;
+  btn.classList.add("busy");
+  try {
+    const r = await api("/production/nodes", { method: "POST", body: { type: nodeType, count: nodeQty } });
+    celebrate();
+    const first = r.nodes[0].serialNumber, last = r.nodes[r.nodes.length - 1].serialNumber;
+    toast(`${r.nodes.length > 1 ? `${r.nodes.length} nodes ${first} → ${last}` : `Node ${first}`} saved` +
+      (printPrefs.auto ? ` - printing ${r.nodes.length * printPrefs.copies} label${r.nodes.length * printPrefs.copies > 1 ? "s" : ""}` : ""));
+    if (printPrefs.auto) printNodeLabels(r.nodes, printPrefs.copies).catch((err) => toast("Labels not printed: " + err.message, "bad"));
+    if (currentDay === istToday() && isNode()) {
+      entries.unshift(...[...r.nodes].reverse());
+      renderEntries(new Set(r.nodes.map((n) => n.id)));
+    }
+    nextSerials = r.nextSerials || nextSerials;
+    showNode();
+    loadSummary();
+  } catch (err) {
+    toast(err.message, "bad");
+  } finally {
+    saving = false;
+    btn.disabled = false;
+    btn.classList.remove("busy");
+  }
+}
+
 // ---------------------------------------------------------------- labels
 // Remembered on this computer: print after each save (on unless switched
 // off), and how many labels per controller (2: module box + carton).
@@ -571,22 +783,25 @@ function setupPrint() {
   };
   $("pdCopiesDown").addEventListener("click", () => step(-1));
   $("pdCopiesUp").addEventListener("click", () => step(1));
+  const print = (list) => (listKind === "node" ? printNodeLabels(list, printPrefs.copies) : printLabels(list, printPrefs.copies))
+    .catch((err) => toast("Labels not printed: " + err.message, "bad"));
   $("pdPrintAll").addEventListener("click", () => {
     const list = shown();
     if (!list.length) { toast("No entries to print", "bad"); return; }
-    if (list.length > 1 && !confirm(`Print ${list.length * printPrefs.copies} labels (${list.length} controllers x ${printPrefs.copies})?`)) return;
-    printLabels(list, printPrefs.copies);
+    if (list.length > 1 && !confirm(`Print ${list.length * printPrefs.copies} labels (${list.length} ${listKind === "node" ? "nodes" : "controllers"} x ${printPrefs.copies})?`)) return;
+    print(list);
   });
   $("pdEntries").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-print]");
     if (!b) return;
     const c = entries.find((x) => x.id === b.dataset.print);
-    if (c) printLabels(c, printPrefs.copies);
+    if (c) print(c);
   });
 }
 
 // ---------------------------------------------------------------- entries
 let entries = [];
+let listKind = "controller";     // what `entries` holds
 let currentDay = istToday();
 let who = "";            // admin filter: "" everyone, else a username / email
 
@@ -618,10 +833,13 @@ function setupList(admin) {
 async function loadEntries() {
   const box = $("pdEntries");
   box.classList.add("loading");
+  const want = kind();
   try {
-    const q = new URLSearchParams({ day: currentDay, ...(who ? { by: who } : {}) });
+    const q = new URLSearchParams({ day: currentDay, kind: want, ...(who ? { by: who } : {}) });
     const r = await api(`/production/entries?${q}`);
+    if (want !== kind()) return;            // switched mode meanwhile
     entries = r.entries;
+    listKind = want;
     renderEntries();
   } catch (err) {
     box.innerHTML = `<p class="pd-empty">${esc(err.message)}</p>`;
@@ -633,23 +851,36 @@ async function loadEntries() {
 function shown() {
   const q = $("pdSearch").value.trim().toLowerCase();
   if (!q) return entries;
-  return entries.filter((e) => [e.serialNumber, e.uniqueId, e.imeiNumber, e.simMsisdn, e.simNumber, e.simImsi, e.createdBy?.name, e.createdBy?.id]
+  return entries.filter((e) => [e.serialNumber, e.uniqueId, e.imeiNumber, e.simMsisdn, e.simNumber, e.simImsi, e.createdBy?.name, e.createdBy?.id,
+    e.type && nodeTypeName(e.type), e.status]
     .some((v) => String(v || "").toLowerCase().includes(q)));
 }
 
-function renderEntries(newId) {
+function renderEntries(newIds) {
+  const isNew = (id) => (newIds instanceof Set ? newIds.has(id) : id === newIds);
   const list = shown();
   const admin = me.role === "admin";
   const today = currentDay === istToday();
-  $("pdCount").textContent = `${fmtDate(currentDay + "T12:00:00+05:30")}${today ? " · today" : ""} · ${entries.length} controller${entries.length === 1 ? "" : "s"}` +
+  const what = listKind === "node" ? "node" : "controller";
+  $("pdCount").textContent = `${fmtDate(currentDay + "T12:00:00+05:30")}${today ? " · today" : ""} · ${entries.length} ${what}${entries.length === 1 ? "" : "s"}` +
     (list.length !== entries.length ? ` · ${list.length} shown` : "");
   if (!list.length) {
-    $("pdEntries").innerHTML = `<div class="pd-empty">${icon("factory")}<p>${entries.length ? "Nothing matches the search." : today ? "No controllers yet today - the first one you add shows up here." : "No controllers on this day."}</p></div>`;
+    $("pdEntries").innerHTML = `<div class="pd-empty">${icon("factory")}<p>${entries.length ? "Nothing matches the search." : today ? `No ${what}s yet today - the first one you add shows up here.` : `No ${what}s on this day.`}</p></div>`;
+    return;
+  }
+  const byOf = (e) => (e.createdBy ? `${e.createdBy.type === "admin" ? "Admin" : esc(e.createdBy.name || e.createdBy.id)}` : (e.source === "production" ? "-" : "Excel upload"));
+  if (listKind === "node") {
+    $("pdEntries").innerHTML = list.map((e) => `<article class="pd-entry-row pd-node-row${isNew(e.id) ? " pd-new" : ""}" data-tone="${nodeTone(e.type)}">
+      <div class="pd-entry-id"><b>${esc(e.serialNumber)}</b><span>${esc(nodeTypeName(e.type))}</span></div>
+      <div class="pd-entry-main"><div><small>Status</small><span class="pd-status ${e.status === "assigned" ? "on" : ""}">${e.status === "assigned" ? "On a farm" : "Available"}</span></div></div>
+      <div class="pd-entry-meta"><span>${e.createdAtMs ? fmtTime(e.createdAtMs) : ""}</span>${admin ? `<small>${byOf(e)}</small>` : ""}
+        <button type="button" class="pd-icon-btn pd-reprint" data-print="${esc(e.id)}" title="Print labels" aria-label="Print labels for ${esc(e.serialNumber)}">${icon("printer")}</button></div>
+    </article>`).join("");
     return;
   }
   $("pdEntries").innerHTML = list.map((e) => {
-    const by = e.createdBy ? `${e.createdBy.type === "admin" ? "Admin" : esc(e.createdBy.name || e.createdBy.id)}` : (e.source === "production" ? "-" : "Excel upload");
-    return `<article class="pd-entry-row${e.id === newId ? " pd-new" : ""}" data-tone="${toneOf(e.variant)}">
+    const by = byOf(e);
+    return `<article class="pd-entry-row${isNew(e.id) ? " pd-new" : ""}" data-tone="${toneOf(e.variant)}">
       <div class="pd-entry-id"><b>${esc(e.uniqueId)}</b><span>${esc(VARIANT_NAMES[e.variant] || e.variant || "")}</span></div>
       <div class="pd-entry-main">
         <div><small>Serial</small>${esc(e.serialNumber)}</div>
@@ -667,6 +898,17 @@ async function exportExcel() {
   if (!list.length) { toast("Nothing to export for this day", "bad"); return; }
   try {
     const XLSX = await window.loadXlsx();
+    const by = (e) => (e.createdBy ? (e.createdBy.type === "admin" ? `Admin (${e.createdBy.id})` : `${e.createdBy.name} (${e.createdBy.id})`) : "");
+    if (listKind === "node") {
+      const ws = XLSX.utils.json_to_sheet(list.map((e) => ({
+        "Node type": nodeTypeName(e.type), "Serial Number": e.serialNumber, "Status": e.status,
+        "Entered by": by(e), "Time": e.createdAtMs ? fmtTime(e.createdAtMs) : ""
+      })));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Nodes");
+      XLSX.writeFile(wb, `production_nodes_${currentDay}${who ? "_" + who.replace(/[^a-z0-9._-]/gi, "") : ""}.xlsx`);
+      return;
+    }
     // Same columns as the MCU / Controller upload template, then who and when.
     const rows = list.map((e) => ({
       "Variant": e.variant, "Serial Number": e.serialNumber, "Unique ID": e.uniqueId, "IMEI Number": e.imeiNumber,
@@ -868,7 +1110,7 @@ function renderUsers(highlight = null) {
     <article class="pd-user${u.active ? "" : " off"}${u.username === highlight ? " pd-new" : ""}" data-user="${esc(u.username)}">
       <span class="pd-avatar">${esc((u.name || u.username).charAt(0).toUpperCase())}</span>
       <div class="pd-user-main"><b>${esc(u.name)}</b><span>@${esc(u.username)}${u.active ? "" : " · switched off"}</span></div>
-      <div class="pd-user-stat"><b>${u.entries ?? "–"}</b><small>controllers</small></div>
+      <div class="pd-user-stat"><b>${u.entries ?? "–"}<i>/</i>${u.nodeEntries ?? "–"}</b><small>controllers / nodes</small></div>
       <div class="pd-user-meta"><small>Last sign-in</small>${u.lastLoginAt ? `${fmtDate(u.lastLoginAt)}, ${fmtTime(u.lastLoginAt)}` : "never"}</div>
       <div class="pd-user-meta"><small>Created by</small>${esc(u.createdBy || "-")}</div>
       ${freshCreds.has(u.username) ? `<div class="pd-user-cred">${icon("key-round")}<span>Username <code>${esc(u.username)}</code></span><span>Password <code>${esc(freshCreds.get(u.username))}</code></span><small>shown until this page is closed</small></div>` : ""}

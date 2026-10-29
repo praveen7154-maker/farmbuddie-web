@@ -1,8 +1,11 @@
 import { auth, db } from "/js/firebase-init.js";
 import { renderValveConfigSection, readValveConfig, fillValveConfig } from "/js/valve-config.js";
+import { createNodeMapping } from "/js/node-mapping.js";
 
 // Valve Configuration + Additional Features fields (IRRIGO and IRRIGO_PLUS alike)
 renderValveConfigSection();
+// Node Mapping (motor / valve / ... nodes, by serial) in the MCU card
+const nodeMapping = createNodeMapping("nodeMapping", db);
 import { onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
 
@@ -998,6 +1001,14 @@ const valveConfig = readValveConfig().config;
     // 🔥 STEP 1: VALIDATE FIRST (NO SAVE)
     await validatePhones(db, farmerData);
 
+    // The nodes chosen: still free?
+    const nodeProblem = await nodeMapping.check();
+    if (nodeProblem) {
+      alert("❌ " + nodeProblem);
+      hideLoader();
+      return resetButton(btn);
+    }
+
     /* ================= GENERATE FARM ID ================= */
     // Only now, after every check - a refused save doesn't use up a number.
     const farmBuddieId = await generateFarmBuddieId();
@@ -1019,6 +1030,16 @@ const valveConfig = readValveConfig().config;
       networkType: networkType,
       updatedAt: serverTimestamp()
     });
+
+    // The new farm's nodes: taken in one go with its list (node-mapping.js).
+    // The farm is saved either way - a node taken by another farm in the
+    // last seconds is a warning, fixed from Edit Farm.
+    try {
+      await nodeMapping.save({ farmerDocId: newFarmRef.id, farmBuddieId });
+    } catch (nodeErr) {
+      console.error("Node mapping error:", nodeErr);
+      alert("⚠ Farm saved, but the nodes weren't mapped: " + nodeErr.message + "\n\nAdd them again from Edit Farm.");
+    }
     const now = new Date();
     const formattedTime = fmtDateTime(now);
     hideLoader();

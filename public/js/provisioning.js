@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "/js/config.js";
 import { encryptRaw } from "/js/qrCrypto.js";
+import { loadQrLib } from "/js/qr-lib.js";
 
 /**
  * Calls POST /provision/device — issues (or rotates) MQTT credentials for
@@ -37,30 +38,6 @@ export async function provisionDeviceCredentials(auth, controllerDocId, { rotate
  * simply reopened - founders can look at or re-share it anytime, no
  * Rotate (which actually changes the password) needed just to view it.
  */
-// The QR drawing library (node-qrcode's browser build), loaded here on first
-// use so no page that shows a credential can forget it. Pinned to 1.5.1:
-// 1.5.3 and later no longer ship build/qrcode.min.js (a 404 - the QR box
-// just stayed empty).
-const QR_LIB_URL = "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
-let qrLibPromise = null;
-
-function loadQrLib() {
-  if (window.QRCode) return Promise.resolve(window.QRCode);
-  if (!qrLibPromise) {
-    qrLibPromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = QR_LIB_URL;
-      script.onload = () => (window.QRCode ? resolve(window.QRCode) : reject(new Error("QR library didn't start")));
-      script.onerror = () => {
-        qrLibPromise = null;   // let the next try load it again
-        reject(new Error("QR library couldn't be downloaded"));
-      };
-      document.head.appendChild(script);
-    });
-  }
-  return qrLibPromise;
-}
-
 export async function renderMqttCredentialReveal(container, data) {
   container.innerHTML = `
     <div class="mqtt-reveal-box">
