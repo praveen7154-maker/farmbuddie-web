@@ -254,6 +254,16 @@ function normalizeControllerRow(row) {
     return { row: normalized, corruptedFields };
 }
 
+// "Ravi Kumar (Production)", "admin@... (Excel upload)" - who added a controller.
+function createdByText(c) {
+    const by = c?.createdBy;
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    if (!by) return "-";
+    const how = c.source === "production" ? "Production" : c.source === "excel" ? "Excel upload" : "";
+    const who = by.type === "staff" ? `${by.name || by.id} (@${by.id})` : (by.id || by.name || "Admin");
+    return esc(who) + (how ? ` <small>· ${how}</small>` : "");
+}
+
 /* ================= Preview Excel ================= */
 function previewExcel(rows) {
 
@@ -467,6 +477,12 @@ async function uploadControllers(){
 
                 farmerId:null,
 
+                // Who added it - the Production page records the same
+                // (server/src/bridge/production.js).
+                source:"excel",
+
+                createdBy:{ type:"admin", id:(auth.currentUser?.email || "").toLowerCase(), name:auth.currentUser?.email || "" },
+
                 createdAt:serverTimestamp()
 
             });
@@ -657,6 +673,7 @@ if (c.status === "assigned" && farmer) {
   /* ================= TABLE ROW ================= */
 
   const tr = document.createElement("tr");
+  if (c.createdBy) tr.title = "Added by " + createdByText(c).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
 
  tr.innerHTML = `
 <td>${serialIndex++}</td>
@@ -983,6 +1000,7 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
       <b>Created At:</b>
       ${fmtDateTime(f.createdAt)}
     </div>
+
     <div class="info-item">
       <b>Last Updated:</b>
       ${fmtDateTime(f.updatedAt)}

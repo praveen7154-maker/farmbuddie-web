@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Production | Farm Buddie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/js/admin-shell.js"></script>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js">
+  <link rel="modulepreload" href="/js/firebase-init.js">
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/logo_icon.png">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/admin-sidebar.css">
+  <link rel="stylesheet" href="/css/admin-mobile.css">
+  <link rel="stylesheet" href="/css/theme-dark.generated.css">
+  <link rel="stylesheet" href="/css/admin-shell.css">
+  <link rel="stylesheet" href="/css/production.css">
+</head>
+
+<body class="fb-layout fbx-prod-body">
+
+<!-- SIDEBAR (Classic view, admins) -->
+<aside class="fb-sidebar">
+  <div class="fb-brand">
+    <img src="/assets/logo.png" alt="Farm Buddie Logo">
+  </div>
+
+  <nav class="fb-menu">
+    <a href="/admin/index.html">📊 Dashboard</a>
+    <a href="/admin/farmer-onboarding.html">🧑‍🌾 Farmer Onboarding</a>
+    <a href="/admin/farmer-database.html">📋 Farmer Database</a>
+    <a href="/admin/controller-database.html">🧠 MCU / Controller</a>
+    <!--<a href="/admin/phone-auth.html">📱 Phone Authentication</a>-->
+    <a href="/admin/analytics.html">📈 Analytics</a>
+    <a href="/admin/distributor-database.html">🏢 Distributor Database</a>
+    <a href="/admin/vps-status.html">🖥️ VPS & TBMQ</a>
+    <a href="/admin/ota.html">🚀 Firmware OTA</a>
+    <a href="/admin/event-log.html">🗃️ Event Log</a>
+    <a href="/admin/broadcast.html">📢 Message Broadcast</a>
+    <a href="/admin/pricing.html">💰 Module Pricing</a>
+    <a href="#" id="logoutBtn" class="logout">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="fb-main">
+
+<header class="fb-topbar">
+  <h1>🏭 Production</h1>
+  <span class="fb-user">Admin</span>
+</header>
+
+<div class="pd" id="pd" aria-busy="true">
+
+  <!-- ============ TODAY ============ -->
+  <section class="pd-hero">
+    <div class="pd-hero-grid" aria-hidden="true"></div>
+    <div class="pd-hero-txt">
+      <span class="fbx-eyebrow"><span class="fbx-dot"></span><span id="pdRole">Production line</span></span>
+      <h1 class="pd-title">Production</h1>
+      <p id="pdHello">Scan or type each new controller - every field is checked as you go.</p>
+    </div>
+    <div class="pd-stats">
+      <div class="pd-stat pd-stat-main">
+        <small>Mine today</small>
+        <b id="pdMine">–</b>
+      </div>
+      <div class="pd-stat">
+        <small>Team today</small>
+        <b id="pdTeamToday">–</b>
+      </div>
+      <div class="pd-stat">
+        <small>My total</small>
+        <b id="pdMineTotal">–</b>
+      </div>
+      <div class="pd-stat pd-stat-spark">
+        <small>Last 7 days (team)</small>
+        <svg id="pdSpark" viewBox="0 0 140 40" preserveAspectRatio="none" role="img" aria-label="Controllers made per day, last 7 days"></svg>
+      </div>
+    </div>
+    <div class="pd-variant-today" id="pdVariantsToday"></div>
+  </section>
+
+  <div class="pd-grid">
+
+    <!-- ============ NEW CONTROLLER ============ -->
+    <section class="pd-card pd-entry" aria-labelledby="pdEntryTitle">
+      <div class="pd-card-head">
+        <h2 id="pdEntryTitle"><span class="pd-ic" data-icon="scan-line"></span>New controller</h2>
+        <span class="pd-hint">Scanner ready &middot; <kbd>Enter</kbd> next field &middot; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save</span>
+      </div>
+
+      <div class="pd-variants" role="radiogroup" aria-label="Variant" id="pdVariants">
+        <button type="button" role="radio" data-variant="IRRIGO" data-tone="green">Irrigo</button>
+        <button type="button" role="radio" data-variant="IRRIGO_PLUS" data-tone="sky">Irrigo Plus</button>
+        <button type="button" role="radio" data-variant="IRRIGO_SMART_PLUS" data-tone="violet">Irrigo Smart Plus</button>
+      </div>
+      <p class="pd-field-msg pd-variant-msg" id="pdVariantMsg"></p>
+
+      <form id="pdForm" class="pd-fields" autocomplete="off" novalidate>
+        <label class="pd-field" data-field="serialNumber">
+          <span class="pd-label">Serial Number <em>*</em></span>
+          <span class="pd-input"><input name="serialNumber" inputmode="text" autocapitalize="characters" spellcheck="false" placeholder="IRRIGO26AA10001"><i class="pd-state"></i></span>
+          <span class="pd-field-msg"></span>
+        </label>
+        <label class="pd-field" data-field="uniqueId">
+          <span class="pd-label">Unique ID <em>*</em> <button type="button" class="pd-suggest" id="pdNextId" hidden></button></span>
+          <span class="pd-input"><input name="uniqueId" inputmode="numeric" maxlength="4" placeholder="0001"><i class="pd-state"></i></span>
+          <span class="pd-field-msg"></span>
+        </label>
+        <label class="pd-field" data-field="imeiNumber">
+          <span class="pd-label">IMEI Number <em>*</em></span>
+          <span class="pd-input"><input name="imeiNumber" inputmode="numeric" maxlength="20" placeholder="15 digits"><i class="pd-state"></i></span>
+          <span class="pd-field-msg"></span>
+        </label>
+        <label class="pd-field" data-field="simMsisdn">
+          <span class="pd-label">SIM MSISDN</span>
+          <span class="pd-input"><input name="simMsisdn" inputmode="numeric" maxlength="20" placeholder="SIM mobile number"><i class="pd-state"></i></span>
+          <span class="pd-field-msg"></span>
+        </label>
+        <label class="pd-field" data-field="simNumber">
+          <span class="pd-label">SIM Number (ICCID)</span>
+          <span class="pd-input"><input name="simNumber" inputmode="numeric" maxlength="24" placeholder="89919..."><i class="pd-state"></i></span>
+          <span class="pd-field-msg"></span>
+        </label>
+        <label class="pd-field" data-field="simImsi">
+          <span class="pd-label">SIM IMSI</span>
+          <span class="pd-input"><input name="simImsi" inputmode="numeric" maxlength="20" placeholder="15 digits"><i class="pd-state"></i></span>
+          <span class="pd-field-msg"></span>
+        </label>
+      </form>
+
+      <div class="pd-actions">
+        <button type="button" class="pd-btn pd-btn-primary" id="pdSave"><span class="pd-ic" data-icon="plus"></span>Add controller</button>
+        <button type="button" class="pd-btn pd-btn-ghost" id="pdClear">Clear</button>
+      </div>
+    </section>
+
+    <!-- ============ ENTRIES ============ -->
+    <section class="pd-card pd-list" aria-labelledby="pdListTitle">
+      <div class="pd-card-head">
+        <h2 id="pdListTitle"><span class="pd-ic" data-icon="list-checks"></span><span id="pdListName">My entries</span></h2>
+        <div class="pd-day">
+          <button type="button" class="pd-icon-btn" id="pdPrevDay" aria-label="Previous day"><span class="pd-ic" data-icon="chevron-left"></span></button>
+          <input type="date" id="pdDayInput" aria-label="Day">
+          <button type="button" class="pd-icon-btn pd-flip" id="pdNextDay" aria-label="Next day"><span class="pd-ic" data-icon="chevron-left"></span></button>
+        </div>
+      </div>
+      <div class="pd-list-tools">
+        <select id="pdWho" hidden aria-label="Whose entries"></select>
+        <input type="search" id="pdSearch" placeholder="Find serial, ID, IMEI, SIM…" aria-label="Search entries">
+        <button type="button" class="pd-btn pd-btn-ghost" id="pdExport"><span class="pd-ic" data-icon="download"></span>Excel</button>
+      </div>
+      <p class="pd-count" id="pdCount"></p>
+      <div class="pd-entries" id="pdEntries"></div>
+    </section>
+  </div>
+
+  <!-- ============ TEAM (admins only) ============ -->
+  <section class="pd-card pd-team" id="pdTeam" hidden aria-labelledby="pdTeamTitle">
+    <div class="pd-card-head">
+      <h2 id="pdTeamTitle"><span class="pd-ic" data-icon="user-cog"></span>Production team</h2>
+      <span class="pd-hint">They sign in on the normal login page with the username below and see only this page.</span>
+    </div>
+    <form class="pd-newuser" id="pdNewUser" autocomplete="off" novalidate>
+      <label><span>Name</span><input id="nuName" placeholder="Ravi Kumar" maxlength="60"></label>
+      <label><span>Username <small id="nuUserState"></small></span><input id="nuUser" placeholder="ravi" maxlength="32" autocapitalize="none" spellcheck="false"></label>
+      <label><span>Password</span>
+        <span class="pd-pw">
+          <input id="nuPass" type="password" placeholder="at least 8 characters" autocomplete="new-password">
+          <button type="button" class="pd-icon-btn" id="nuShow" aria-label="Show password"><span class="pd-ic" data-icon="eye"></span></button>
+          <button type="button" class="pd-icon-btn" id="nuGen" aria-label="Make a password" title="Make a strong password"><span class="pd-ic" data-icon="wand-sparkles"></span></button>
+        </span>
+      </label>
+      <button type="submit" class="pd-btn pd-btn-primary" id="nuCreate"><span class="pd-ic" data-icon="plus"></span>Create</button>
+    </form>
+    <p class="pd-field-msg" id="nuMsg"></p>
+    <div class="pd-credentials" id="pdCredentials" hidden></div>
+    <div class="pd-users" id="pdUsers"></div>
+  </section>
+</div>
+
+</main>
+
+<div class="pd-toast" id="pdToast" role="status" aria-live="polite"></div>
+
+<div class="pd-modal" id="pdPwModal" hidden>
+  <div class="pd-modal-box" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
+    <h3 id="pwTitle"><span class="pd-ic" data-icon="key-round"></span>New password for <span id="pwWho"></span></h3>
+    <p class="pd-hint">They are signed out everywhere and use this from now on. Only an admin can change it.</p>
+    <span class="pd-pw">
+      <input id="pwInput" type="text" autocomplete="new-password" spellcheck="false">
+      <button type="button" class="pd-icon-btn" id="pwGen" aria-label="Make a password"><span class="pd-ic" data-icon="wand-sparkles"></span></button>
+      <button type="button" class="pd-icon-btn" id="pwCopy" aria-label="Copy"><span class="pd-ic" data-icon="copy"></span></button>
+    </span>
+    <p class="pd-field-msg" id="pwMsg"></p>
+    <div class="pd-actions">
+      <button type="button" class="pd-btn pd-btn-primary" id="pwSave">Change password</button>
+      <button type="button" class="pd-btn pd-btn-ghost" id="pwCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/lazy-xlsx.js"></script>
+<script type="module" src="/js/production.js"></script>
+<script src="/js/admin-mobile.js" defer></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Admin Login | Farm Buddie</title>
+  <title>Sign in | Farm Buddie</title>
 
   <!-- Main CSS -->
   <!-- Start downloading Firebase straight away (it is otherwise found one
@@ -22,15 +22,17 @@
     <!-- LOGO -->
     <img src="/assets/logo.png" alt="Farm Buddie Logo" class="login-logo">
 
-    <h2>Admin Login</h2>
-    <p class="login-subtitle">Sign in to manage farms & controllers</p>
+    <h2>Sign in</h2>
+    <p class="login-subtitle">Admin: your email &middot; Production team: your username</p>
 
-    <!-- EMAIL -->
+    <!-- EMAIL (admin) or USERNAME (production team) -->
     <input
-      type="email"
+      type="text"
       id="email"
-      placeholder="Admin Email"
+      placeholder="Email or username"
       autocomplete="username"
+      autocapitalize="none"
+      spellcheck="false"
     >
 
     <!-- PASSWORD -->
@@ -54,8 +56,10 @@
   <!-- Firebase Login Logic (CORRECT VERSION) -->
   <script type="module">
     import { auth } from "/js/firebase-init.js";
-    import { signInWithEmailAndPassword }
+    import { signInWithEmailAndPassword, signOut }
       from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+    import { BRIDGE_BASE_URL } from "/js/config.js";
+    import { saveStaffSession, clearStaffSession } from "/js/production-session.js";
 
     const emailInput = document.getElementById("email");
     const passwordInput = document.getElementById("password");
@@ -71,7 +75,7 @@
       errorMsg.style.display = "none";
 
       if (!email || !password) {
-        errorMsg.textContent = "Please enter email and password";
+        errorMsg.textContent = "Please enter your email or username, and the password";
         errorMsg.style.display = "block";
         return;
       }
@@ -79,9 +83,18 @@
       loginBtn.disabled = true;
       loginBtn.textContent = "Signing in...";
 
+      // No "@": a production team member (an account the admin made on
+      // the Production page) - signed in by our server, not Firebase, and
+      // taken straight to the Production module.
+      if (!email.includes("@")) {
+        staffLogin(email, passwordInput.value);
+        return;
+      }
+
       signInWithEmailAndPassword(auth, email, password)
         .then((cred) => {
           console.log("LOGIN SUCCESS:", cred.user.uid);
+          clearStaffSession();
           // Modern view (the default) starts on the module Home page,
           // Classic on the Dashboard as before - see /js/admin-shell.js.
           let view = null;
@@ -99,7 +112,30 @@
         });
     }
 
+    async function staffLogin(username, password) {
+      try {
+        await signOut(auth).catch(() => {});   // an admin session left on this browser ends first
+        const r = await fetch(`${BRIDGE_BASE_URL}/production/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error || "Sign-in failed - try again");
+        saveStaffSession(body);
+        window.location.href = "/admin/production.html";
+      } catch (err) {
+        errorMsg.textContent = err.message === "Failed to fetch" ? "Can't reach the server - check the internet connection" : err.message;
+        errorMsg.style.display = "block";
+        loginBtn.disabled = false;
+        loginBtn.textContent = "Login";
+      }
+    }
+
     loginBtn.addEventListener("click", login);
+    [emailInput, passwordInput].forEach((el) => el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") login();
+    }));
   </script>
 
 </body>

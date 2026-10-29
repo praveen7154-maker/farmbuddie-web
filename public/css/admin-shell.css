@@ -454,6 +454,16 @@ html[data-view="modern"].fbx-has-header .fb-topbar-auto { display: none; }
    theme / view switches and the breadcrumbs */
 html[data-view="classic"] .fbx-header .fbx-seg:not(.fbx-seg-sm) button span { display: inline; }
 
+/* A production team member (admin-shell.js STAFF): Production only - no
+   sidebar, Home, module list, search or layout switch */
+html.fbx-staff .fb-sidebar,
+html.fbx-staff .fb-menu-toggle,
+html.fbx-staff .fbx-right > .fbx-seg,
+html.fbx-staff .fbx-right > a.fbx-ibtn,
+html.fbx-staff .fbx-right > .fbx-search,
+html.fbx-staff .fbx-pop-wrap:has(> [data-act="launcher"]),
+html.fbx-staff .fbx-pm-row:has(.fbx-seg) { display: none !important; }
+
 /* The Home link the shell adds to the classic sidebar */
 .fb-menu a.fbx-home-link { font-weight: 600; }
 

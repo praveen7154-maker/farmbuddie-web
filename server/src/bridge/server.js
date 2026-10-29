@@ -30,6 +30,9 @@ import { createDistributorModule, TOKEN_PREFIX } from "./distributors.js";
 import { pgDistributorStore } from "./distributorStore.js";
 import { findDistributor, distributorFarms, loadReferrals, loadRedemptions } from "./distributorsFirebase.js";
 import { requireAdmin } from "../adminAuth.js";
+import { createProductionModule, PROD_TOKEN_PREFIX } from "./production.js";
+import { pgProductionStore } from "./productionStore.js";
+import { firestoreControllers } from "./productionFirebase.js";
 import { createPricingModule } from "./pricing.js";
 import { pgPricingStore } from "./pricingStore.js";
 import { createAdminGateModule } from "./adminGate.js";
@@ -98,12 +101,32 @@ app.use("/admin-gate/check", adminGateLimiter);
 app.use("/admin-gate/status", rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }));
 app.use("/admin-gate", cors({ origin: (origin, cb) => cb(null, true) }), adminGate.publicRouter);
 
+// Production team logins (web panel > Production) - see production.js.
+// Sign-in sits before the auth below, rate limited like the distributors'.
+export const production = createProductionModule({ store: pgProductionStore, controllers: firestoreControllers });
+app.use("/production/login", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false }));
+app.use("/production", cors({ origin: (origin, cb) => cb(null, true) }), production.publicRouter);
+
 // Every route below: a Firebase login (admin web panel / Irrigo Admin, or a
 // farmer's Irrigo app), or a distributor's session token ("fbd_..."). A
 // distributor still on their first password may only set a new one.
 const MUST_CHANGE_ALLOWED = new Set(["/distributor/me", "/distributor/password", "/distributor/logout"]);
 async function verifyCaller(req, res, next) {
   const m = (req.headers.authorization || "").match(/^Bearer (.+)$/);
+  // A production team member's session ("fbp_...") reaches /production and
+  // nothing else on this server.
+  if (m && m[1].startsWith(PROD_TOKEN_PREFIX)) {
+    if (req.path !== "/production" && !req.path.startsWith("/production/")) {
+      return res.status(403).json({ error: "Production access only" });
+    }
+    const who = await production.authenticate(m[1]).catch((err) => {
+      console.error("[production] session check failed:", err);
+      return null;
+    });
+    if (!who) return res.status(401).json({ error: "Signed out - please sign in again", code: "signed_out" });
+    req.decodedToken = who;
+    return next();
+  }
   if (m && m[1].startsWith(TOKEN_PREFIX)) {
     const who = await distributors.authenticate(m[1]).catch((err) => {
       console.error("[distributor] session check failed:", err);
@@ -130,6 +153,8 @@ app.use(cors(corsOptions), limiter, verifyCaller);
 app.use("/distributor", distributors.router);
 app.use("/distributors", requireAdmin, distributors.adminRouter);
 app.use("/admin-gate", requireAdmin, adminGate.adminRouter);
+app.use("/production", production.router);
+app.use("/production-users", requireAdmin, production.adminRouter);
 
 // Module Pricing (web panel > Module Pricing, Irrigo Admin > Price List /
 // Price Calculator) - see pricing.js. Its own role checks inside.
