@@ -192,7 +192,7 @@
       </form>
       <p class="pd-field-msg" id="nuMsg"></p>
       <div class="pd-credentials" id="pdCredentials" hidden></div>
-      <div class="pd-users" id="pdUsers"></div>
+      <div class="pd-team-summary" id="pdTeamSummary"></div>
     </section>
     </div>
 
@@ -223,6 +223,17 @@
 </main>
 
 <div class="pd-toast" id="pdToast" role="status" aria-live="polite"></div>
+
+<div class="pd-modal" id="pdTeamModal" hidden>
+  <div class="pd-modal-box pd-team-box" role="dialog" aria-modal="true" aria-labelledby="teamTitle">
+    <div class="pd-team-box-head">
+      <h3 id="teamTitle"><span class="pd-ic" data-icon="user-cog"></span>Production team <small id="teamCount"></small></h3>
+      <button type="button" class="pd-icon-btn" id="teamClose" aria-label="Close"><span class="pd-ic" data-icon="x"></span></button>
+    </div>
+    <input type="search" id="teamSearch" class="pd-team-search" placeholder="Find by name or username" aria-label="Find a team member">
+    <div class="pd-users" id="pdUsers"></div>
+  </div>
+</div>
 
 <div class="pd-modal" id="pdPwModal" hidden>
   <div class="pd-modal-box" role="dialog" aria-modal="true" aria-labelledby="pwTitle">

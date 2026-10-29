@@ -243,7 +243,7 @@ html[data-theme] .pd-list-tools select {
 .pd-newuser label > span { display: flex; justify-content: space-between; }
 .pd-newuser small.ok { color: var(--fbx-accent); }
 .pd-newuser small.bad { color: var(--fbx-danger); }
-html[data-theme] .pd-newuser input, html[data-theme] .pd-modal input {
+html[data-theme] .pd-newuser input, html[data-theme] #pdPwModal input {
   width: 100%; height: 44px; padding: 0 12px; border-radius: 12px; border: 0; outline: 0; min-width: 0;
   font: 500 14px var(--fbx-font); color: var(--fbx-text); background: var(--fbx-surface-2); box-shadow: inset 0 0 0 1px var(--fbx-line);
 }
@@ -293,7 +293,7 @@ html[data-theme] .pd-newuser input, html[data-theme] .pd-modal input {
 .pd-modal-box h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 17px; }
 .pd-modal-box h3 .fbx-i { color: var(--fbx-accent); }
 .pd-modal-box .pd-hint { display: block; margin-bottom: 14px; }
-.pd-modal-box input { font-family: ui-monospace, Consolas, monospace !important; letter-spacing: 0.04em; }
+#pdPwModal .pd-modal-box input { font-family: ui-monospace, Consolas, monospace !important; letter-spacing: 0.04em; }
 
 /* ---------- cards in the narrow column ---------- */
 @container (max-width: 720px) {
@@ -375,3 +375,22 @@ html[data-theme] .pd-locked .pd-input input { background: transparent; box-shado
   .pd-upload { width: 100%; }
   .pd-simstat b { font-size: 22px; }
 }
+
+/* ---------- team summary + popup ---------- */
+.pd-team-summary { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--fbx-surface-2); box-shadow: inset 0 0 0 1px var(--fbx-line); }
+.pd-faces { display: flex; }
+.pd-faces .pd-avatar { width: 34px; height: 34px; font-size: 13px; margin-left: -8px; box-shadow: 0 0 0 2px var(--fbx-surface); }
+.pd-faces .pd-avatar:first-child { margin-left: 0; }
+.pd-faces .pd-avatar.off { background: var(--fbx-faint); }
+.pd-avatar.pd-more { background: var(--fbx-line-strong); color: var(--fbx-text); }
+.pd-team-nums { flex: 1; min-width: 120px; font-size: 13px; color: var(--fbx-muted); }
+.pd-team-nums b { font-size: 18px; color: var(--fbx-text); }
+.pd-team-summary .pd-btn { height: 38px; font-size: 13px; }
+.pd-empty-line { margin: 0; font-size: 13px; color: var(--fbx-muted); }
+.pd-team-box { width: min(760px, 100%); max-height: min(86vh, 760px); display: flex; flex-direction: column; container-type: inline-size; }
+.pd-team-box-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.pd-team-box-head h3 { margin: 0; }
+.pd-team-box-head small { margin-left: 4px; padding: 2px 9px; border-radius: 999px; font-size: 12px; color: var(--fbx-accent); background: var(--fbx-accent-soft); }
+html[data-theme] .pd-team-search { height: 40px; padding: 0 12px; border: 0; outline: 0; border-radius: 10px; font: 500 14px var(--fbx-font); color: var(--fbx-text); background: var(--fbx-surface-2); box-shadow: inset 0 0 0 1px var(--fbx-line); }
+.pd-team-box .pd-users { overflow: auto; margin-top: 12px; padding: 2px; }
+#pdPwModal { z-index: 2600; }

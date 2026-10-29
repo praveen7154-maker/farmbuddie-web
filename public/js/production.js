@@ -742,6 +742,13 @@ function setupTeam() {
     s.className = taken ? "bad" : "ok";
   }
 
+  // Team popup
+  const team = $("pdTeamModal");
+  $("teamClose").addEventListener("click", () => { team.hidden = true; });
+  team.addEventListener("mousedown", (e) => { if (e.target === team) team.hidden = true; });
+  $("teamSearch").addEventListener("input", renderUsers);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !team.hidden && $("pdPwModal").hidden) team.hidden = true; });
+
   // Change password
   let pwFor = null;
   const modal = $("pdPwModal");
@@ -824,11 +831,42 @@ async function loadUsers() {
   sel.innerHTML = `<option value="">Everyone</option><option value="${esc(me.username)}">Me (${esc(me.username)})</option>` +
     users.map((u) => `<option value="${esc(u.username)}">${esc(u.name)} (${esc(u.username)})</option>`).join("");
   sel.value = keep;
+  renderTeamSummary();
+  renderUsers();
+}
+
+// On the card: who's in the team at a glance + "View team"; the full list
+// (with password / switch off) opens in a popup, so the page doesn't grow.
+function renderTeamSummary() {
+  const box = $("pdTeamSummary");
   if (!users.length) {
-    $("pdUsers").innerHTML = `<p class="pd-empty">No production team accounts yet - create the first one above.</p>`;
+    box.innerHTML = `<p class="pd-empty-line">No production team accounts yet - create the first one above.</p>`;
     return;
   }
-  $("pdUsers").innerHTML = users.map((u) => `
+  const active = users.filter((u) => u.active).length;
+  const faces = users.slice(0, 6).map((u) => `<span class="pd-avatar${u.active ? "" : " off"}" title="${esc(u.name)}">${esc((u.name || u.username).charAt(0).toUpperCase())}</span>`).join("");
+  box.innerHTML = `<div class="pd-faces">${faces}${users.length > 6 ? `<span class="pd-avatar pd-more">+${users.length - 6}</span>` : ""}</div>
+    <div class="pd-team-nums"><b>${users.length}</b> member${users.length === 1 ? "" : "s"} &middot; ${active} active</div>
+    <button type="button" class="pd-btn pd-btn-ghost" id="teamOpen">${icon("users")}View team</button>`;
+  $("teamOpen").addEventListener("click", openTeam);
+}
+
+function openTeam() {
+  $("pdTeamModal").hidden = false;
+  $("teamSearch").value = "";
+  renderUsers();
+  $("teamSearch").focus();
+}
+
+function renderUsers() {
+  const q = ($("teamSearch")?.value || "").trim().toLowerCase();
+  const list = q ? users.filter((u) => `${u.name} ${u.username}`.toLowerCase().includes(q)) : users;
+  $("teamCount").textContent = `${users.length}`;
+  if (!list.length) {
+    $("pdUsers").innerHTML = `<p class="pd-empty">${users.length ? "Nobody matches." : "No production team accounts yet."}</p>`;
+    return;
+  }
+  $("pdUsers").innerHTML = list.map((u) => `
     <article class="pd-user${u.active ? "" : " off"}">
       <span class="pd-avatar">${esc((u.name || u.username).charAt(0).toUpperCase())}</span>
       <div class="pd-user-main"><b>${esc(u.name)}</b><span>@${esc(u.username)}${u.active ? "" : " · switched off"}</span></div>
