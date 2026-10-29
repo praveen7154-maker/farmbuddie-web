@@ -8,6 +8,7 @@ import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/
 import { BRIDGE_BASE_URL } from "/js/config.js";
 import { staffSession, clearStaffSession } from "/js/production-session.js";
 import { fmtTime, fmtDate } from "/js/time-format.js";
+import { printLabels } from "/js/labels.js";
 
 const shell = window.FBShell;
 const icon = shell.icon;
@@ -83,6 +84,7 @@ async function start() {
   $("pdListName").textContent = admin ? "Entries" : "My entries";
   $("pd").removeAttribute("aria-busy");
   setupVariants();
+  setupPrint();
   setupForm();
   setupList(admin);
   if (admin) setupTeam();
@@ -251,7 +253,9 @@ async function save() {
   try {
     const r = await api("/production/controllers", { method: "POST", body: values() });
     celebrate();
-    toast(`Controller ${r.controller.uniqueId} saved`);
+    toast(`Controller ${r.controller.uniqueId} saved${printPrefs.auto ? ` - printing ${printPrefs.copies} label${printPrefs.copies > 1 ? "s" : ""}` : ""}`);
+    // back to Serial for the next board's scan once the print dialog closes
+    if (printPrefs.auto) printLabels(r.controller, printPrefs.copies).then(() => $("pdForm").elements.serialNumber.focus());
     if (currentDay === istToday()) {
       entries.unshift(r.controller);
       renderEntries(r.controller.id);
@@ -288,6 +292,43 @@ function resetForm(keepFocus) {
 function celebrate() {
   const card = document.querySelector(".pd-entry");
   card.classList.remove("pd-saved"); void card.offsetWidth; card.classList.add("pd-saved");
+}
+
+// ---------------------------------------------------------------- labels
+// Remembered on this computer: print after each save (on unless switched
+// off), and how many labels per controller (2: module box + carton).
+const printPrefs = (() => {
+  try {
+    const p = JSON.parse(localStorage.getItem("fb.prodLabels") || "{}");
+    return { auto: p.auto !== false, copies: Math.min(10, Math.max(1, Number(p.copies) || 2)) };
+  } catch (e) { return { auto: true, copies: 2 }; }
+})();
+const savePrintPrefs = () => { try { localStorage.setItem("fb.prodLabels", JSON.stringify(printPrefs)); } catch (e) { /* private mode */ } };
+
+function setupPrint() {
+  const auto = $("pdAutoPrint"), out = $("pdCopies");
+  auto.checked = printPrefs.auto;
+  out.textContent = printPrefs.copies;
+  auto.addEventListener("change", () => { printPrefs.auto = auto.checked; savePrintPrefs(); });
+  const step = (n) => {
+    printPrefs.copies = Math.min(10, Math.max(1, printPrefs.copies + n));
+    out.textContent = printPrefs.copies;
+    savePrintPrefs();
+  };
+  $("pdCopiesDown").addEventListener("click", () => step(-1));
+  $("pdCopiesUp").addEventListener("click", () => step(1));
+  $("pdPrintAll").addEventListener("click", () => {
+    const list = shown();
+    if (!list.length) { toast("No entries to print", "bad"); return; }
+    if (list.length > 1 && !confirm(`Print ${list.length * printPrefs.copies} labels (${list.length} controllers x ${printPrefs.copies})?`)) return;
+    printLabels(list, printPrefs.copies);
+  });
+  $("pdEntries").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-print]");
+    if (!b) return;
+    const c = entries.find((x) => x.id === b.dataset.print);
+    if (c) printLabels(c, printPrefs.copies);
+  });
 }
 
 // ---------------------------------------------------------------- entries
@@ -361,7 +402,8 @@ function renderEntries(newId) {
         <div><small>IMEI</small>${esc(e.imeiNumber)}</div>
         <div><small>SIM</small>${esc(e.simNumber || "-")}${e.simMsisdn ? ` · ${esc(e.simMsisdn)}` : ""}</div>
       </div>
-      <div class="pd-entry-meta"><span>${e.createdAtMs ? fmtTime(e.createdAtMs) : ""}</span>${admin ? `<small>${by}</small>` : ""}</div>
+      <div class="pd-entry-meta"><span>${e.createdAtMs ? fmtTime(e.createdAtMs) : ""}</span>${admin ? `<small>${by}</small>` : ""}
+        <button type="button" class="pd-icon-btn pd-reprint" data-print="${esc(e.id)}" title="Print labels" aria-label="Print labels for ${esc(e.serialNumber)}">${icon("printer")}</button></div>
     </article>`;
   }).join("");
 }

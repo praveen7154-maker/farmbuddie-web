@@ -131,6 +131,16 @@
         </label>
       </form>
 
+      <div class="pd-print">
+        <label class="pd-switch-row"><input type="checkbox" id="pdAutoPrint"><span class="pd-switch"><i></i></span>
+          <span><b><span class="pd-ic" data-icon="printer"></span>Print labels after saving</b><small>2 &times; 1 inch, serial barcode - module box + carton</small></span></label>
+        <div class="pd-stepper" aria-label="Labels per controller">
+          <button type="button" id="pdCopiesDown" aria-label="Fewer"><span class="pd-ic" data-icon="minus"></span></button>
+          <output id="pdCopies">2</output>
+          <button type="button" id="pdCopiesUp" aria-label="More"><span class="pd-ic" data-icon="plus"></span></button>
+        </div>
+      </div>
+
       <div class="pd-actions">
         <button type="button" class="pd-btn pd-btn-primary" id="pdSave"><span class="pd-ic" data-icon="plus"></span>Add controller</button>
         <button type="button" class="pd-btn pd-btn-ghost" id="pdClear">Clear</button>
@@ -150,6 +160,7 @@
       <div class="pd-list-tools">
         <select id="pdWho" hidden aria-label="Whose entries"></select>
         <input type="search" id="pdSearch" placeholder="Find serial, ID, IMEI, SIM…" aria-label="Search entries">
+        <button type="button" class="pd-btn pd-btn-ghost" id="pdPrintAll" title="Print labels for every entry shown"><span class="pd-ic" data-icon="printer"></span>Labels</button>
         <button type="button" class="pd-btn pd-btn-ghost" id="pdExport"><span class="pd-ic" data-icon="download"></span>Excel</button>
       </div>
       <p class="pd-count" id="pdCount"></p>
