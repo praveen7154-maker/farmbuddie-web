@@ -176,8 +176,9 @@
       <section class="pd-card pd-team" id="pdTeam" hidden aria-labelledby="pdTeamTitle">
       <div class="pd-card-head">
         <h2 id="pdTeamTitle"><span class="pd-ic" data-icon="user-cog"></span>Production team</h2>
-        <span class="pd-hint">They sign in on the normal login page with the username below and see only this page.</span>
+        <button type="button" class="pd-btn pd-btn-ghost pd-team-open" id="teamOpen"><span class="pd-ic" data-icon="users"></span>View team <span class="pd-badge" id="teamBadge">0</span></button>
       </div>
+      <p class="pd-hint pd-team-hint">They sign in on the normal login page with the username below and see only this page.</p>
       <form class="pd-newuser" id="pdNewUser" autocomplete="off" novalidate>
         <label><span>Name</span><input id="nuName" placeholder="Murugan" maxlength="60"></label>
         <label><span>Username <small id="nuUserState"></small></span><input id="nuUser" placeholder="murugan" maxlength="32" autocapitalize="none" spellcheck="false"></label>
@@ -191,8 +192,6 @@
         <button type="submit" class="pd-btn pd-btn-primary" id="nuCreate"><span class="pd-ic" data-icon="plus"></span>Create</button>
       </form>
       <p class="pd-field-msg" id="nuMsg"></p>
-      <div class="pd-credentials" id="pdCredentials" hidden></div>
-      <div class="pd-team-summary" id="pdTeamSummary"></div>
     </section>
     </div>
 

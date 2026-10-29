@@ -720,11 +720,11 @@ function setupTeam() {
     btn.disabled = true;
     try {
       await api("/production-users", { method: "POST", body });
-      showCredentials(body.name, body.username, body.password);
       $("pdNewUser").reset();
       userEdited = false;
       $("nuUserState").textContent = "";
       await loadUsers();
+      showCredentials(body.name, body.username, body.password);   // the popup, on the new person
       toast(`${body.name} can sign in now`);
     } catch (err) {
       msg.textContent = err.message;
@@ -744,6 +744,7 @@ function setupTeam() {
 
   // Team popup
   const team = $("pdTeamModal");
+  $("teamOpen").addEventListener("click", () => openTeam());
   $("teamClose").addEventListener("click", () => { team.hidden = true; });
   team.addEventListener("mousedown", (e) => { if (e.target === team) team.hidden = true; });
   $("teamSearch").addEventListener("input", renderUsers);
@@ -765,9 +766,9 @@ function setupTeam() {
       await api(`/production-users/${encodeURIComponent(pwFor.username)}/password`, { method: "POST", body: { password: pw } });
       const u = pwFor;
       closeModal();
+      await loadUsers();
       showCredentials(u.name, u.username, pw);
       toast(`New password set for ${u.name}`);
-      loadUsers();
     } catch (err) {
       $("pwMsg").textContent = err.message;
     }
@@ -778,7 +779,12 @@ function setupTeam() {
     if (!b) return;
     const u = users.find((x) => x.username === b.dataset.user);
     if (!u) return;
-    if (b.dataset.act === "password") {
+    if (b.dataset.act === "copy") {
+      const pw = freshCreds.get(u.username);
+      navigator.clipboard?.writeText(signInText(u.username, pw)).then(
+        () => toast(pw ? `Copied ${u.name}'s sign-in` : "Copied the link and username - the password can't be shown again: use Password to set a new one"),
+        () => toast("Couldn't copy - select and copy by hand", "bad"));
+    } else if (b.dataset.act === "password") {
       pwFor = u;
       $("pwWho").textContent = u.name;
       $("pwInput").value = makePassword();
@@ -801,17 +807,15 @@ function setupTeam() {
   loadUsers();
 }
 
+// Sign-in details of people created / given a new password on this page.
+// Passwords are kept only as hashes on the server, so this is the only
+// place they can be read back - until this page is closed.
+const freshCreds = new Map();   // username -> password
+const signInText = (u, pw) => `Farm Buddie Production sign-in\n${location.origin}/login.html\nUsername: ${u}` + (pw ? `\nPassword: ${pw}` : "");
+
 function showCredentials(name, username, password) {
-  const box = $("pdCredentials");
-  box.hidden = false;
-  box.innerHTML = `${icon("key-round")}<div><b>Give these to ${esc(name)}</b>
-    <p>Sign in at <code>${esc(location.origin)}/login.html</code> with</p>
-    <p class="pd-cred"><span>Username <code>${esc(username)}</code></span><span>Password <code>${esc(password)}</code></span></p>
-    <small>Shown only now - it isn't stored anywhere readable. You can always set a new one.</small></div>
-    <button type="button" class="pd-btn pd-btn-ghost" id="credCopy">${icon("copy")}Copy</button>
-    <button type="button" class="pd-icon-btn" id="credClose" aria-label="Close">${icon("x")}</button>`;
-  $("credCopy").addEventListener("click", () => copy(`Farm Buddie Production sign-in\n${location.origin}/login.html\nUsername: ${username}\nPassword: ${password}`));
-  $("credClose").addEventListener("click", () => { box.hidden = true; box.innerHTML = ""; });
+  freshCreds.set(username, password);
+  openTeam(username);
 }
 
 function copy(text) {
@@ -837,28 +841,22 @@ async function loadUsers() {
 
 // On the card: who's in the team at a glance + "View team"; the full list
 // (with password / switch off) opens in a popup, so the page doesn't grow.
+// The card only shows how many there are; the list is in the popup.
 function renderTeamSummary() {
-  const box = $("pdTeamSummary");
-  if (!users.length) {
-    box.innerHTML = `<p class="pd-empty-line">No production team accounts yet - create the first one above.</p>`;
-    return;
-  }
   const active = users.filter((u) => u.active).length;
-  const faces = users.slice(0, 6).map((u) => `<span class="pd-avatar${u.active ? "" : " off"}" title="${esc(u.name)}">${esc((u.name || u.username).charAt(0).toUpperCase())}</span>`).join("");
-  box.innerHTML = `<div class="pd-faces">${faces}${users.length > 6 ? `<span class="pd-avatar pd-more">+${users.length - 6}</span>` : ""}</div>
-    <div class="pd-team-nums"><b>${users.length}</b> member${users.length === 1 ? "" : "s"} &middot; ${active} active</div>
-    <button type="button" class="pd-btn pd-btn-ghost" id="teamOpen">${icon("users")}View team</button>`;
-  $("teamOpen").addEventListener("click", openTeam);
+  $("teamBadge").textContent = users.length;
+  $("teamOpen").title = users.length ? `${users.length} member${users.length === 1 ? "" : "s"}, ${active} active` : "No team members yet";
 }
 
-function openTeam() {
+function openTeam(highlight) {
   $("pdTeamModal").hidden = false;
   $("teamSearch").value = "";
-  renderUsers();
-  $("teamSearch").focus();
+  renderUsers(typeof highlight === "string" ? highlight : null);
+  const row = typeof highlight === "string" && document.querySelector(`.pd-user[data-user="${CSS.escape(highlight)}"]`);
+  if (row) row.scrollIntoView({ block: "nearest" }); else $("teamSearch").focus();
 }
 
-function renderUsers() {
+function renderUsers(highlight = null) {
   const q = ($("teamSearch")?.value || "").trim().toLowerCase();
   const list = q ? users.filter((u) => `${u.name} ${u.username}`.toLowerCase().includes(q)) : users;
   $("teamCount").textContent = `${users.length}`;
@@ -867,13 +865,15 @@ function renderUsers() {
     return;
   }
   $("pdUsers").innerHTML = list.map((u) => `
-    <article class="pd-user${u.active ? "" : " off"}">
+    <article class="pd-user${u.active ? "" : " off"}${u.username === highlight ? " pd-new" : ""}" data-user="${esc(u.username)}">
       <span class="pd-avatar">${esc((u.name || u.username).charAt(0).toUpperCase())}</span>
       <div class="pd-user-main"><b>${esc(u.name)}</b><span>@${esc(u.username)}${u.active ? "" : " · switched off"}</span></div>
       <div class="pd-user-stat"><b>${u.entries ?? "–"}</b><small>controllers</small></div>
       <div class="pd-user-meta"><small>Last sign-in</small>${u.lastLoginAt ? `${fmtDate(u.lastLoginAt)}, ${fmtTime(u.lastLoginAt)}` : "never"}</div>
       <div class="pd-user-meta"><small>Created by</small>${esc(u.createdBy || "-")}</div>
+      ${freshCreds.has(u.username) ? `<div class="pd-user-cred">${icon("key-round")}<span>Username <code>${esc(u.username)}</code></span><span>Password <code>${esc(freshCreds.get(u.username))}</code></span><small>shown until this page is closed</small></div>` : ""}
       <div class="pd-user-actions">
+        <button type="button" class="pd-btn pd-btn-ghost" data-act="copy" data-user="${esc(u.username)}" title="Login link, username${freshCreds.has(u.username) ? " and password" : ""}">${icon("copy")}Copy sign-in</button>
         <button type="button" class="pd-btn pd-btn-ghost" data-act="password" data-user="${esc(u.username)}">${icon("key-round")}Password</button>
         <button type="button" class="pd-btn ${u.active ? "pd-btn-ghost" : "pd-btn-primary"}" data-act="active" data-user="${esc(u.username)}">${icon("power")}${u.active ? "Switch off" : "Switch on"}</button>
       </div>
