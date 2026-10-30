@@ -28,10 +28,22 @@ const PUSH_EVENTS = new Set([
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
-function isPushWorthy(payload) {
+// A fault trip is sent with the fault code as its event (1-7, or 10 for a
+// power outage). "fault" is the motor's fault at send time, which can still
+// be an earlier one (phase loss tripping while phase-reversed is active) -
+// so a 1-7 event is a trip of that fault whatever "fault" says.
+function trippedFault(payload) {
+  const { event, fault } = payload;
+  if (typeof event !== "number") return 0;
+  if (event >= 1 && event <= 7) return event;
+  if (typeof fault === "number" && fault !== 0 && event === fault) return fault;
+  return 0;
+}
+
+export function isPushWorthy(payload) {
   const { event, fault } = payload;
   if (typeof event !== "number") return false;
-  if (typeof fault === "number" && fault !== 0 && event === fault) return true; // a fault tripping
+  if (trippedFault(payload)) return true; // a fault tripping
   if (event === LEGACY_VOLTAGE_RESTORED && fault === 0) return true;
   // A schedule's start that took over a motor the farmer was running by hand.
   if (payload.took_over_manual === true) return true;
@@ -81,11 +93,12 @@ const EVENT_TEXT = {
   71: "Phase order is correct again - the motor can start"
 };
 
-function buildNotification(nodeId, motorNum, payload) {
+export function buildNotification(nodeId, motorNum, payload) {
   const motorLabel = `Motor ${normalizeMotorNum(motorNum)}`;
-  const { event, fault } = payload;
-  if (typeof fault === "number" && fault !== 0 && event === fault) {
-    return { title: motorLabel, body: FAULT_TEXT[fault] || "Fault - the motor was stopped" };
+  const { event } = payload;
+  const tripped = trippedFault(payload);
+  if (tripped) {
+    return { title: motorLabel, body: FAULT_TEXT[tripped] || "Fault - the motor was stopped" };
   }
   const valve = typeof payload.valve === "number" && payload.valve > 0 ? payload.valve : null;
   if (valve && (event === 48 || event === 49)) {
