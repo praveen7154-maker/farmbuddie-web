@@ -18,6 +18,7 @@ import { onAuthStateChanged, signOut }
 import {
   doc,
   getDoc,
+  getDocFromCache,
   updateDoc,
   setDoc,
   serverTimestamp,
@@ -260,15 +261,14 @@ document.addEventListener("input", function (e) {
 });
 
 /* ================= LOAD FARMER ================= */
-async function loadFarmer() {
-
-  const snap = await getDoc(doc(db, "farmers", docId));
-  if (!snap.exists()) {
-    alert("❌ Farmer not found");
-    return;
-  }
-
-  const f = snap.data();
+// Fills the form from a farmer record. Waits on nothing from the server:
+// the farm count and the distributor list load alongside (they used to be
+// awaited one after the other before most fields were filled, so the form
+// sat empty for two or three round trips).
+let fillCount = 0;
+let distributorChoice = Promise.resolve();
+function fillFarmer(f) {
+  fillCount++;
   originalAadhaar = f.aadhaarNumber || "";
   currentIdentityId = f.identityId || "";
 
@@ -282,13 +282,11 @@ async function loadFarmer() {
         isPrimaryFarmGlobal = farmNumber === "Farm 1";
 
         /* 🔎 COUNT TOTAL FARMS FOR THIS AADHAAR */
-        const farmQuery = query(
-          collection(db, "farmers"),
-          where("aadhaarNumber", "==", f.aadhaarNumber)
-        );
-
-        const farmSnap = await getDocs(farmQuery);
-        totalFarmsForFarmer = farmSnap.size;
+        if (f.aadhaarNumber) {
+          getDocs(query(collection(db, "farmers"), where("aadhaarNumber", "==", f.aadhaarNumber)))
+            .then((farmSnap) => { totalFarmsForFarmer = farmSnap.size; })
+            .catch((err) => console.warn("farm count:", err));
+        }
 
         /* ---------- FARM 2–5 ---------- */
         if (!isPrimaryFarmGlobal) {
@@ -355,7 +353,14 @@ nodeMapping?.fill(f.nodes);
   aadhaarUrl = f.documents?.aadhaarUrl || "";
   otherDocUrl = f.documents?.otherDocUrl || "";
   farmerPhotoUrl = f.documents?.farmerPhotoUrl || "";
-  docSetting = applyDocumentUploadSetting(DOCUMENT_UPLOADS, ["aadhaarFile", "otherDoc", "farmerPhoto"], {
+  if (fillCount > 1) {
+    // Filled again with the server's copy: the hard-copy ticks only (the
+    // setting's card is already on the page).
+    Object.entries(f.hardcopies || {}).forEach(([key, has]) => {
+      const r = document.querySelector(`input[name="hc_${key}"][value="${has === true ? "yes" : "no"}"]`);
+      if (r) r.checked = true;
+    });
+  } else docSetting = applyDocumentUploadSetting(DOCUMENT_UPLOADS, ["aadhaarFile", "otherDoc", "farmerPhoto"], {
     card: document.getElementById("aadhaarFile")?.closest(".fb-card"), checklist: FARMER_DOCS, existing: f.hardcopies || {}
   });
 
@@ -377,11 +382,11 @@ nodeMapping?.fill(f.nodes);
   const distributorField = document.getElementById("distributorField");
   distributorField.style.display = "block";
 
-  await loadDistributors();
-
-  if (f.leadSource?.distributorId) {
-    distributorSelect.value = f.leadSource.distributorId;
-  }
+  // The list loads alongside the rest of the form; the saved one is
+  // picked as soon as it's there.
+  distributorChoice = distributorsReady().then(() => {
+    if (f.leadSource?.distributorId) distributorSelect.value = f.leadSource.distributorId;
+  });
 
 } else {
         leadSourceType.value = "DIRECT";
@@ -422,6 +427,38 @@ nodeMapping?.fill(f.nodes);
   warrantyStart.disabled = true;
   warrantyEnd.disabled = true;
   
+}
+
+// The form shows at once from this browser's own copy of the record (the
+// Farmer Database page keeps it up to date), then again from the server if
+// that differs. Update stays off until the server's copy is in, so a save
+// never starts from an old copy.
+async function loadFarmer() {
+  const ref = doc(db, "farmers", docId);
+  const btn = document.getElementById("updateFarmerBtn");
+  const label = btn?.innerText || "Update Farmer";
+  if (btn) { btn.disabled = true; btn.innerText = "Loading…"; }
+
+  let shown = "";
+  try {
+    const cached = await getDocFromCache(ref);
+    if (cached.exists()) { fillFarmer(cached.data()); shown = JSON.stringify(cached.data()); }
+  } catch { /* not in this browser yet - wait for the server */ }
+
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      alert("❌ Farmer not found");
+      return;
+    }
+    if (JSON.stringify(snap.data()) !== shown) fillFarmer(snap.data());
+    await distributorChoice;
+    if (btn) { btn.disabled = false; btn.innerText = label; }
+  } catch (err) {
+    console.error("Load farmer:", err);
+    if (btn) btn.innerText = "Couldn't load - reload the page";
+    alert("❌ Couldn't load this farmer: " + err.message);
+  }
 }
 
 loadFarmer();
@@ -1389,12 +1426,19 @@ window.handleLeadSource = async function () {
 
   if (leadSourceType.value === "DISTRIBUTOR") {
     distributorField.style.display = "block";
-    await loadDistributors();
+    await distributorsReady();
   } else {
     distributorField.style.display = "none";
     distributorSelect.value = "";
   }
 };
+
+// The distributor list, loaded once per page.
+let distributorsLoad = null;
+function distributorsReady() {
+  if (!distributorsLoad) distributorsLoad = loadDistributors().catch((err) => { distributorsLoad = null; throw err; });
+  return distributorsLoad;
+}
 
 async function loadDistributors() {
 

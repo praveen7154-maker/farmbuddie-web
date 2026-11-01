@@ -7,6 +7,7 @@ import { onAuthStateChanged, signOut }
 import {
   doc,
   getDoc,
+  getDocFromCache,
   updateDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
@@ -49,17 +50,39 @@ if (!distributorDocId) {
 }
 
 /* ================= LOAD DISTRIBUTOR ================= */
+// Shows this browser's own copy at once (the Distributor Database page
+// keeps it up to date), then the server's if that differs. Save stays off
+// until the server's copy is in, so a save never starts from an old copy.
 async function loadDistributor() {
 
   const docRef = doc(db, "distributors", distributorDocId);
-  const snap = await getDoc(docRef);
+  const saveBtn = document.querySelector('button[type="submit"].fb-btn-primary');
+  const label = saveBtn?.innerText || "Update";
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = "Loading…"; }
 
-  if (!snap.exists()) {
-    alert("Distributor not found");
-    return window.location.href = "/admin/distributor-database.html";
+  let shown = "";
+  try {
+    const cached = await getDocFromCache(docRef);
+    if (cached.exists()) { fillDistributor(cached.data()); shown = JSON.stringify(cached.data()); }
+  } catch { /* not in this browser yet - wait for the server */ }
+
+  try {
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) {
+      alert("Distributor not found");
+      return window.location.href = "/admin/distributor-database.html";
+    }
+    if (JSON.stringify(snap.data()) !== shown) fillDistributor(snap.data());
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = label; }
+  } catch (err) {
+    console.error("Load distributor:", err);
+    if (saveBtn) saveBtn.innerText = "Couldn't load - reload the page";
+    alert("Couldn't load this distributor: " + err.message);
   }
+}
 
-  const d = snap.data();
+let filled = false;
+function fillDistributor(d) {
 
   // 🔹 Basic
   document.getElementById("distributorId").value = d.distributorId || "";
@@ -85,6 +108,16 @@ async function loadDistributor() {
   document.getElementById("ifsc").value = d.bankDetails?.ifsc || "";
   document.getElementById("branchLocation").value = d.bankDetails?.branchLocation || "";
 
+  if (filled) {
+    // Filled again with the server's copy: the hard-copy ticks only (the
+    // checklist card is already on the page).
+    Object.entries(d.hardcopies || {}).forEach(([key, has]) => {
+      const r = document.querySelector(`input[name="hc_${key}"][value="${has === true ? "yes" : "no"}"]`);
+      if (r) r.checked = true;
+    });
+    return;
+  }
+  filled = true;
   docSetting = applyDocumentUploadSetting(DOCUMENT_UPLOADS,
     ["gstFile", "panFile", "aadhaarFile", "chequeFile", "msmeFile", "itrFile", "otherDoc1", "otherDoc2", "otherDoc3"],
     { card: document.getElementById("gstFile")?.closest(".fb-card"), checklist: DISTRIBUTOR_DOCS, existing: d.hardcopies || {} });
