@@ -730,6 +730,45 @@ mcuVariant.addEventListener("change", async function () {
   handleVariantMotorValve(false); // Upgrade mode
 });
 
+/* ================= THIS FARMER'S OTHER FARMS ================= */
+// Farm 1, Farm 2... of the same person: same identityId - or, on records
+// from before identityId, the same Aadhaar (how this page counts them).
+// Never matches on an empty value (that would reach other farmers).
+async function otherFarmsOfFarmer(identityId, aadhaar) {
+  const found = new Map();
+  if (identityId) {
+    const s = await getDocs(query(collection(db, "farmers"), where("identityId", "==", identityId)));
+    s.docs.forEach(d => found.set(d.id, d));
+  }
+  if (aadhaar) {
+    const s = await getDocs(query(collection(db, "farmers"), where("aadhaarNumber", "==", aadhaar)));
+    s.docs.forEach(d => found.set(d.id, d));
+  }
+  found.delete(docId);
+  return [...found.values()];
+}
+
+// Lead Source (Farm Buddie direct / which distributor) belongs to the
+// farmer, not one farm: it decides which distributor sees ALL of this
+// farmer's farms in the Irrigo Admin app (the server reads each farm's
+// leadSource.distributorId). Written to every other farm whichever farm was
+// edited - it used to follow only an edit of Farm 1 without an MCU change.
+async function syncLeadSourceToOtherFarms(leadSource, others) {
+  let n = 0;
+  for (const farmDoc of others) {
+    const cur = farmDoc.data().leadSource || {};
+    if ((cur.type || "") === leadSource.type && (cur.distributorId || "") === leadSource.distributorId &&
+        (cur.distributorName || "") === leadSource.distributorName) continue;
+    await updateDoc(doc(db, "farmers", farmDoc.id), {
+      leadSource,
+      updatedAt: serverTimestamp(),
+      updatedBy: auth.currentUser.uid
+    });
+    n++;
+  }
+  return n;
+}
+
 /* ================= UPDATE FARMER ================= */
 window.updateFarmer = async function () {
 
@@ -1199,6 +1238,10 @@ const latestData = latestSnap.data();
 // ✅ CORRECT SYNC
 await fullPhoneSync(db, auth, docId, latestData);
 
+// Lead Source to the farmer's other farms (see syncLeadSourceToOtherFarms)
+await syncLeadSourceToOtherFarms(updatedData.leadSource,
+  await otherFarmsOfFarmer(currentIdentityId, oldData.aadhaarNumber || ""));
+
   /* ---------- STEP 2: OLD CONTROLLER → SOLD ---------- */
 
   if (oldController?.serialNumber) {
@@ -1278,20 +1321,16 @@ return;
 
     // ✅ CORRECT SYNC
     await fullPhoneSync(db, auth, docId, latestData);
-    /* ================= STEP 2: SYNC IDENTITY IF FARM 1 ================= */
+    const otherFarms = await otherFarmsOfFarmer(currentIdentityId, oldData.aadhaarNumber || "");
+
+    /* ================= STEP 2: LEAD SOURCE TO EVERY FARM ================= */
+    await syncLeadSourceToOtherFarms(updatedData.leadSource, otherFarms);
+
+    /* ================= STEP 3: SYNC IDENTITY IF FARM 1 ================= */
 
     if (isPrimaryFarmGlobal) {
 
-      const farmQuery = query(
-        collection(db, "farmers"),
-        where("identityId", "==", currentIdentityId)
-      );
-
-      const farmSnap = await getDocs(farmQuery);
-
-      for (const farmDoc of farmSnap.docs) {
-
-        if (farmDoc.id === docId) continue;
+      for (const farmDoc of otherFarms) {
 
         await updateDoc(doc(db, "farmers", farmDoc.id), {
           role: updatedData.role,
