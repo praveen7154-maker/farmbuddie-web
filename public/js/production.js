@@ -819,6 +819,10 @@ let entries = [];
 let listKind = "controller";     // what `entries` holds
 let currentDay = istToday();
 let who = "";            // admin filter: "" everyone, else a username / email
+// Entries per page. The day's list (newest first) is paged on screen;
+// Labels and Excel still take every entry shown (the search), not one page.
+const PAGE_SIZE = 20;
+let page = 1;
 
 function setupList(admin) {
   const dayInput = $("pdDayInput");
@@ -835,7 +839,15 @@ function setupList(admin) {
   dayInput.addEventListener("change", () => go(dayInput.value));
   $("pdPrevDay").addEventListener("click", () => go(shiftDay(currentDay, -1)));
   $("pdNextDay").addEventListener("click", () => go(shiftDay(currentDay, 1)));
-  $("pdSearch").addEventListener("input", () => renderEntries());
+  $("pdSearch").addEventListener("input", () => { page = 1; renderEntries(); });
+  $("pdPager").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-page]");
+    if (!b || b.disabled) return;
+    page = Number(b.dataset.page);
+    renderEntries();
+    $("pdEntries").scrollTop = 0;
+    $("pdListCard")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
   $("pdExport").addEventListener("click", exportExcel);
   if (admin) {
     const sel = $("pdWho");
@@ -860,6 +872,7 @@ async function loadEntries() {
     }
     entries = r.entries;
     listKind = want;
+    page = 1;
     renderEntries();
   } catch (err) {
     box.innerHTML = `<p class="pd-empty">${esc(err.message)}</p>`;
@@ -876,14 +889,37 @@ function shown() {
     .some((v) => String(v || "").toLowerCase().includes(q)));
 }
 
+// Page buttons: Prev, 1 … 4 5 6 … 12, Next - at most 7 numbers.
+function renderPager(pages) {
+  const pager = $("pdPager");
+  if (pages <= 1) { pager.hidden = true; pager.innerHTML = ""; return; }
+  const nums = [];
+  for (let n = 1; n <= pages; n++) {
+    if (n === 1 || n === pages || Math.abs(n - page) <= 1 || (page <= 3 && n <= 5) || (page >= pages - 2 && n >= pages - 4)) nums.push(n);
+    else if (nums[nums.length - 1] !== "…") nums.push("…");
+  }
+  const btn = (label, to, { cur = false, dis = false, aria = "" } = {}) =>
+    `<button type="button" class="pd-page${cur ? " cur" : ""}" data-page="${to}"${dis ? " disabled" : ""}${cur ? ' aria-current="page"' : ""}${aria ? ` aria-label="${aria}"` : ""}>${label}</button>`;
+  pager.innerHTML = btn("‹ Prev", page - 1, { dis: page === 1, aria: "Previous page" }) +
+    nums.map((n) => (n === "…" ? `<span class="pd-page-gap">…</span>` : btn(n, n, { cur: n === page, aria: `Page ${n}` }))).join("") +
+    btn("Next ›", page + 1, { dis: page === pages, aria: "Next page" });
+  pager.hidden = false;
+}
+
 function renderEntries(newIds) {
   const isNew = (id) => (newIds instanceof Set ? newIds.has(id) : id === newIds);
-  const list = shown();
+  if (newIds !== undefined) page = 1;      // just added: they're at the top
+  const all = shown();
+  const pages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
+  if (page > pages) page = pages;
+  const list = all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const admin = me.role === "admin";
   const today = currentDay === istToday();
   const what = listKind === "node" ? "node" : "controller";
   $("pdCount").textContent = `${fmtDate(currentDay + "T12:00:00+05:30")}${today ? " · today" : ""} · ${entries.length} ${what}${entries.length === 1 ? "" : "s"}` +
-    (list.length !== entries.length ? ` · ${list.length} shown` : "");
+    (all.length !== entries.length ? ` · ${all.length} match` : "") +
+    (pages > 1 ? ` · showing ${(page - 1) * PAGE_SIZE + 1}-${(page - 1) * PAGE_SIZE + list.length}` : "");
+  renderPager(pages);
   if (!list.length) {
     $("pdEntries").innerHTML = `<div class="pd-empty">${icon("factory")}<p>${entries.length ? "Nothing matches the search." : today ? `No ${what}s yet today - the first one you add shows up here.` : `No ${what}s on this day.`}</p></div>`;
     return;
