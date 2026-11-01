@@ -28,6 +28,7 @@
   <link rel="stylesheet" href="/css/admin-mobile.css">
   <link rel="stylesheet" href="/css/theme-dark.generated.css">
   <link rel="stylesheet" href="/css/admin-shell.css">
+  <link rel="stylesheet" href="/css/records.css">
   <!-- Menu clicks feel instant: Chrome/Edge prepare the admin page you point
        at (hover / touch) in the background, so the click just shows it. -->
   <script type="speculationrules">
@@ -68,51 +69,56 @@
 <span class="fb-user">Admin</span>
 </header>
 
-<div class="top-actions">
+<div class="rx" id="ddPage">
 
-  <input 
-    type="text" 
-    id="searchInput" 
-    placeholder="Search Distributors by ID">
+  <section class="rx-hero" aria-labelledby="ddTitle">
+    <div>
+      <span class="rx-kicker">Live · partner network</span>
+      <h2 class="rx-title" id="ddTitle">Distributor Database</h2>
+      <p>Every distributor and the farms they brought in - search, filter by status, state and farmers. Press <b>/</b> to search.</p>
+    </div>
+    <div class="rx-stats" id="ddStats" aria-label="Totals - click one to filter"></div>
+  </section>
 
-  <button class="fb-btn-primary small"
-    onclick="goToDistributorOnboarding()">
-    ➕ Add New Distributor
-  </button>
+  <section class="rx-card" aria-label="Distributors">
+    <div class="rx-tools">
+      <label class="rx-search">
+        <span data-rx-icon="search"></span>
+        <input type="search" id="searchInput" placeholder="Search distributor ID, name, mobile, email, city, state…" aria-label="Search distributors" autocomplete="off">
+        <kbd class="rx-kbd">/</kbd>
+      </label>
+      <button type="button" class="rx-btn" id="ddFilterBtn" aria-expanded="false" aria-controls="ddFilters"><span data-rx-icon="filter"></span><span class="rx-lbl">Filters</span><span class="rx-dotcount" id="ddFilterCount" hidden></span></button>
+      <select id="ddSort" aria-label="Sort">
+        <option value="id">Sort: Distributor ID</option>
+        <option value="name">Sort: Name A-Z</option>
+        <option value="farms">Sort: Most farms</option>
+        <option value="newest">Sort: Newest first</option>
+      </select>
+      <button type="button" class="rx-btn" id="ddExcel" title="Download the distributors shown (filters applied) as Excel"><span data-rx-icon="download"></span><span class="rx-lbl">Excel</span></button>
+      <button type="button" class="rx-btn primary" onclick="goToDistributorOnboarding()"><span data-rx-icon="plus"></span><span class="rx-lbl">Add distributor</span></button>
+    </div>
+
+    <div class="rx-filters" id="ddFilters" hidden></div>
+    <div class="rx-active" id="ddActive"></div>
+
+    <p class="rx-count" id="ddCount" aria-live="polite"></p>
+    <div class="rx-list" id="ddList">
+      <div class="rx-skel"></div><div class="rx-skel"></div><div class="rx-skel"></div>
+    </div>
+
+    <div class="rx-foot">
+      <label>Rows per page
+        <select id="ddSize"><option>10</option><option selected>20</option><option>50</option><option>100</option></select>
+      </label>
+      <nav class="rx-pager" id="ddPager" aria-label="Distributor pages"></nav>
+    </div>
+  </section>
 
 </div>
-
-<div class="fb-table-card">
-  <table class="fb-table">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Distributor ID</th>
-        <th>Company/Person Name</th>
-        <th>Mobile</th>
-        <th>Status</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody id="distributorTableBody"></tbody>
-  </table>
-</div>
-
-
-<!-- ================= PAGINATION ================= -->
-<div class="fb-table-pagination">
-  <div class="fb-page-info">
-    Showing <span id="fbStart">0</span> to 
-    <span id="fbEnd">0</span> of 
-    <span id="fbTotal">0</span> entries
-  </div>
-  <div class="fb-pagination-controls" id="fbPagination"></div>
-</div>
-
 </main>
 
+<script src="/js/lazy-xlsx.js"></script>
 <script type="module" src="/js/distributor-database.js"></script>
-<script src="/js/table-pagination.js"></script>
 <script src="/js/admin-mobile.js" defer></script>
 </body>
 </html>

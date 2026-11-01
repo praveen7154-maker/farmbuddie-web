@@ -139,6 +139,9 @@ function startDistributors(){
 export function getFarmers(){ return farmers; }
 export function getControllers(){ return controllers; }
 export function getDistributors(){ return distributors; }
+// The live listener has answered for this collection - until then an empty
+// list may just mean "not loaded yet" (a page shows skeletons, not "none").
+export function isLive(name){ return !!liveFrom[name]; }
 
 /* ================= SUBSCRIBE ================= */
 

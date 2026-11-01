@@ -27,6 +27,7 @@
   <link rel="stylesheet" href="/css/admin-mobile.css">
   <link rel="stylesheet" href="/css/theme-dark.generated.css">
   <link rel="stylesheet" href="/css/admin-shell.css">
+  <link rel="stylesheet" href="/css/records.css">
   <!-- Menu clicks feel instant: Chrome/Edge prepare the admin page you point
        at (hover / touch) in the background, so the click just shows it. -->
   <script type="speculationrules">
@@ -68,87 +69,50 @@
   <span class="fb-user">Admin</span>
 </header>
 
-<div class="top-actions">
-  <button class="fb-btn-primary small" onclick="downloadAllFarmersExcel()">
-    ⬇ Download (Excel)
-  </button> 
+<div class="rx" id="fdPage">
 
-   <input 
-    type="text" 
-    id="searchInput" 
-    placeholder="Search by Farm Buddie ID">
+  <section class="rx-hero" aria-labelledby="fdTitle">
+    <div>
+      <span class="rx-kicker">Live · every farm</span>
+      <h2 class="rx-title" id="fdTitle">Farmer Database</h2>
+      <p>Every onboarded farm - search, filter by status, farm, lead source, device and app access. Press <b>/</b> to search.</p>
+    </div>
+    <div class="rx-stats" id="fdStats" aria-label="Totals - click one to filter"></div>
+  </section>
 
-</div>
+  <section class="rx-card" aria-label="Farmers">
+    <div class="rx-tools">
+      <label class="rx-search">
+        <span data-rx-icon="search"></span>
+        <input type="search" id="searchInput" placeholder="Search Farm Buddie ID, name, mobile, farm ID, serial, distributor, location…" aria-label="Search farmers" autocomplete="off">
+        <kbd class="rx-kbd">/</kbd>
+      </label>
+      <button type="button" class="rx-btn" id="fdFilterBtn" aria-expanded="false" aria-controls="fdFilters"><span data-rx-icon="filter"></span><span class="rx-lbl">Filters</span><span class="rx-dotcount" id="fdFilterCount" hidden></span></button>
+      <select id="fdSort" aria-label="Sort">
+        <option value="id">Sort: Farm Buddie ID</option>
+        <option value="name">Sort: Name A-Z</option>
+        <option value="newest">Sort: Newest first</option>
+        <option value="oldest">Sort: Oldest first</option>
+      </select>
+      <button type="button" class="rx-btn" id="fdExcel" title="Download the farmers shown (filters applied) as Excel"><span data-rx-icon="download"></span><span class="rx-lbl">Excel</span></button>
+    </div>
 
-<!-- TABLE -->
-<div class="fb-table-card">
-  <table class="fb-table">
+    <div class="rx-filters" id="fdFilters" hidden></div>
+    <div class="rx-active" id="fdActive"></div>
 
-    <thead>
-      <tr>
-        <th>#</th>
-        <!-- ✅ FILTER ENABLED -->
-        <th>
-          <div class="fb-th-wrapper">
-            <span class="fb-th-label">Farm Buddie ID</span>
-            <span class="fb-filter-icon" data-col="1">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path fill="currentColor"
-                  d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-              </svg>
-            </span>
-            <div class="fb-filter-dropdown"></div>
-          </div>
-        </th>
+    <p class="rx-count" id="fdCount" aria-live="polite"></p>
+    <div class="rx-list" id="fdList">
+      <div class="rx-skel"></div><div class="rx-skel"></div><div class="rx-skel"></div><div class="rx-skel"></div>
+    </div>
 
-        <th>Farmer Name</th>
-        <th>Distributor ID</th>
+    <div class="rx-foot">
+      <label>Rows per page
+        <select id="fdSize"><option>10</option><option selected>20</option><option>50</option><option>100</option></select>
+      </label>
+      <nav class="rx-pager" id="fdPager" aria-label="Farmer pages"></nav>
+    </div>
+  </section>
 
-
-        <th><div class="fb-th-wrapper">
-            <span class="fb-th-label">Farm Badge</span>
-            <span class="fb-filter-icon" data-col="4">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path fill="currentColor"
-                  d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-              </svg>
-            </span>
-            <div class="fb-filter-dropdown"></div>
-          </div></th>
-
-
-        <!-- ✅ FILTER ENABLED -->
-        <th>
-          <div class="fb-th-wrapper">
-            <span class="fb-th-label">Mobile</span>
-            <span class="fb-filter-icon" data-col="5">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path fill="currentColor"
-                  d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-              </svg>
-            </span>
-            <div class="fb-filter-dropdown"></div>
-          </div>
-        </th>
-
-        <th>Status</th>
-        <th>Action</th>
-
-      </tr>
-    </thead>
-
-    <tbody id="farmerTableBody"></tbody>
-  </table>
-</div>
-
-<!-- ✅ Pagination -->
-<div class="fb-table-pagination">
-  <div class="fb-page-info">
-    Showing <span id="fbStart">0</span> to 
-    <span id="fbEnd">0</span> of 
-    <span id="fbTotal">0</span> entries
-  </div>
-  <div class="fb-pagination-controls" id="fbPagination"></div>
 </div>
 </main>
 
@@ -157,7 +121,6 @@
 
 <!-- Your Database JS -->
 <script type="module" src="/js/farmer-database.js"></script>
-<script src="/js/table-pagination.js"></script>
 <script src="/js/admin-mobile.js" defer></script>
 </body>
 </html>
