@@ -255,6 +255,67 @@ function normalizeControllerRow(row) {
     return { row: normalized, corruptedFields };
 }
 
+// The same rules the Production page applies to a controller
+// (server/src/bridge/production.js checkFields()), so a controller added
+// either way looks the same. Returns { values, problem } - values are the
+// record's fields, every one a string ("" when the cell was blank:
+// sheet_to_json() leaves a blank cell out of the row, and a missing field
+// made Firestore reject the whole row - every hub without a SIM failed).
+const VARIANTS = ["IRRIGO", "IRRIGO_PLUS", "IRRIGO_SMART_PLUS"];
+const cleanCell = (v) => String(v ?? "").replace(/\s+/g, "").trim();
+function normalizeVariant(v) {
+    const s = String(v ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+    return { IRRIGOPLUS: "IRRIGO_PLUS", IRRIGOSMARTPLUS: "IRRIGO_SMART_PLUS", IRRIGO_SMARTPLUS: "IRRIGO_SMART_PLUS" }[s] || s;
+}
+function checkControllerRow(rawRow) {
+    const { row, corruptedFields } = normalizeControllerRow(rawRow);
+    const values = {
+        variant: normalizeVariant(row["Variant"]),
+        serialNumber: cleanCell(row["Serial Number"]).toUpperCase(),
+        uniqueId: cleanCell(row["Unique ID"]),
+        imeiNumber: cleanCell(row["IMEI Number"]),
+        simMsisdn: cleanCell(row["SIM MSISDN"]),
+        simNumber: cleanCell(row["SIM Number"]).toUpperCase(),
+        simImsi: cleanCell(row["SIM IMSI"])
+    };
+    if (/^\d{1,4}$/.test(values.uniqueId)) values.uniqueId = values.uniqueId.padStart(4, "0");
+    let problem = "";
+    if (corruptedFields.length) problem = `${corruptedFields.join(", ")} looks corrupted (scientific notation/decimal) - re-enter that column in Excel as Text`;
+    else if (!VARIANTS.includes(values.variant)) problem = `Variant must be IRRIGO, IRRIGO_PLUS or IRRIGO_SMART_PLUS - got "${row["Variant"] ?? ""}"`;
+    else if (!values.serialNumber) problem = "Serial Number is missing";
+    else if (!/^[A-Z0-9][A-Z0-9-]{3,31}$/.test(values.serialNumber)) problem = `Serial Number: letters, digits and - only (4-32) - got "${values.serialNumber}"`;
+    else if (!isValidUniqueId(values.uniqueId)) problem = `Invalid Unique ID (must be 4 digits, e.g. "0001") - got "${row["Unique ID"] ?? ""}"`;
+    else if (values.uniqueId === "0000") problem = "0000 is not a valid Unique ID";
+    else if (!values.imeiNumber) problem = "IMEI Number is missing";
+    else if (!/^\d{15}$/.test(values.imeiNumber)) problem = `IMEI Number must be 15 digits - got "${values.imeiNumber}"`;
+    else if (values.simMsisdn && !/^\d{8,15}$/.test(values.simMsisdn)) problem = "SIM MSISDN must be 8-15 digits";
+    else if (values.simNumber && !/^\d{18,22}F?$/.test(values.simNumber)) problem = "SIM Number must be 18-22 digits (the ICCID printed on the SIM)";
+    else if (values.simImsi && !/^\d{14,15}$/.test(values.simImsi)) problem = "SIM IMSI must be 15 digits";
+    return { values, problem };
+}
+
+// The fields no two controllers may share (as the Production page checks).
+const UNIQUE_FIELDS = [
+    ["serialNumber", "Serial Number"], ["uniqueId", "Unique ID"], ["imeiNumber", "IMEI Number"],
+    ["simMsisdn", "SIM MSISDN"], ["simNumber", "SIM Number"], ["simImsi", "SIM IMSI"]
+];
+// A clash with a controller already saved, or with an earlier row of this
+// same file - only on values actually there (two blank SIM cells are not
+// the same SIM). "" when none.
+function clashOf(values, existing, seenInFile) {
+    for (const [key, label] of UNIQUE_FIELDS) {
+        const v = values[key];
+        if (!v) continue;
+        const hit = existing.find((c) => String(c[key] ?? "").trim().toUpperCase() === v);
+        if (hit) return `${label} ${v} is already used by controller ${hit.uniqueId || hit.serialNumber || hit.id}`;
+        if (seenInFile[key].has(v)) return `${label} ${v} appears twice in this file`;
+    }
+    return "";
+}
+const newSeen = () => Object.fromEntries(UNIQUE_FIELDS.map(([k]) => [k, new Set()]));
+const markSeen = (values, seen) => UNIQUE_FIELDS.forEach(([k]) => { if (values[k]) seen[k].add(values[k]); });
+const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
 // "Ravi Kumar (Production)", "admin@... (Excel upload)" - who added a controller.
 function createdByText(c) {
     const by = c?.createdBy;
@@ -271,25 +332,27 @@ function previewExcel(rows) {
     const tbody = document.getElementById("previewTable");
     tbody.innerHTML = "";
 
+    const existing = getControllers();
+    const seen = newSeen();
     rows.forEach((row, index) => {
 
-        const { row: normalized, corruptedFields } = normalizeControllerRow(row);
-        const valid = isValidUniqueId(normalized["Unique ID"]) && corruptedFields.length === 0;
+        // Same checks uploadControllers() makes, so "Ready" here means it saves.
+        const { values, problem: bad } = checkControllerRow(row);
+        const problem = bad || clashOf(values, existing, seen);
+        if (!problem) markSeen(values, seen);
 
         tbody.innerHTML += `
             <tr>
                 <td>${index + 1}</td>
 
-                <td>${row["Serial Number"] || "-"}</td>
+                <td>${escHtml(values.serialNumber || "-")}</td>
 
-                <td>${row["Variant"] || "-"}</td>
+                <td>${escHtml(values.variant || "-")}</td>
 
                 <td>
-                    ${valid
-                        ? `<span class="status-ready">Ready</span>`
-                        : corruptedFields.length > 0
-                            ? `<span class="status-invalid">${corruptedFields.join(", ")} looks corrupted (scientific notation/decimal) - re-enter that column in Excel as Text before re-uploading</span>`
-                            : `<span class="status-invalid">Invalid Unique ID (must be 4 digits, e.g. "0001") - got "${row["Unique ID"] ?? ""}"</span>`
+                    ${problem
+                        ? `<span class="status-invalid">${escHtml(problem)}</span>`
+                        : `<span class="status-ready">Ready</span>`
                     }
                 </td>
             </tr>
@@ -409,70 +472,27 @@ async function uploadControllers(){
 
     let uploaded=0;
     let failed=0;
+    const failures=[];   // "Row 3: IMEI Number must be 15 digits"
+    const seen=newSeen();
 
-    for(const rawRow of rows){
+    for(const [i, rawRow] of rows.entries()){
 
         try{
 
-            // Same normalization previewExcel() already showed the admin -
-            // applied again here (not read back from the preview render)
-            // so what actually gets saved always matches what "Ready"
-            // meant on screen, even if this runs in a later session or
-            // window.previewRows was touched by something else in between.
-            const { row, corruptedFields } = normalizeControllerRow(rawRow);
-
-            if (corruptedFields.length > 0) {
-                console.error(`Skipped row (${corruptedFields.join(", ")} looks corrupted - scientific notation/decimal point): re-enter that column in Excel as Text and re-upload. Unique ID was "${rawRow["Unique ID"] ?? ""}"`);
+            // Checked again here (not read back from the preview) so what's
+            // saved always matches what "Ready" meant on screen.
+            const { values, problem: bad } = checkControllerRow(rawRow);
+            const problem = bad || clashOf(values, getControllers(), seen);
+            if (problem) {
+                failures.push(`Row ${i + 1}: ${problem}`);
                 failed++;
                 continue;
             }
-
-           const serial = row["Serial Number"];
-            const uniqueId = row["Unique ID"];
-            const imei = row["IMEI Number"];
-            const sim = row["SIM Number"];
-            const msisdn = row["SIM MSISDN"];
-            const imsi = row["SIM IMSI"];
-
-            if (!isValidUniqueId(uniqueId)) {
-                console.error(`Skipped row (invalid Unique ID "${uniqueId}"): must be 4 digits, e.g. "0001"`);
-                failed++;
-                continue;
-            }
-
-            const controllers = getControllers();
-
-            const duplicate = controllers.find(c =>
-                c.serialNumber === serial ||
-                c.uniqueId === uniqueId ||
-                c.imeiNumber === imei ||
-                (sim && c.simNumber === sim) ||
-                (msisdn && c.simMsisdn === msisdn) ||
-                (imsi && c.simImsi === imsi)
-            );
-
-            if (duplicate) {
-
-                failed++;
-                continue;
-
-            }
+            markSeen(values, seen);
 
             await addDoc(collection(db,"controllers"),{
 
-                variant:row["Variant"],
-
-                serialNumber:row["Serial Number"],
-
-                uniqueId:uniqueId,
-
-                imeiNumber:row["IMEI Number"],
-
-                simMsisdn:row["SIM MSISDN"],
-
-                simNumber:row["SIM Number"],
-
-                simImsi:row["SIM IMSI"],
+                ...values,
 
                 status:"available",
 
@@ -495,6 +515,7 @@ async function uploadControllers(){
         catch(err){
 
             console.error(err);
+            failures.push(`Row ${i + 1}: couldn't save - ${err.message}`);
 
             failed++;
 
@@ -518,6 +539,7 @@ async function uploadControllers(){
         Uploaded : ${uploaded}<br>
 
         Failed : ${failed}
+        ${failures.length ? `<ul style="text-align:left;max-height:240px;overflow:auto;margin-top:8px">${failures.map((f) => `<li>${escHtml(f)}</li>`).join("")}</ul>` : ""}
     `;
 
     document
