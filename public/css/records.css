@@ -225,3 +225,12 @@ html[data-theme] .rx-foot select { height: 34px; padding: 0 10px; border-radius:
 @media (max-width: 900px) {
   html[data-view="classic"]:not(.fbx-staff) .fb-main:has(> .rx) > .fb-topbar { display: flex; }
 }
+
+/* Upload strip (MCU / Controller) */
+.rx-upload { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.rx-upload b { font-size: 15px; }
+.rx-upload p { margin: 4px 0 0; color: var(--fbx-muted); font-size: 13px; max-width: 560px; }
+.rx-upload-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rx-upload-actions input[type=file] { font: inherit; font-size: 13px; color: var(--fbx-muted); max-width: 240px; }
+button.rx-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; cursor: pointer; }
+a.rx-icon { text-decoration: none; }

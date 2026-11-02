@@ -26,6 +26,7 @@
   <link rel="stylesheet" href="/css/admin-mobile.css">
   <link rel="stylesheet" href="/css/theme-dark.generated.css">
   <link rel="stylesheet" href="/css/admin-shell.css">
+  <link rel="stylesheet" href="/css/records.css">
   <!-- Menu clicks feel instant: Chrome/Edge prepare the admin page you point
        at (hover / touch) in the background, so the click just shows it. -->
   <script type="speculationrules">
@@ -67,60 +68,53 @@
   <span class="fb-user">Admin</span>
 </header>
 
-<div class="top-actions">
-  <input
-    type="text"
-    id="searchInput"
-    placeholder="Search by Farm Buddie ID"
-  >
+<div class="rx" id="anPage">
+
+  <section class="rx-hero" aria-labelledby="anTitle">
+    <div>
+      <span class="rx-kicker">Live · every hub on a farm</span>
+      <h2 class="rx-title" id="anTitle">Device Analytics</h2>
+      <p>Which farms' hubs are online right now - open one for its motors, valves and reports. Press <b>/</b> to search.</p>
+    </div>
+    <div class="rx-stats" id="anStats" aria-label="Totals - click one to filter"></div>
+  </section>
+
+  <section class="rx-card" aria-label="Devices">
+    <div class="rx-tools">
+      <label class="rx-search">
+        <span data-rx-icon="search"></span>
+        <input type="search" id="searchInput" placeholder="Search Farm Buddie ID, Unique ID, farmer name, mobile, location…" aria-label="Search devices" autocomplete="off">
+        <kbd class="rx-kbd">/</kbd>
+      </label>
+      <button type="button" class="rx-btn" id="anFilterBtn" aria-expanded="false" aria-controls="anFilters"><span data-rx-icon="filter"></span><span class="rx-lbl">Filters</span><span class="rx-dotcount" id="anFilterCount" hidden></span></button>
+      <select id="anSort" aria-label="Sort">
+        <option value="id">Sort: Farm Buddie ID</option>
+        <option value="seen">Sort: Last seen (recent first)</option>
+        <option value="quiet">Sort: Quiet longest first</option>
+        <option value="name">Sort: Farmer name A-Z</option>
+      </select>
+    </div>
+
+    <div class="rx-filters" id="anFilters" hidden></div>
+    <div class="rx-active" id="anActive"></div>
+
+    <p class="rx-count" id="anCount" aria-live="polite"></p>
+    <div class="rx-list" id="anList">
+      <div class="rx-skel"></div><div class="rx-skel"></div><div class="rx-skel"></div><div class="rx-skel"></div>
+    </div>
+
+    <div class="rx-foot">
+      <label>Rows per page
+        <select id="anSize"><option>10</option><option selected>20</option><option>50</option><option>100</option></select>
+      </label>
+      <nav class="rx-pager" id="anPager" aria-label="Device pages"></nav>
+    </div>
+  </section>
+
 </div>
-
-<!-- TABLE -->
-<div class="fb-table-card">
-  <table class="fb-table">
-    <thead>
-      <tr>
-        <th>#</th>
-        
-        <!-- ✅ FILTER ENABLED -->
-        <th>
-          <div class="fb-th-wrapper">
-            <span class="fb-th-label">Farm Buddie ID</span>
-            <span class="fb-filter-icon" data-col="1">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path fill="currentColor"
-                  d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-              </svg>
-            </span>
-            <div class="fb-filter-dropdown"></div>
-          </div>
-        </th>
-
-        <th>VARIANT</th>
-        <th>Unique ID</th>
-        <th>Status</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-
-    <tbody id="farmerTableBody"></tbody>
-  </table>
-</div>
-
-<!-- PAGINATION (same as farmer db) -->
-<div class="fb-table-pagination">
-  <div class="fb-page-info">
-    Showing <span id="fbStart">0</span> to 
-    <span id="fbEnd">0</span> of 
-    <span id="fbTotal">0</span> entries
-  </div>
-  <div class="fb-pagination-controls" id="fbPagination"></div>
-</div>
-
 </main>
 
 <script type="module" src="/js/analytics.js"></script>
-<script src="/js/table-pagination.js"></script>
 
 <script src="/js/admin-mobile.js" defer></script>
 </body>

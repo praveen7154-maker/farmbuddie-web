@@ -26,6 +26,7 @@
   <link rel="stylesheet" href="/css/admin-mobile.css">
   <link rel="stylesheet" href="/css/theme-dark.generated.css">
   <link rel="stylesheet" href="/css/admin-shell.css">
+  <link rel="stylesheet" href="/css/records.css">
   <!-- Menu clicks feel instant: Chrome/Edge prepare the admin page you point
        at (hover / touch) in the background, so the click just shows it. -->
   <script type="speculationrules">
@@ -66,178 +67,62 @@
   <span class="fb-user">Admin</span>
 </header>
 
-<section class="controller-stats">
-  <div class="stat stat-total" id="tabTotal">
-  Total <b id="totalCount">0</b>
-</div>
+<div class="rx" id="cdPage">
 
- <div class="stat stat-available" id="tabAvailable">
-    Available <b id="availableCount">0</b>
-  </div>
+  <section class="rx-hero" aria-labelledby="cdTitle">
+    <div>
+      <span class="rx-kicker">Live · every hub</span>
+      <h2 class="rx-title" id="cdTitle">MCU / Controller</h2>
+      <p>Every hub made - search by serial, Unique ID, IMEI, SIM or farmer; filter by status, variant and how it was added. Press <b>/</b> to search.</p>
+    </div>
+    <div class="rx-stats" id="cdStats" aria-label="Totals - click one to filter"></div>
+  </section>
 
-  <div class="stat stat-assigned" id="tabAssigned">
-    Assigned <b id="assignedCount">0</b>
-  </div>
+  <section class="rx-card rx-upload" aria-label="Controller Excel upload">
+    <div>
+      <b>Controller Excel upload</b>
+      <p>Same checks as Production: duplicate Serial, Unique ID, IMEI and SIM are rejected, and the Serial must end in the Unique ID.</p>
+    </div>
+    <div class="rx-upload-actions">
+      <input type="file" id="controllerExcel" accept=".xlsx,.xls,.csv" aria-label="Excel file">
+      <button type="button" class="rx-btn primary" id="uploadExcelBtn"><span data-rx-icon="plus"></span><span class="rx-lbl">Upload Excel</span></button>
+      <button type="button" class="rx-btn" onclick="downloadControllerSample()"><span data-rx-icon="download"></span><span class="rx-lbl">Sample Excel</span></button>
+    </div>
+  </section>
 
-  <div class="stat stat-sold" id="tabUnmapped">
-    Unmapped <b id="unmappedCount">0</b>
-  </div>
-  
-</section>
-
-<div class="variant-summary">
-
-  <div class="variant-card" id="tabIrrigo">
-    <h4>IRRIGO</h4>
-    <p>Total: <span id="irrigoTotal">0</span></p>
-    <p>Available: <span id="irrigoAvailable">0</span></p>
-    <p>Assigned: <span id="irrigoAssigned">0</span></p>
-    <p>Unmapped: <span id="irrigoUnmapped">0</span></p>
-  </div>
-
-  <div class="variant-card" id="tabPlus">
-    <h4>IRRIGO PLUS</h4>
-    <p>Total: <span id="plusTotal">0</span></p>
-    <p>Available: <span id="plusAvailable">0</span></p>
-    <p>Assigned: <span id="plusAssigned">0</span></p>
-    <p>Unmapped: <span id="plusUnmapped">0</span></p>
-  </div>
-
-  <div class="variant-card" id="tabSmart">
-    <h4>IRRIGO SMART PLUS</h4>
-    <p>Total: <span id="smartTotal">0</span></p>
-    <p>Available: <span id="smartAvailable">0</span></p>
-    <p>Assigned: <span id="smartAssigned">0</span></p>
-    <p>Unmapped: <span id="smartUnmapped">0</span></p>
-  </div>
-
-</div>
-
-<!-- ===========================================================
-UPLOAD CONTROLLERS
-============================================================ -->
-
-<div class="controller-upload-card">
-
-    <div class="upload-left">
-
-        <div class="upload-title">
-            📤 Controller Excel Upload
-        </div>
-
-        <div class="upload-sub">
-            Upload production controller data.
-            Duplicate Serial No, Unique ID, IMEI,
-            SIM MSISDN and SIM Number are automatically rejected.
-        </div>
-
+  <section class="rx-card" aria-label="Controllers">
+    <div class="rx-tools">
+      <label class="rx-search">
+        <span data-rx-icon="search"></span>
+        <input type="search" id="searchInput" placeholder="Search serial, Unique ID, username, IMEI, SIM, farmer ID…" aria-label="Search controllers" autocomplete="off">
+        <kbd class="rx-kbd">/</kbd>
+      </label>
+      <button type="button" class="rx-btn" id="cdFilterBtn" aria-expanded="false" aria-controls="cdFilters"><span data-rx-icon="filter"></span><span class="rx-lbl">Filters</span><span class="rx-dotcount" id="cdFilterCount" hidden></span></button>
+      <select id="cdSort" aria-label="Sort">
+        <option value="oldest">Sort: Oldest first</option>
+        <option value="newest">Sort: Newest first</option>
+        <option value="uid">Sort: Unique ID</option>
+        <option value="serial">Sort: Serial</option>
+      </select>
+      <button type="button" class="rx-btn" id="cdExcel" title="Download the controllers shown (filters applied) as Excel"><span data-rx-icon="download"></span><span class="rx-lbl">Excel</span></button>
     </div>
 
-    <div class="upload-actions">
+    <div class="rx-filters" id="cdFilters" hidden></div>
+    <div class="rx-active" id="cdActive"></div>
 
-        <input
-            type="file"
-            id="controllerExcel"
-            accept=".xlsx,.xls,.csv">
-
-        <button
-            class="fb-btn-primary"
-            id="uploadExcelBtn">
-
-            Upload Excel
-
-        </button>
-
-        <button
-            class="fb-btn-secondary"
-            onclick="downloadControllerSample()">
-
-            Sample Excel
-
-        </button>
-
-        
+    <p class="rx-count" id="cdCount" aria-live="polite"></p>
+    <div class="rx-list" id="cdList">
+      <div class="rx-skel"></div><div class="rx-skel"></div><div class="rx-skel"></div><div class="rx-skel"></div>
     </div>
 
-</div>
+    <div class="rx-foot">
+      <label>Rows per page
+        <select id="cdSize"><option>10</option><option selected>20</option><option>50</option><option>100</option></select>
+      </label>
+      <nav class="rx-pager" id="cdPager" aria-label="Controller pages"></nav>
+    </div>
+  </section>
 
-<div class="fb-table-card">
-  <table class="fb-table">
-
-    <thead>
-<tr>
-
-    <th>#</th>
-
-    <th>
-        <div class="fb-th-wrapper">
-            <span class="fb-th-label">Variant</span>
-            <span class="fb-filter-icon" data-col="1">
-                <svg viewBox="0 0 24 24" width="14" height="14">
-                    <path fill="currentColor"
-                    d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-                </svg>
-            </span>
-            <div class="fb-filter-dropdown"></div>
-        </div>
-    </th>
-
-    <th>
-        <div class="fb-th-wrapper">
-            <span class="fb-th-label">Username</span>
-            <span class="fb-filter-icon" data-col="2">
-                <svg viewBox="0 0 24 24" width="14" height="14">
-                    <path fill="currentColor"
-                    d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-                </svg>
-            </span>
-            <div class="fb-filter-dropdown"></div>
-        </div>
-    </th>
-
-    <th>
-        <div class="fb-th-wrapper">
-            <span class="fb-th-label">Farmer ID</span>
-            <span class="fb-filter-icon" data-col="3">
-                <svg viewBox="0 0 24 24" width="14" height="14">
-                    <path fill="currentColor"
-                    d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-                </svg>
-            </span>
-            <div class="fb-filter-dropdown"></div>
-        </div>
-    </th>
-
-    <th>
-        <div class="fb-th-wrapper">
-            <span class="fb-th-label">Status</span>
-            <span class="fb-filter-icon" data-col="4">
-                <svg viewBox="0 0 24 24" width="14" height="14">
-                    <path fill="currentColor"
-                    d="M3 5h18l-7 8v5l-4 2v-7L3 5z"/>
-                </svg>
-            </span>
-            <div class="fb-filter-dropdown"></div>
-        </div>
-    </th>
-
-    
-</tr>
-</thead>
-
-    <tbody id="controllerTable"></tbody>
-
-  </table>
-</div>
-
-<!-- ✅ Pagination -->
-<div class="fb-table-pagination">
-  <div class="fb-page-info">
-    Showing <span id="fbStart">0</span> to 
-    <span id="fbEnd">0</span> of 
-    <span id="fbTotal">0</span> entries
-  </div>
-  <div class="fb-pagination-controls" id="fbPagination"></div>
 </div>
 
 <input
@@ -249,8 +134,7 @@ style="display:none;">
 </main>
 
 <script src="/js/lazy-xlsx.js"></script>
-<script type="module" src="/js/controller-database.js?v=2002"></script>
-<script src="/js/table-pagination.js"></script>
+<script type="module" src="/js/controller-database.js?v=2003"></script>
 
 <script>
 async function downloadControllerSample() {

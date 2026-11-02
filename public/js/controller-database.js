@@ -18,16 +18,16 @@ import {
   warmDataStore,
   getControllers,
   getFarmers,
+  isLive,
   subscribe
 } from "/js/data-store.js";
 
 import { provisionDeviceCredentials, renderMqttCredentialReveal } from "/js/provisioning.js";
 import { fmtDateTime } from "/js/time-format.js";
+import { icon, esc, renderPager, loadState, saveState, toast, slashToSearch } from "/js/records-ui.js";
 
 /* ================= CACHE ================= */
 
-let activeStatus = "ALL";
-let activeVariant = "ALL";
 
 let renderScheduled = false;
 let lastTableKey = "";
@@ -45,8 +45,6 @@ onAuthStateChanged(auth, (user) => {
     window.location.replace("/login.html");
     return;
   }
-
-  activateStatusTab("tabTotal");
 
   /* START REALTIME DATA STORE (only what this page shows) */
   startDataStore(PAGE_DATA);
@@ -71,39 +69,12 @@ function tableKey(){
 }
 
 function scheduleRender(){
-
-  /* prevent unnecessary re-render */
   const key = tableKey();
-  if (key === lastTableKey) return;
-
+  if (key === lastTableKey) return;     // e.g. only a device status changed
   lastTableKey = key;
-
   if (renderScheduled) return;
-
   renderScheduled = true;
-
-  requestAnimationFrame(()=>{
-
-    /* preserve pagination page */
-    const currentPage =
-      document.querySelector(".fb-pagination .active")?.textContent || 1;
-
-    renderControllers();
-
-    setTimeout(()=>{
-
-      const pageBtn = document.querySelector(
-        `.fb-pagination button[data-page="${currentPage}"]`
-      );
-
-      if(pageBtn) pageBtn.click();
-
-    },200);
-
-    renderScheduled = false;
-
-  });
-
+  requestAnimationFrame(() => { renderScheduled = false; renderControllers(); });
 }
 
 /* ================= LOGOUT ================= */
@@ -585,196 +556,196 @@ document
 
 }
 
-/* ================= LOAD CONTROLLERS ================= */
-async function renderControllers() {
+/* ================= LIST (css/records.css) ================= */
+// Search, filters, sort and page are kept for this browser tab.
+const STATE_KEY = "fb.controllerDb.v1";
+const DEFAULTS = { q: "", status: "all", variant: "all", source: "all", sort: "oldest", size: 20, page: 1, open: false };
+const st = loadState(STATE_KEY, DEFAULTS);
+let shown = [];
 
-  const tbody = document.getElementById("controllerTable");
-  tbody.innerHTML = "";
+const $ = (id) => document.getElementById(id);
+const ms = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : (Date.parse(t) || 0));
+const VARIANT_NAMES = { IRRIGO: "Irrigo", IRRIGO_PLUS: "Irrigo Plus", IRRIGO_SMART_PLUS: "Irrigo Smart Plus" };
+const STATUS_NAMES = { available: "Available", assigned: "Assigned", sold: "Unmapped" };
+const STATUS_TONE = { available: "green", assigned: "blue", sold: "red" };
 
-  // 🔝 OVERALL COUNTS
-  let total = 0, available = 0, assigned = 0, unmapped = 0;
-  let serialIndex = 1;
+// Farmer holding each Unique ID; "assigned" with no farmer shows as available.
+function holders() {
+  const m = new Map();
+  for (const f of getFarmers()) if (f.controller?.uniqueId) m.set(f.controller.uniqueId, f);
+  return m;
+}
+const statusOf = (c, farmer) => (c.status === "assigned" && !farmer ? "available" : c.status);
+const sourceOf = (c) => (c.source === "production" ? "production" : c.source === "excel" ? "excel" : "other");
 
-  // 📦 VARIANT COUNTS
-  let irrigo = { total: 0, available: 0, assigned: 0, unmapped: 0 };
-  let plus = { total: 0, available: 0, assigned: 0, unmapped: 0 };
-  let smart = { total: 0, available: 0, assigned: 0, unmapped: 0 };
+const GROUPS = [
+  { key: "status", label: "Status", opts: [["all", "All"], ["available", "Available"], ["assigned", "Assigned"], ["sold", "Unmapped"]] },
+  { key: "variant", label: "Variant", opts: [["all", "All"], ["IRRIGO", "Irrigo"], ["IRRIGO_PLUS", "Irrigo Plus"], ["IRRIGO_SMART_PLUS", "Irrigo Smart Plus"]] },
+  { key: "source", label: "Added by", opts: [["all", "All"], ["production", "Production"], ["excel", "Excel upload"], ["other", "Other"]] }
+];
+const activeCount = () => GROUPS.filter((g) => st[g.key] !== "all").length;
 
-  /* ================= MAP FARMERS ================= */
-const farmerList = getFarmers();
-const farmerMap = {};
+const SORTS = {
+  oldest: (a, b) => ms(a.c.createdAt) - ms(b.c.createdAt),
+  newest: (a, b) => ms(b.c.createdAt) - ms(a.c.createdAt),
+  uid: (a, b) => String(a.c.uniqueId || "").localeCompare(String(b.c.uniqueId || "")),
+  serial: (a, b) => String(a.c.serialNumber || "").localeCompare(String(b.c.serialNumber || ""))
+};
 
-farmerList.forEach(f => {
-  if (f.controller?.uniqueId) {
-    farmerMap[f.controller.uniqueId] = {
-      farmerDocId: f.id,
-      farmBuddieId: f.farmBuddieId
-    };
+function renderFilters() {
+  $("cdFilters").innerHTML = GROUPS.map((g) => `
+    <div class="rx-fgroup"><span>${g.label}</span><div class="rx-chips">
+      ${g.opts.map(([v, l]) => `<button type="button" class="rx-chip${st[g.key] === v ? " on" : ""}" data-f="${g.key}" data-v="${v}" aria-pressed="${st[g.key] === v}">${l}</button>`).join("")}
+    </div></div>`).join("");
+  $("cdFilters").hidden = !st.open;
+  $("cdFilterBtn").classList.toggle("on", st.open);
+  $("cdFilterBtn").setAttribute("aria-expanded", String(st.open));
+  const n = activeCount();
+  $("cdFilterCount").hidden = !n;
+  $("cdFilterCount").textContent = n;
+  const pills = GROUPS.filter((g) => st[g.key] !== "all").map((g) =>
+    `<button type="button" class="rx-pill-x" data-clear="${g.key}" title="Remove this filter">${esc(g.label)}: ${esc(g.opts.find(([v]) => v === st[g.key])?.[1] || "")}${icon("x")}</button>`);
+  if (st.q) pills.push(`<button type="button" class="rx-pill-x" data-clear="q">“${esc(st.q)}”${icon("x")}</button>`);
+  $("cdActive").innerHTML = pills.length ? pills.join("") + `<button type="button" class="rx-clear" data-clear="all">Clear all</button>` : "";
+}
+
+function renderStats(all) {
+  const n = (s) => all.filter((x) => x.status === s).length;
+  const tile = (label, v, tone, set, on) =>
+    `<button type="button" class="rx-stat${on ? " on" : ""}" data-tone="${tone}" data-stat='${JSON.stringify(set)}'><small>${label}</small><b>${v}</b></button>`;
+  const variants = Object.keys(VARIANT_NAMES).filter((v) => all.some((x) => x.c.variant === v));
+  $("cdStats").innerHTML =
+    tile("Total", all.length, "", { status: "all", variant: "all" }, false) +
+    tile("Available", n("available"), "green", { status: "available" }, st.status === "available") +
+    tile("Assigned", n("assigned"), "blue", { status: "assigned" }, st.status === "assigned") +
+    tile("Unmapped", n("sold"), "red", { status: "sold" }, st.status === "sold") +
+    (variants.length > 1 ? variants.map((v) => tile(VARIANT_NAMES[v], all.filter((x) => x.c.variant === v).length, "blue", { variant: v }, st.variant === v)).join("") : "");
+}
+
+function matches(x, q) {
+  if (st.status !== "all" && x.status !== st.status) return false;
+  if (st.variant !== "all" && x.c.variant !== st.variant) return false;
+  if (st.source !== "all" && sourceOf(x.c) !== st.source) return false;
+  if (!q) return true;
+  const c = x.c;
+  return [c.serialNumber, c.uniqueId, c.username, c.imeiNumber, c.simNumber, c.simMsisdn, c.simImsi, c.variant,
+    VARIANT_NAMES[c.variant], x.farmer?.farmBuddieId, x.farmer?.name, c.createdBy?.name, c.createdBy?.id]
+    .some((v) => String(v ?? "").toLowerCase().includes(q));
+}
+
+function row(x, i) {
+  const { c, farmer, status } = x;
+  const tone = STATUS_TONE[status] || "grey";
+  const farmerCell = status === "assigned" && farmer
+    ? `<button type="button" class="rx-link" data-act="farmer" data-fb="${esc(farmer.farmBuddieId)}" data-id="${esc(c.id)}" title="Open the farmer">${esc(farmer.farmBuddieId)}</button>`
+    : status === "sold" ? `<span class="rx-tag" data-tone="red">Unmapped</span>` : `<span style="color:var(--fbx-faint)">Not assigned</span>`;
+  const by = c.createdBy ? createdByText(c) : "-";
+  return `<article class="rx-row" data-tone="${status === "assigned" ? "green" : "grey"}" style="animation-delay:${Math.min(i, 12) * 18}ms">
+    <div class="rx-id"><b>${esc(c.uniqueId || "-")}</b><span class="rx-tag" data-tone="${tone}">${esc(STATUS_NAMES[status] || status || "-")}</span></div>
+    <div class="rx-main">
+      <div class="rx-name"><span class="rx-mono">${esc(c.serialNumber || "-")}</span><em>${esc(VARIANT_NAMES[c.variant] || c.variant || "")}${c.username ? " · " + esc(c.username) : ""}</em></div>
+      <div><small>IMEI</small><span class="rx-mono">${esc(c.imeiNumber || "-")}</span></div>
+      <div><small>Farmer</small>${farmerCell}</div>
+      <div class="rx-wide-only"><small>Added</small>${by}${c.createdAt ? `<br><span style="color:var(--fbx-faint)">${esc(fmtDateTime(c.createdAt))}</span>` : ""}</div>
+    </div>
+    <div class="rx-side"><div class="rx-actions">
+      ${status === "assigned" && farmer ? `<button type="button" class="rx-icon" data-act="farmer" data-fb="${esc(farmer.farmBuddieId)}" data-id="${esc(c.id)}" title="Farmer details" aria-label="Farmer details for ${esc(c.uniqueId)}">${icon("eye")}</button>` : `<span class="rx-icon" style="visibility:hidden" aria-hidden="true"></span>`}
+    </div></div>
+  </article>`;
+}
+
+function renderControllers() {
+  saveState(STATE_KEY, st);
+  const list0 = getControllers();
+  if (!list0.length && !isLive("controllers")) return;      // still loading - the skeletons stay
+  const hold = holders();
+  // Production-internal statuses stay hidden, as before.
+  const all = list0.filter((c) => ADMIN_VISIBLE_STATUSES.includes(c.status))
+    .map((c) => { const farmer = hold.get(c.uniqueId); return { c, farmer, status: statusOf(c, farmer) }; });
+  const q = st.q.trim().toLowerCase();
+  shown = all.filter((x) => matches(x, q)).sort(SORTS[st.sort] || SORTS.oldest);
+  const size = Number(st.size) || 20;
+  const pages = Math.max(1, Math.ceil(shown.length / size));
+  st.page = Math.min(Math.max(1, st.page), pages);
+  const from = (st.page - 1) * size;
+  const page = shown.slice(from, from + size);
+
+  renderStats(all);
+  renderFilters();
+  $("cdCount").textContent = !all.length ? "" :
+    `${shown.length} of ${all.length} controller${all.length === 1 ? "" : "s"}` + (shown.length ? ` · showing ${from + 1}-${from + page.length}` : "");
+  $("cdList").innerHTML = page.length ? page.map(row).join("") :
+    `<div class="rx-empty">${icon("inbox")}<p>${all.length ? "No controllers match these filters." : "No controllers yet - add them on the Production page or upload an Excel."}</p>${activeCount() || st.q ? `<button type="button" class="rx-btn" data-clear="all">Clear filters</button>` : ""}</div>`;
+  renderPager($("cdPager"), st.page, pages);
+}
+
+/* ================= LIST CONTROLS ================= */
+document.querySelectorAll("[data-rx-icon]").forEach((el) => { el.outerHTML = icon(el.dataset.rxIcon); });
+const searchBox = $("searchInput");
+searchBox.value = st.q;
+$("cdSort").value = st.sort;
+$("cdSize").value = String(st.size);
+slashToSearch(searchBox);
+let typing = 0;
+searchBox.addEventListener("input", () => {
+  clearTimeout(typing);
+  typing = setTimeout(() => { st.q = searchBox.value; st.page = 1; renderControllers(); }, 120);
+});
+$("cdSort").addEventListener("change", (e) => { st.sort = e.target.value; st.page = 1; renderControllers(); });
+$("cdSize").addEventListener("change", (e) => { st.size = Number(e.target.value) || 20; st.page = 1; renderControllers(); });
+$("cdFilterBtn").addEventListener("click", () => { st.open = !st.open; renderFilters(); saveState(STATE_KEY, st); });
+$("cdExcel").addEventListener("click", exportControllers);
+
+function clearFilter(key) {
+  if (key === "all") { Object.assign(st, { ...DEFAULTS, sort: st.sort, size: st.size, open: st.open }); searchBox.value = ""; }
+  else if (key === "q") { st.q = ""; searchBox.value = ""; }
+  else st[key] = "all";
+  st.page = 1;
+  renderControllers();
+}
+
+$("cdPage").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-f]");
+  if (chip) { st[chip.dataset.f] = chip.dataset.v; st.page = 1; return renderControllers(); }
+  const clr = e.target.closest("[data-clear]");
+  if (clr) return clearFilter(clr.dataset.clear);
+  const stat = e.target.closest("[data-stat]");
+  if (stat) {
+    const set = JSON.parse(stat.dataset.stat);
+    const already = stat.classList.contains("on");
+    Object.assign(st, already ? Object.fromEntries(Object.keys(set).map((k) => [k, "all"])) : set);
+    st.page = 1;
+    return renderControllers();
   }
+  const pg = e.target.closest("button[data-page]");
+  if (pg && !pg.disabled) {
+    st.page = Number(pg.dataset.page);
+    renderControllers();
+    $("cdCount").scrollIntoView({ block: "nearest", behavior: "smooth" });
+    return;
+  }
+  const act = e.target.closest("[data-act='farmer']");
+  if (act) window.openFarmerPanel(act.dataset.fb, act.dataset.id);
 });
 
-/* ================= LOAD CONTROLLERS ================= */
-const controllerList = getControllers();
-
-for (const c of controllerList) {
-
-  /* HIDE PRODUCTION INTERNAL STATUSES */
-  if (!ADMIN_VISIBLE_STATUSES.includes(c.status)) continue;
-
-  const farmer = farmerMap[c.uniqueId];
-
- total++;
- //if (activeVariant === "ALL") total++;
-
-  /* ================= OVERALL COUNTS ================= */
-
-  if (c.status === "available") available++;
-  else if (c.status === "assigned") assigned++;
-  else if (c.status === "sold") unmapped++;
-
-  /* ================= VARIANT COUNTS ================= */
-
-  const variant = c.variant;
-
-  if (variant === "IRRIGO") {
-    irrigo.total++;
-
-    if (c.status === "available") irrigo.available++;
-    else if (c.status === "assigned") irrigo.assigned++;
-    else if (c.status === "sold") irrigo.unmapped++;
+async function exportControllers() {
+  if (!shown.length) { toast("Nothing to export - clear the filters first", true); return; }
+  try {
+    const XLSX = await window.loadXlsx();
+    const rows = shown.map(({ c, farmer, status }) => ({
+      "Variant": c.variant || "", "Serial Number": c.serialNumber || "", "Unique ID": c.uniqueId || "",
+      "Username": c.username || "", "IMEI Number": c.imeiNumber || "", "SIM MSISDN": c.simMsisdn || "",
+      "SIM Number": c.simNumber || "", "SIM IMSI": c.simImsi || "", "Status": STATUS_NAMES[status] || status || "",
+      "Farmer": farmer?.farmBuddieId || "", "Added by": c.createdBy ? (c.createdBy.name || c.createdBy.id || "") : "",
+      "Source": c.source || "", "Created At": c.createdAt ? fmtDateTime(c.createdAt) : ""
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Controllers");
+    XLSX.writeFile(wb, "Farm_Buddie_Controllers.xlsx");
+  } catch (err) {
+    toast("Couldn't make the Excel file: " + err.message, true);
   }
-
-  if (variant === "IRRIGO_PLUS") {
-    plus.total++;
-
-    if (c.status === "available") plus.available++;
-    else if (c.status === "assigned") plus.assigned++;
-    else if (c.status === "sold") plus.unmapped++;
-  }
-
-  if (variant === "IRRIGO_SMART_PLUS") {
-    smart.total++;
-
-    if (c.status === "available") smart.available++;
-    else if (c.status === "assigned") smart.assigned++;
-    else if (c.status === "sold") smart.unmapped++;
-  }
-
-    /* ===== VARIANT FILTER ===== */
-if (activeVariant !== "ALL" && c.variant !== activeVariant) {
-  continue;
-}
-
-/* ===== STATUS FILTER ===== */
-if (activeStatus !== "ALL" && c.status !== activeStatus) {
-  continue;
-}
-
-   /* ================= FARMER CELL ================= */
-
- let farmerCell = "—";
-
-/* AUTO FIX IF FARMER NOT FOUND */
-let status = c.status;
-
-if (status === "assigned" && !farmer) {
-  status = "available";
-}
-
-if (c.status === "assigned" && farmer) {
-  farmerCell = `
-    <span class="farmer-link"
-      onclick="openFarmerPanel('${farmer.farmBuddieId}', '${c.id}')">
-      ${farmer.farmBuddieId}
-    </span>`;
-}
-
-  if (c.status === "sold") {
-    farmerCell = `<span class="badge-unmapped">Unmapped</span>`;
-  }
-
-  /* ================= TABLE ROW ================= */
-
-  const tr = document.createElement("tr");
-  if (c.createdBy) tr.title = "Added by " + createdByText(c).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
-
- tr.innerHTML = `
-<td>${serialIndex++}</td>
-
-<td>${c.variant || "-"}</td>
-
-<td>${c.username || "-"}</td>
-
-<td>${farmerCell}</td>
-
-<td>
-    <span class="status ${status}">
-        ${
-            status === "available"
-                ? "Available"
-                : status === "assigned"
-                ? "Assigned"
-                : "Unmapped"
-        }
-    </span>
-</td>
-
-`;
-
-tbody.appendChild(tr);
-
-}
-
-if (serialIndex === 1) {
-
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-        <td colspan="5"
-            style="
-                text-align:center;
-                padding:40px;
-                color:#7a7a7a;
-                font-weight:500;
-            ">
-            No Controllers Found
-        </td>
-    `;
-
-    tbody.appendChild(tr);
-
-}
-
-setTimeout(() => {
-  initTablePagination(".fb-table", 10);
-}, 200);
-/* ================= UPDATE OVERALL UI ================= */
-
-document.getElementById("totalCount").textContent = total;
-document.getElementById("availableCount").textContent = available;
-document.getElementById("assignedCount").textContent = assigned;
-document.getElementById("unmappedCount").textContent = unmapped;
-
-/* ================= UPDATE VARIANT UI ================= */
-
-// IRRIGO
-document.getElementById("irrigoTotal").textContent = irrigo.total;
-document.getElementById("irrigoAvailable").textContent = irrigo.available;
-document.getElementById("irrigoAssigned").textContent = irrigo.assigned;
-document.getElementById("irrigoUnmapped").textContent = irrigo.unmapped;
-
-// IRRIGO PLUS
-document.getElementById("plusTotal").textContent = plus.total;
-document.getElementById("plusAvailable").textContent = plus.available;
-document.getElementById("plusAssigned").textContent = plus.assigned;
-document.getElementById("plusUnmapped").textContent = plus.unmapped;
-
-// IRRIGO SMART PLUS
-document.getElementById("smartTotal").textContent = smart.total;
-document.getElementById("smartAvailable").textContent = smart.available;
-document.getElementById("smartAssigned").textContent = smart.assigned;
-document.getElementById("smartUnmapped").textContent = smart.unmapped;
-
 }
 
 /* ================= FARMER SIDE PANEL (1:1 WITH ONBOARDING) ================= */
@@ -1055,67 +1026,6 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
 
 window.closeFarmerPanel = () =>
   document.getElementById("farmerPanel")?.classList.add("hidden");
-
-/* Tab variant Activation */
-
-function activateStatusTab(id){
-
-  document.querySelectorAll(".stat")
-    .forEach(c => c.classList.remove("active"));
-
-  document.getElementById(id).classList.add("active");
-
-}
-function activateVariantTab(id){
-
-  document.querySelectorAll(".variant-card")
-    .forEach(c => c.classList.remove("active"));
-
-  document.getElementById(id).classList.add("active");
-
-}
-
-document.getElementById("tabIrrigo").onclick = ()=>{
-  activeVariant="IRRIGO";
-  activateVariantTab("tabIrrigo");
-   renderControllers();
-};
-
-document.getElementById("tabPlus").onclick = ()=>{
-  activeVariant="IRRIGO_PLUS";
-  activateVariantTab("tabPlus");
-  renderControllers();
-};
-
-document.getElementById("tabSmart").onclick = ()=>{
-  activeVariant="IRRIGO_SMART_PLUS";
-  activateVariantTab("tabSmart");
-  renderControllers();
-};
-
-document.getElementById("tabTotal").onclick = () => {
-  activeStatus = "ALL";
-  activateStatusTab("tabTotal");
-   renderControllers();
-};
-
-document.getElementById("tabAvailable").onclick = () => {
-  activeStatus = "available";
-  activateStatusTab("tabAvailable");
-  renderControllers();
-};
-
-document.getElementById("tabAssigned").onclick = () => {
-  activeStatus = "assigned";
-  activateStatusTab("tabAssigned");
- renderControllers();
-};
-
-document.getElementById("tabUnmapped").onclick = () => {
-  activeStatus = "sold";
-  activateStatusTab("tabUnmapped");
-  renderControllers();
-};
 
 /* ================= MQTT PROVISIONING ================= */
 
