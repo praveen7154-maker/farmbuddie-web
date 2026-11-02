@@ -2,7 +2,7 @@ import express from "express";
 
 // Admin panel > Event Log. Each V2 hub keeps a "black box" in its own EEPROM
 // (Motor repo, event_log.h): a warranty card (serial, install date, firmware
-// history), lifetime counters and the last ~476 events. Nothing is uploaded
+// history), lifetime counters and the last ~450 events. Nothing is uploaded
 // by the hub on its own - this module asks for it when an admin opens the
 // page, over the hub's normal command topic:
 //   eventlog_info                  -> reply carries "info" (card + counters)
