@@ -2,8 +2,6 @@ import { auth, db } from "/js/firebase-init.js";
 
 import {
   collection,
-  query,
-  orderBy,
   onSnapshot,
   getDocsFromCache
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
@@ -27,7 +25,7 @@ onAuthStateChanged(auth, (user) => {
 const liveFrom = { farmers: false, controllers: false, distributors: false };   // the live listener has answered
 const refs = () => ({
   farmers: collection(db, "farmers"),
-  controllers: query(collection(db, "controllers"), orderBy("createdAt", "asc")),
+  controllers: collection(db, "controllers"),
   distributors: collection(db, "distributors")
 });
 
@@ -42,7 +40,7 @@ export async function warmDataStore(which = ALL) {
       if (liveFrom[name] || snap.empty) return;   // the live data got here first
       const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       if (name === "farmers") farmers = docs;
-      else if (name === "controllers") controllers = docs;
+      else if (name === "controllers") controllers = docs.sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
       else distributors = docs;
       notify();
     } catch { /* nothing cached yet - the live listener will fill it */ }
@@ -71,23 +69,31 @@ export function startDataStore(which = ALL){
 
 }
 
+/* ================= LIVE LISTENER ================= */
+
+const tsMs = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : Number(t) || 0);
+
+// A listener that fails (signed-in token not ready yet, network dropped,
+// permission) used to stop silently - the page stayed empty until a
+// reload, and sometimes a reload didn't help either. Now it is opened
+// again after a short wait, as many times as it takes.
+function listen(name, ref, set, attempt = 0) {
+  onSnapshot(ref, (snap) => {
+    attempt = 0;
+    liveFrom[name] = true;
+    set(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    notify();
+  }, (err) => {
+    console.warn(`[data] ${name} listener stopped (${err.code || err.message}) - retrying`);
+    setTimeout(() => listen(name, ref, set, attempt + 1), Math.min(1000 * 2 ** attempt, 15000));
+  });
+}
+
 /* ================= FARMERS ================= */
 
 function startFarmers(){
 
-  const col = collection(db,"farmers");
-
-  onSnapshot(col,(snap)=>{
-
-    liveFrom.farmers = true;
-    farmers = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
-
-    notify();
-
-  });
+  listen("farmers", collection(db,"farmers"), (docs) => { farmers = docs; });
 
 }
 
@@ -95,21 +101,10 @@ function startFarmers(){
 
 function startControllers(){
 
-  const q = query(
-    collection(db,"controllers"),
-    orderBy("createdAt","asc")
-  );
-
-  onSnapshot(q,(snap)=>{
-
-    liveFrom.controllers = true;
-    controllers = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
-
-    notify();
-
+  // No orderBy in the query: Firestore leaves out every document without
+  // createdAt, so such controllers never showed. Sorted here instead.
+  listen("controllers", collection(db,"controllers"), (docs) => {
+    controllers = docs.sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
   });
 
 }
@@ -118,19 +113,7 @@ function startControllers(){
 
 function startDistributors(){
 
-  const col = collection(db,"distributors");
-
-  onSnapshot(col,(snap)=>{
-
-    liveFrom.distributors = true;
-    distributors = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
-
-    notify();
-
-  });
+  listen("distributors", collection(db,"distributors"), (docs) => { distributors = docs; });
 
 }
 
