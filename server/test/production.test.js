@@ -202,15 +202,16 @@ const ADMIN = "admin:owner@farmbuddie.com";
 const SIMS = Array.from({ length: 6 }, (_, i) => ({ msisdn: `57541826998${40 + i}`, iccid: `'89919409129403337${60 + i}`, imsi: `'4049409403337${60 + i}` }));
 const ICCID = (i) => `89919409129403337${60 + i}`;
 const uploadSims = (call, token = ADMIN) => call("/production/sims", { method: "POST", token, body: { rows: SIMS, fileName: "sims.csv" } });
-const GOOD = { variant: "IRRIGO", serialNumber: "irrigo26aa10001", uniqueId: "7", imeiNumber: "490154203237518", simMsisdn: "", simNumber: "8991940912940333760", simImsi: "" };
+const GOOD = { variant: "IRRIGO", serialNumber: "irrigo26aa10007", uniqueId: "7", imeiNumber: "490154203237518", simMsisdn: "", simNumber: "8991940912940333760", simImsi: "" };
 
 test("fields are normalized and checked like the Excel upload", () => {
   const { values, problems } = checkFields(GOOD);
   assert.deepEqual(problems, {});
   assert.equal(values.uniqueId, "0007");
-  assert.equal(values.serialNumber, "IRRIGO26AA10001");
+  assert.equal(values.serialNumber, "IRRIGO26AA10007");
   const bad = checkFields({ variant: "x", serialNumber: "", uniqueId: "12345", imeiNumber: "8.6E+14", simNumber: "123", simImsi: "1", simMsisdn: "12" }).problems;
   for (const k of ["variant", "serialNumber", "uniqueId", "imeiNumber", "simNumber", "simImsi", "simMsisdn"]) assert.ok(bad[k], k);
+  assert.match(checkFields({ ...GOOD, uniqueId: "4" }).problems.serialNumber, /end in the Unique ID 0004/, "serial must end in the Unique ID");
   assert.ok(checkFields({ ...GOOD, uniqueId: "0000" }).problems.uniqueId);
   assert.deepEqual(checkFields({ ...GOOD, simMsisdn: "", simNumber: "", simImsi: "" }).problems, {}, "SIM fields optional");
   assert.equal(checkFields({ ...GOOD, imeiNumber: "4901 5420 3237 518" }).values.imeiNumber, "490154203237518", "spaces from a scanner dropped");
@@ -277,10 +278,10 @@ test("staff sign in, reach only /production, and only see their own entries", as
     assert.deepEqual(r.body.controller.createdBy, { type: "staff", id: "ravi", name: "Ravi" });
     assert.equal(r.body.controller.uniqueId, "0007");
     r = await call("/production/controllers", { method: "POST", token: meena,
-      body: { ...GOOD, serialNumber: "IRRIGO26AA10002", uniqueId: "0008", imeiNumber: "356938035643809", simNumber: ICCID(1) } });
+      body: { ...GOOD, serialNumber: "IRRIGO26AA10008", uniqueId: "0008", imeiNumber: "356938035643809", simNumber: ICCID(1) } });
     assert.equal(r.status, 201);
     r = await call("/production/controllers", { method: "POST", token: ADMIN,
-      body: { ...GOOD, variant: "IRRIGO_PLUS", serialNumber: "IRRIGOPLUS26PP1", uniqueId: "0009", imeiNumber: "353918052512345", simNumber: ICCID(2) } });
+      body: { ...GOOD, variant: "IRRIGO_PLUS", serialNumber: "IRRIGOPLUS26PP10009", uniqueId: "0009", imeiNumber: "353918052512345", simNumber: ICCID(2) } });
     assert.equal(r.status, 201);
     assert.equal(r.body.controller.createdBy.type, "admin");
     assert.equal(r.body.controller.createdBy.id, "owner@farmbuddie.com");
@@ -302,7 +303,7 @@ test("staff sign in, reach only /production, and only see their own entries", as
     assert.equal(r.body.byVariant.IRRIGO, 2);
     assert.equal(r.body.byVariant.IRRIGO_PLUS, 1);
     assert.equal(r.body.nextUniqueId, "0010");
-    assert.deepEqual(r.body.lastSerials, { IRRIGO: "IRRIGO26AA10002", IRRIGO_PLUS: "IRRIGOPLUS26PP1" }, "newest serial per variant");
+    assert.deepEqual(r.body.lastSerials, { IRRIGO: "IRRIGO26AA10008", IRRIGO_PLUS: "IRRIGOPLUS26PP10009" }, "newest serial per variant");
     assert.equal(r.body.days.length, 7);
     assert.equal(r.body.days[6].count, 3);
 
@@ -320,26 +321,32 @@ test("nothing duplicated: every unique field, and two saves at the same moment",
     const tok = (await call("/production/login", { method: "POST", body: { username: "ravi", password: "line1-pass" } })).body.token;
     await uploadSims(call);
     assert.equal((await call("/production/controllers", { method: "POST", token: tok, body: GOOD })).status, 201);
-    const other = { variant: "IRRIGO", serialNumber: "NEWSERIAL01", uniqueId: "0100", imeiNumber: "356938035643809", simNumber: ICCID(3) };
-    for (const [field, value] of [["serialNumber", GOOD.serialNumber], ["uniqueId", "0007"], ["imeiNumber", GOOD.imeiNumber]]) {
-      const r = await call("/production/controllers", { method: "POST", token: tok, body: { ...other, [field]: value } });
+    const other = { variant: "IRRIGO", serialNumber: "NEWSERIAL0100", uniqueId: "0100", imeiNumber: "356938035643809", simNumber: ICCID(3) };
+    // serial and Unique ID go together (the serial ends in the ID), so reusing one reuses both
+    for (const [field, extra] of [["serialNumber", { serialNumber: GOOD.serialNumber, uniqueId: "0007" }],
+                                  ["uniqueId", { serialNumber: "OTHER0007", uniqueId: "0007" }],
+                                  ["imeiNumber", { imeiNumber: GOOD.imeiNumber }]]) {
+      const r = await call("/production/controllers", { method: "POST", token: tok, body: { ...other, ...extra } });
       assert.equal(r.status, 409, `${field} reused: refused`);
-      assert.equal(r.body.clashes[0].field, field);
+      assert.ok(r.body.clashes.some((c) => c.field === field), field);
     }
+    const mismatch = await call("/production/controllers", { method: "POST", token: tok, body: { ...other, uniqueId: "0101" } });
+    assert.equal(mismatch.status, 400, "serial not ending in the Unique ID: refused");
+    assert.ok(mismatch.body.problems.serialNumber);
     let s = await call("/production/controllers", { method: "POST", token: tok, body: { ...other, simNumber: GOOD.simNumber } });
     assert.equal(s.status, 409, "SIM already on a controller: refused");
     assert.match(s.body.error, /already on controller 0007/);
     let r = await call("/production/check", { method: "POST", token: tok, body: { ...other, imeiNumber: GOOD.imeiNumber } });
     assert.deepEqual(r.body.clashes.map((c) => c.field), ["imeiNumber"], "live check names the clash");
     assert.equal(r.body.clashes[0].uniqueId, "0007");
-    r = await call("/production/check", { method: "POST", token: tok, body: { ...other, uniqueId: "12" } });
+    r = await call("/production/check", { method: "POST", token: tok, body: { ...other, serialNumber: "NEWSERIAL0012", uniqueId: "12" } });
     assert.deepEqual(r.body.clashes, []);
     assert.equal(r.body.values.uniqueId, "0012");
     r = await call("/production/controllers", { method: "POST", token: tok, body: { ...other, imeiNumber: "123" } });
     assert.equal(r.status, 400);
     assert.ok(r.body.problems.imeiNumber);
 
-    const same = { ...other, serialNumber: "RACE0001", uniqueId: "0200", imeiNumber: "353918052599999", simNumber: ICCID(4) };
+    const same = { ...other, serialNumber: "RACE0200", uniqueId: "0200", imeiNumber: "353918052599999", simNumber: ICCID(4) };
     const both = await Promise.all([
       call("/production/controllers", { method: "POST", token: tok, body: same }),
       call("/production/controllers", { method: "POST", token: ADMIN, body: same })
@@ -401,10 +408,10 @@ test("SIM inventory: upload, the dropdown list, SIM details only from the invent
     assert.equal(r.body.counts.assigned, 1);
     assert.ok(!r.body.available.some((x) => x.iccid === ICCID(0)));
 
-    r = await call("/production/controllers", { method: "POST", token: ADMIN, body: { ...GOOD, serialNumber: "S2", uniqueId: "0011", imeiNumber: "356938035643809", simNumber: "" } });
+    r = await call("/production/controllers", { method: "POST", token: ADMIN, body: { ...GOOD, serialNumber: "S20011", uniqueId: "0011", imeiNumber: "356938035643809", simNumber: "" } });
     assert.equal(r.status, 400, "no SIM chosen: refused");
     assert.ok(r.body.problems.simNumber);
-    r = await call("/production/controllers", { method: "POST", token: ADMIN, body: { ...GOOD, serialNumber: "SERIAL0003", uniqueId: "0012", imeiNumber: "353918052512345", simNumber: "8991940912940339999" } });
+    r = await call("/production/controllers", { method: "POST", token: ADMIN, body: { ...GOOD, serialNumber: "SERIAL0012", uniqueId: "0012", imeiNumber: "353918052512345", simNumber: "8991940912940339999" } });
     assert.equal(r.status, 409, "a SIM not in the inventory: refused");
     assert.match(r.body.error, /isn't in the SIM inventory/);
 

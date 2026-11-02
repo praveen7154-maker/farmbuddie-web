@@ -286,6 +286,7 @@ function checkControllerRow(rawRow) {
     else if (!/^[A-Z0-9][A-Z0-9-]{3,31}$/.test(values.serialNumber)) problem = `Serial Number: letters, digits and - only (4-32) - got "${values.serialNumber}"`;
     else if (!isValidUniqueId(values.uniqueId)) problem = `Invalid Unique ID (must be 4 digits, e.g. "0001") - got "${row["Unique ID"] ?? ""}"`;
     else if (values.uniqueId === "0000") problem = "0000 is not a valid Unique ID";
+    else if (!values.serialNumber.endsWith(values.uniqueId)) problem = `Serial Number ${values.serialNumber} must end in the Unique ID ${values.uniqueId}`;
     else if (!values.imeiNumber) problem = "IMEI Number is missing";
     else if (!/^\d{15}$/.test(values.imeiNumber)) problem = `IMEI Number must be 15 digits - got "${values.imeiNumber}"`;
     else if (values.simMsisdn && !/^\d{8,15}$/.test(values.simMsisdn)) problem = "SIM MSISDN must be 8-15 digits";

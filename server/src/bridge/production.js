@@ -113,6 +113,10 @@ export function checkFields(input) {
   if (!v.uniqueId) p.uniqueId = "Unique ID is required";
   else if (!/^\d{4}$/.test(v.uniqueId)) p.uniqueId = "4 digits, e.g. 0001 - it becomes the device's farm ID";
   else if (v.uniqueId === "0000") p.uniqueId = "0000 is not a valid Unique ID";
+  // The hub makes its serial from its farm ID (IRRIGO26AA1 + 0007), so the
+  // serial printed on the box must end in the same 4 digits.
+  if (!p.serialNumber && !p.uniqueId && !v.serialNumber.endsWith(v.uniqueId))
+    p.serialNumber = `Must end in the Unique ID ${v.uniqueId} (e.g. IRRIGO26AA1${v.uniqueId})`;
   if (!v.imeiNumber) p.imeiNumber = "IMEI is required";
   else if (!/^\d{15}$/.test(v.imeiNumber)) p.imeiNumber = "15 digits";
   if (v.simMsisdn && !/^\d{8,15}$/.test(v.simMsisdn)) p.simMsisdn = "8-15 digits";
