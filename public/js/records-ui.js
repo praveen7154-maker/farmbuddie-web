@@ -70,3 +70,11 @@ export function slashToSearch(input) {
     input.select();
   });
 }
+
+// A cell cut off with "…" shows its full text on hover (and on a long
+// press on touch screens, which shows the title too).
+document.addEventListener("mouseover", (e) => {
+  const el = e.target.closest?.(".rx-main > div, .rx-name em, .rx-sub");
+  if (!el || el.title) return;
+  if (el.scrollWidth > el.clientWidth + 1) el.title = el.innerText.replace(/\s*\n\s*/g, " · ").trim();
+});

@@ -193,7 +193,7 @@ function row(f, i) {
   const dev = deviceOf(f);
   const viaDist = String(f.leadSource?.type || "").toUpperCase() === "DISTRIBUTOR";
   const lead = viaDist
-    ? `${esc(f.leadSource?.distributorName || distName(f.leadSource?.distributorId) || "Distributor")} <span class="rx-mono">${esc(f.leadSource?.distributorId || "")}</span>`
+    ? `${esc(f.leadSource?.distributorName || distName(f.leadSource?.distributorId) || "Distributor")}${f.leadSource?.distributorId ? `<span class="rx-sub rx-mono">${esc(f.leadSource.distributorId)}</span>` : ""}`
     : "Farm Buddie";
   const on = accessOn(f);
   const team = !!window.FBShell?.team;
