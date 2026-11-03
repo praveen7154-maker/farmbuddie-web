@@ -35,27 +35,30 @@ export const rupees = (p) => `₹${(p / 100).toLocaleString("en-IN", { minimumFr
 
 // ---- one price row ----
 
-/** The largest discount allowed per unit (paise) - from a % or a ₹ amount. */
-export function maxDiscountPaise(item) {
-  if (!isInt(item.basePrice)) return 0;
-  if (item.maxDiscountType === "pct") return Math.floor(item.basePrice * (item.maxDiscountValue || 0) / 10000);
-  if (item.maxDiscountType === "amt") return Math.min(item.basePrice, item.maxDiscountValue || 0);
-  return 0;
-}
+/**
+ * The company discount on a row (paise per unit, before GST): the most Farm
+ * Buddie itself pays when a distributor passes a discount on to the
+ * customer. Giving it is optional on every sale - any amount up to this. The
+ * distributor pays us that much less, so their margin stays the same.
+ */
+export const companyDiscountOf = (item) => (isInt(item.companyDiscount) && item.companyDiscount > 0 ? item.companyDiscount : 0);
 
-/** Lowest price a unit may be sold at: the higher of the minimum price and base - max discount. */
+/** Lowest price a unit may be sold at: the minimum price less the full company discount. */
 export function floorPrice(item) {
-  return Math.max(item.minPrice ?? 0, item.basePrice - maxDiscountPaise(item));
+  return Math.max(0, (item.minPrice ?? 0) - companyDiscountOf(item));
 }
 
 const withGst = (paise, gstBp) => Math.round(paise * (10000 + gstBp) / 10000);
 
 /**
  * Problems with one price row (an empty list = fine). item:
- * { mrp, distributorPrice, basePrice, minPrice, maxPrice, maxDiscountType
- *   ('pct' | 'amt'), maxDiscountValue (pct in basis points: 10% = 1000;
- *   amt in paise), gstBp, kind ('goods' | 'service') }
- * A service (installation, transport) has no MRP.
+ * { mrp, distributorPrice, basePrice, minPrice, maxPrice, companyDiscount
+ *   (optional, paise), costPrice (optional, paise), gstBp, kind ('goods' |
+ *   'service') }
+ * minPrice is the lowest a distributor may go out of their own margin;
+ * the company discount comes on top of that. A service (installation,
+ * transport) has no MRP. maxDiscountType / maxDiscountValue on older rows
+ * are ignored.
  */
 export function priceProblems(item) {
   const errors = [];
@@ -70,10 +73,10 @@ export function priceProblems(item) {
   // Our purchase cost is optional (admin reference only).
   const cost = item.costPrice;
   if (cost !== null && cost !== undefined && (!isInt(cost) || cost < 0)) errors.push("Our cost can't be negative");
+  const cd = item.companyDiscount;
+  if (cd !== null && cd !== undefined && (!isInt(cd) || cd < 0)) errors.push("Company discount can't be negative");
+  else if (isInt(cd) && cd > MAX_PAISE) errors.push("Company discount is too large");
   if (!GST_RATES_BP.includes(item.gstBp)) errors.push("GST rate is not a valid GST slab");
-  if (!["pct", "amt"].includes(item.maxDiscountType)) errors.push("Choose the discount limit as % or ₹");
-  else if (!isInt(item.maxDiscountValue) || item.maxDiscountValue < 0) errors.push("Max discount can't be negative");
-  else if (item.maxDiscountType === "pct" && item.maxDiscountValue > 10000) errors.push("Max discount can't be over 100%");
   if (errors.length) return errors;
 
   const { mrp, distributorPrice: dp, basePrice: base, minPrice: min, maxPrice: max } = item;
@@ -81,7 +84,8 @@ export function priceProblems(item) {
   if (dp > min) errors.push(`Minimum price (${rupees(min)}) is below the distributor price (${rupees(dp)}) - the distributor would sell at a loss`);
   if (min > base) errors.push(`Minimum price (${rupees(min)}) is above the farmer selling price (${rupees(base)})`);
   if (base > max) errors.push(`Farmer selling price (${rupees(base)}) is above the maximum price (${rupees(max)})`);
-  if (item.maxDiscountType === "amt" && item.maxDiscountValue > base) errors.push("Max discount is more than the farmer selling price");
+  // The distributor's price after the full company discount can't go below zero.
+  if (companyDiscountOf(item) > dp) errors.push(`Company discount (${rupees(companyDiscountOf(item))}) is more than the distributor price (${rupees(dp)})`);
   if (mrp !== null && mrp !== undefined && withGst(max, item.gstBp) > mrp) {
     errors.push(`Maximum price + GST (${rupees(withGst(max, item.gstBp))}) is more than the MRP (${rupees(mrp)})`);
   }
@@ -91,18 +95,19 @@ export function priceProblems(item) {
 /**
  * Farm Buddie's own profit per unit (before GST), when our cost is known:
  * direct = sold by us to the farmer at the selling price; viaDistributor =
- * sold to a distributor at the distributor price. null when unknown.
+ * sold to a distributor at the distributor price. companyDiscount: what
+ * either drops by when the full company discount is given. null when unknown.
  */
 export function ourProfit(item) {
   if (!isInt(item.costPrice) || !isInt(item.basePrice) || !isInt(item.distributorPrice)) return null;
-  return { direct: item.basePrice - item.costPrice, viaDistributor: item.distributorPrice - item.costPrice };
+  return { direct: item.basePrice - item.costPrice, viaDistributor: item.distributorPrice - item.costPrice, companyDiscount: companyDiscountOf(item) };
 }
 
 /**
  * Our cost and profit on a priced quote (lines from calculateQuote). A
- * distributor's quote: they buy from us at the distributor price. Our own
- * (direct) quote: we get the net price. costOf(variantId) -> paise | null.
- * Returns null if any line's cost is unknown.
+ * distributor's quote: they buy from us at the distributor price less the
+ * company discount they gave. Our own (direct) quote: we get the net price.
+ * costOf(variantId) -> paise | null. Returns null if any line's cost is unknown.
  */
 export function quoteProfit(lines, costOf, viaDistributor) {
   let cost = 0, revenue = 0;
@@ -110,7 +115,7 @@ export function quoteProfit(lines, costOf, viaDistributor) {
     const c = costOf(l.variantId);
     if (!isInt(c)) return null;
     cost += c * l.qty;
-    revenue += (viaDistributor ? l.distributorPrice : l.unitPrice) * l.qty;
+    revenue += (viaDistributor ? l.distributorNet ?? l.distributorPrice : l.unitPrice) * l.qty;
   }
   return { ourCost: cost, ourRevenue: revenue, ourProfit: revenue - cost, viaDistributor: !!viaDistributor };
 }
@@ -119,15 +124,29 @@ export function quoteProfit(lines, costOf, viaDistributor) {
 export function priceWarnings(item) {
   const w = [];
   if (priceProblems(item).length) return w;
-  if (item.basePrice - maxDiscountPaise(item) < item.minPrice) {
-    w.push(`The minimum price limits the discount to ${rupees(item.basePrice - item.minPrice)} per unit`);
-  }
+  const cd = companyDiscountOf(item);
   if (item.minPrice === item.distributorPrice) w.push("At the minimum price the distributor earns nothing");
   if (isInt(item.costPrice)) {
     if (item.distributorPrice < item.costPrice) w.push(`Distributor price is below our cost - we lose ${rupees(item.costPrice - item.distributorPrice)} on each distributor sale`);
+    else if (cd && item.distributorPrice - cd < item.costPrice) w.push(`With the full company discount a distributor sale loses ${rupees(item.costPrice - item.distributorPrice + cd)}`);
     else if (floorPrice(item) < item.costPrice) w.push(`The lowest price is below our cost - a direct sale at the lowest price loses money`);
   }
   return w;
+}
+
+// ---- production pricing (our cost) ----
+
+/** One component / extra cost line: qty (up to 3 decimals) × cost per unit, to the paisa. */
+export const componentAmount = (x) => Math.round(Math.round(Number(x.qty ?? 1) * 1000) * Number(x.cost || 0) / 1000);
+
+/**
+ * What one unit costs us, before GST: the purchase price when it's bought
+ * (source 'buy'), plus every line - the components / materials of a made
+ * product (source 'make'), or extra costs like freight on a bought one.
+ */
+export function costingTotal(c) {
+  const lines = (c.components || []).reduce((s, x) => s + componentAmount(x), 0);
+  return (c.source === "buy" ? c.purchasePrice || 0 : 0) + lines;
 }
 
 // ---- quote calculation ----
@@ -139,8 +158,11 @@ export function priceWarnings(item) {
  * MRP without GST (rounded down to the rupee) as the unit price, and the
  * gap to the farmer selling price becomes one "Company discount" row under the
  * products total. A line with no MRP, or an MRP not above the selling
- * price, shows the selling price as usual.
- *   mrpTotal - mrpDiscount - totals.discount = totals.taxable, always.
+ * price, shows the selling price as usual. The company discount given on
+ * a line joins the same row; what the distributor took off on their own is
+ * "Additional discount" (otherDiscount).
+ *   mrpTotal - mrpDiscount - totals.discount = totals.taxable, always, and
+ *   mrpTotal - companyDiscount - otherDiscount = totals.taxable.
  */
 export function mrpView(lines) {
   const shown = lines.map((l) => {
@@ -148,10 +170,15 @@ export function mrpView(lines) {
     const unit = ex > l.listPrice ? ex : l.listPrice;
     return { unit, amount: unit * l.qty, mrpDiscount: (unit - l.listPrice) * l.qty };
   });
+  const mrpDiscount = shown.reduce((s, x) => s + x.mrpDiscount, 0);
+  const given = lines.reduce((s, l) => s + (l.companyDiscount || 0) * l.qty, 0);
+  const discount = lines.reduce((s, l) => s + (l.discount ?? (l.listPrice - l.unitPrice) * l.qty), 0);
   return {
     lines: shown,
     mrpTotal: shown.reduce((s, x) => s + x.amount, 0),
-    mrpDiscount: shown.reduce((s, x) => s + x.mrpDiscount, 0)
+    mrpDiscount,
+    companyDiscount: mrpDiscount + given,
+    otherDiscount: discount - given
   };
 }
 
@@ -166,6 +193,9 @@ export function mrpView(lines) {
  * opts:   { customerState, homeState }
  * Returns { ok, errors: [{ line, error }], lines: [...], totals }.
  * A line that breaks a rule is reported, never silently clamped.
+ * A discount is the company's first, up to the row's company discount (the
+ * distributor pays us that much less, so their margin stays whole), then
+ * the distributor's own, down to the minimum price.
  */
 export function calculateQuote(prices, lines, opts = {}) {
   const errors = [];
@@ -183,6 +213,7 @@ export function calculateQuote(prices, lines, opts = {}) {
     if (!isInt(qty) || qty < 1 || qty > MAX_QTY) return errors.push({ line: i, error: `Quantity must be a whole number from 1 to ${MAX_QTY}` });
     const base = p.basePrice;
     const floor = floorPrice(p);
+    const cdMax = companyDiscountOf(p);
     let net = base;
     if (l.unitPrice !== undefined && l.unitPrice !== null && l.unitPrice !== "") {
       const u = Number(l.unitPrice);
@@ -199,10 +230,12 @@ export function calculateQuote(prices, lines, opts = {}) {
       } else return errors.push({ line: i, error: "Discount must be % or ₹" });
     }
     if (net < floor) {
-      return errors.push({ line: i, error: `${p.productName}: lowest allowed price is ${rupees(floor)} per unit (max discount ${rupees(base - floor)})` });
+      return errors.push({ line: i, error: `${p.productName}: lowest allowed price is ${rupees(floor)} per unit (at most ${rupees(base - floor)} off${cdMax ? `, ${rupees(cdMax)} of it company discount` : ""})` });
     }
     if (net > p.maxPrice) return errors.push({ line: i, error: `${p.productName}: highest allowed price is ${rupees(p.maxPrice)} per unit` });
 
+    const company = Math.min(Math.max(0, base - net), cdMax);   // per unit, paid by Farm Buddie
+    const distributorNet = p.distributorPrice - company;
     const taxable = net * qty;
     const gst = Math.round(taxable * p.gstBp / 10000);
     out.push({
@@ -227,7 +260,10 @@ export function calculateQuote(prices, lines, opts = {}) {
       gst,
       total: taxable + gst,
       distributorPrice: p.distributorPrice,
-      margin: (net - p.distributorPrice) * qty,
+      companyDiscount: company,
+      companyDiscountMax: cdMax,
+      distributorNet,
+      margin: (net - distributorNet) * qty,
       // What was asked for, so a quote can be copied at new prices later.
       discountType: l.unitPrice !== undefined && l.unitPrice !== null && l.unitPrice !== "" ? null : (l.discountType || null),
       discountValue: l.unitPrice !== undefined && l.unitPrice !== null && l.unitPrice !== "" ? null : (Number(l.discountValue) || 0),
@@ -265,7 +301,8 @@ export function calculateQuote(prices, lines, opts = {}) {
       roundOff: payable - beforeRound,
       payable,
       margin: sum("margin"),
-      distributorCost: out.reduce((s, l) => s + l.distributorPrice * l.qty, 0)
+      companyDiscount: out.reduce((s, l) => s + l.companyDiscount * l.qty, 0),
+      distributorCost: out.reduce((s, l) => s + l.distributorNet * l.qty, 0)
     }
   };
 }

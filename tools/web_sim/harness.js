@@ -117,7 +117,21 @@ export async function startHarness({ port = 0 } = {}) {
     loadAudience: af.loadAudience, phoneFarmIds: af.phoneFarmIds, sendPush: af.sendPush, removeDevices: af.removeDevices,
     distributorFarms: df.distributorFarms, distributorDevices: () => distStore.devices(), removeDistributorDevices: async () => {}
   });
-  const pricing = createPricingModule({ store: stores.emptyPricingStore(), findDistributor });
+  // Module Pricing: a real Postgres when WEB_SIM_PG points at a throwaway
+  // test database (its pricing tables are emptied first), else an empty store.
+  let pricingStore = stores.emptyPricingStore(), pgPool = null;
+  if (process.env.WEB_SIM_PG) {
+    const dbName = new URL(process.env.WEB_SIM_PG).pathname.slice(1);
+    if (!/(test|sim)$/i.test(dbName)) throw new Error(`WEB_SIM_PG: use a throwaway database whose name ends in "test" or "sim" (got "${dbName}") - its pricing tables are wiped`);
+    process.env.BRIDGE_PG_CONNECTION_STRING = process.env.WEB_SIM_PG;
+    ({ pool: pgPool } = await import(server("src/bridge/postgres.js")));
+    const ps = await import(server("src/bridge/pricingStore.js"));
+    await pgPool.query(`DROP TABLE IF EXISTS pricing_quotes, price_list_items, price_lists, pricing_accessories, pricing_costing, pricing_variants,
+      pricing_products, pricing_counters, pricing_audit, pricing_staff, pricing_settings CASCADE`);
+    await ps.ensurePricingSchema();
+    pricingStore = ps.pgPricingStore;
+  }
+  const pricing = createPricingModule({ store: pricingStore, findDistributor });
 
   // ---------------- the bridge (server.js, minus MQTT/Postgres) ----------------
   const bridge = express();
@@ -221,7 +235,7 @@ export async function startHarness({ port = 0 } = {}) {
   await new Promise((r) => httpServer.listen(port, "127.0.0.1", r));
   const url = `http://127.0.0.1:${httpServer.address().port}`;
   return {
-    url, mem, db, log, prodStore, otaStore, ota, production, users,
-    close: () => new Promise((r) => httpServer.close(r))
+    url, mem, db, log, prodStore, otaStore, ota, production, users, pricingDb: pgPool,
+    close: async () => { await new Promise((r) => httpServer.close(r)); await pgPool?.end(); }
   };
 }

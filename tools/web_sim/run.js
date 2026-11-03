@@ -63,7 +63,10 @@ const issues = [];
 const results = [];          // { phase, check, ok, detail }
 let phase = "";
 const check = (name, ok, detail = "") => { results.push({ phase, check: name, ok: !!ok, detail: String(detail) }); console.log(`  ${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  - " + detail : ""}`); };
+// WEB_SIM_ONLY=16 (or 1,16): only those phases - for a quick re-run of one area.
+const ONLY = process.env.WEB_SIM_ONLY ? new Set(process.env.WEB_SIM_ONLY.split(",").map((x) => x.trim())) : null;
 async function run(name, fn) {
+  if (ONLY && !ONLY.has(name.split(".")[0])) { console.log(`\n== ${name} (skipped: WEB_SIM_ONLY)`); return; }
   phase = name;
   console.log(`\n== ${name}`);
   const before = issues.length;
@@ -729,6 +732,159 @@ await run("15. Team access after switch-off; phone-width layout", async () => {
     if (over > 2) wide.push(`${p.split(".")[0]} +${over}px`);
   }
   check("no page scrolls sideways at phone width (390 px)", !wide.length, wide.join(", "));
+  await page.setViewportSize({ width: 1366, height: 900 });
+});
+
+await run("16. Module Pricing on a real database - production cost, company discount, calculator, quote", async () => {
+  if (!h.pricingDb) { check("skipped - set WEB_SIM_PG to a throwaway Postgres database to run it", true); return; }
+  const P = (r) => Math.round(r * 100);
+  const ids = Object.fromEntries((await h.pricingDb.query("SELECT id, sku FROM pricing_variants")).rows.map((r) => [r.sku, r.id]));
+  await login(ADMIN.email, ADMIN.password);
+  await page.waitForURL(/\/admin\/home\.html/, { timeout: 8000 });
+  await go("/admin/pricing.html");
+  await until(() => page.evaluate(() => document.getElementById("roleBadge").textContent.includes("Admin")), 8000, "the pricing page");
+  const tabs = await page.evaluate(() => [...document.querySelectorAll("#tabs button")].filter((b) => !b.hidden).map((b) => b.dataset.tab));
+  check("Production Pricing sits next to Calculator and Price Lists", tabs.slice(0, 3).join() === "calc,lists,production", tabs.join(", "));
+
+  // ---- Production Pricing: a made product, a bought one, an edit ----
+  await page.click("#tabs button[data-tab=production]");
+  await until(() => page.$(`#pcBody tr[data-v="${ids["FB-HUB"]}"]`), 8000, "the product list");
+  check("every product and variant is listed (16)", (await page.$$("#pcBody tr[data-v]")).length === 16);
+  const line = (i) => `#cmLines tr[data-i="${i}"]`;
+  async function fillLine(i, name, qty, cost) {
+    if (!(await page.$(line(i)))) await page.click("#cmAddLine");
+    await page.fill(`${line(i)} [data-f=name]`, name);
+    await page.fill(`${line(i)} [data-f=qty]`, qty);
+    await page.fill(`${line(i)} [data-f=cost]`, cost);
+  }
+  await page.click(`#pcBody tr[data-v="${ids["FB-HUB"]}"]`);
+  await page.check('input[name=cmSource][value=make]');
+  await fillLine(0, "Main PCB", "1", "1800");
+  await fillLine(1, "ESP32 module", "1", "450");
+  await fillLine(2, "Relay 12V", "4", "42.50");
+  await fillLine(3, "Enclosure", "1", "600");
+  await fillLine(4, `Label ${XSS}`, "1", "10");
+  check("the total adds up as you type (₹3,030)", (await page.textContent("#cmTotal")) === "₹3,030.00", await page.textContent("#cmTotal"));
+  await page.click("#cmSave");
+  await until(() => page.evaluate(() => document.getElementById("costModal").hidden), 5000, "the cost saved");
+  let row = await page.textContent(`#pcBody tr[data-v="${ids["FB-HUB"]}"]`);
+  check("the hub is tagged Manufacturing with its cost", row.includes("Manufacturing") && row.includes("₹3,030.00"), row.replace(/\s+/g, " "));
+  // Edit: 6 relays, not 4
+  await page.click(`#pcBody tr[data-v="${ids["FB-HUB"]}"]`);
+  await page.fill(`${line(2)} [data-f=qty]`, "6");
+  check("editing shows the new total (₹3,115)", (await page.textContent("#cmTotal")) === "₹3,115.00");
+  await page.click("#cmSave");
+  await until(() => page.evaluate(() => document.getElementById("costModal").hidden), 5000, "the edit saved");
+  // Bought: supplier, purchase price and freight
+  await page.click(`#pcBody tr[data-v="${ids["FB-ANT"]}"]`);
+  await page.check('input[name=cmSource][value=buy]');
+  await page.fill("#cmSupplier", `Sri Traders ${XSS}`);
+  await page.fill("#cmPurchase", "55");
+  await fillLine(0, "Freight", "1", "5");
+  await page.click("#cmSave");
+  await until(() => page.evaluate(() => document.getElementById("costModal").hidden), 5000, "the bought cost saved");
+  row = await page.textContent(`#pcBody tr[data-v="${ids["FB-ANT"]}"]`);
+  check("the antenna is tagged Buying with its supplier and ₹60", row.includes("Buying") && row.includes("Sri Traders") && row.includes("₹60.00"), row.replace(/\s+/g, " "));
+  // A bought product with no supplier isn't saved
+  await page.click(`#pcBody tr[data-v="${ids["FB-MN"]}"]`);
+  await page.check('input[name=cmSource][value=buy]');
+  await page.fill("#cmPurchase", "100");
+  await page.click("#cmSave");
+  await page.waitForTimeout(300);
+  check("Buying without a supplier is refused", /supplier/i.test(await page.textContent("#cmStatus")) && !(await h.pricingDb.query("SELECT 1 FROM pricing_costing WHERE variant_id = $1", [ids["FB-MN"]])).rowCount);
+  await page.click("[data-close=costModal]");
+  const db = (await h.pricingDb.query("SELECT variant_id, source, total_cost, components FROM pricing_costing ORDER BY variant_id")).rows;
+  check("saved on the server: 2 costs, before GST", db.length === 2 && db.find((c) => c.variant_id === ids["FB-HUB"]).total_cost == P(3115)
+    && db.find((c) => c.variant_id === ids["FB-HUB"]).components.length === 5, JSON.stringify(db.map((c) => [c.source, Number(c.total_cost)])));
+  await leakCheck("open / close a product's cost", async () => { await page.click(`#pcBody tr[data-v="${ids["FB-HUB"]}"]`); await page.click("[data-close=costModal]"); });
+
+  // ---- A price list with company discounts ----
+  await page.click("#tabs button[data-tab=lists]");
+  // The page's own prompt (name) and confirm (publish) are accepted by the runner.
+  await expecting([/dialog: prompt: Name for the first price list/], () => page.click("#newListBtn"));
+  await until(() => page.$(`#itemsBody tr[data-v="${ids["FB-HUB"]}"]`), 8000, "the new draft");
+  const tr = (sku) => `#itemsBody tr[data-v="${ids[sku]}"]`;
+  const heads = await page.textContent(".pr-items thead");
+  check("no Max discount column; Company discount and Lowest price are there", !/Max discount/i.test(heads) && /Company\s*discount/.test(heads) && /Lowest\s*price/.test(heads));
+  const hubCost = await page.textContent(`${tr("FB-HUB")} td:nth-child(3)`);
+  check("Our cost comes from Production Pricing and can't be typed", hubCost.includes("₹3,115.00") && hubCost.includes("made") && !(await page.$(`${tr("FB-HUB")} [data-k=costPrice]`)), hubCost);
+  async function price(sku, v) {
+    for (const [k, x] of Object.entries(v)) await page.fill(`${tr(sku)} [data-k=${k}]`, x);
+  }
+  await price("FB-HUB", { mrp: "14160", distributorPrice: "10000", basePrice: "12000", companyDiscount: "500" });
+  await price("FB-MN", { mrp: "5900", distributorPrice: "3500", basePrice: "5000", minPrice: "4800", companyDiscount: "200" });
+  await price("FB-ANT", { mrp: "590", distributorPrice: "300", basePrice: "450" });
+  const cell = (sku, c) => page.textContent(`${tr(sku)} [data-c=${c}]`);
+  check("hub: lowest price = minimum - company discount = ₹11,500", (await cell("FB-HUB", "floor")) === "₹11,500.00", await cell("FB-HUB", "floor"));
+  const m = await cell("FB-HUB", "margin");
+  check("hub: distributor margin ₹2,000, the same with the company discount", m.includes("₹2,000.00") && m.includes("same with company discount"), m);
+  const pr = await cell("FB-HUB", "profit");
+  check("hub: our profit shows the company discount's effect", pr.includes("₹8,885.00") && pr.includes("₹6,885.00") && pr.includes("− ₹500.00"), pr);
+  check("motor node: lowest ₹4,600 (own ₹200 + company ₹200)", (await cell("FB-MN", "floor")) === "₹4,600.00", await cell("FB-MN", "floor"));
+  // Too big a company discount is flagged on the row
+  await page.fill(`${tr("FB-ANT")} [data-k=companyDiscount]`, "301");
+  check("a company discount over the distributor price is flagged", /more than the distributor price/.test(await cell("FB-ANT", "check")));
+  await page.fill(`${tr("FB-ANT")} [data-k=companyDiscount]`, "");
+  // Off sale: everything else
+  for (const el of await page.$$("#itemsBody tr[data-v]")) {
+    const v = Number(await el.getAttribute("data-v"));
+    if (![ids["FB-HUB"], ids["FB-MN"], ids["FB-ANT"]].includes(v)) await (await el.$("[data-k=active]")).uncheck();
+  }
+  await page.fill("#edFrom", new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+  await page.dispatchEvent("#edFrom", "input");
+  await expecting([/dialog: confirm: Save and publish/], () => page.click("[data-a=quickPublish]"));
+  await until(() => page.evaluate(() => !document.getElementById("pageOk").hidden && /published/.test(document.getElementById("pageOk").textContent)), 10000, "published");
+  const items = (await h.pricingDb.query(`SELECT v.sku, i.company_discount, i.cost_price, i.min_price FROM price_list_items i JOIN pricing_variants v ON v.id = i.variant_id
+    JOIN price_lists l ON l.id = i.list_id WHERE l.status = 'published' AND i.active ORDER BY v.sku`)).rows;
+  check("published with the company discounts and our cost", items.length === 3 && items.find((i) => i.sku === "FB-HUB").company_discount == P(500)
+    && items.find((i) => i.sku === "FB-HUB").cost_price == P(3115) && items.find((i) => i.sku === "FB-ANT").company_discount == 0, JSON.stringify(items));
+  // The distributors' PDF: company discount, no cost
+  const [pop] = await Promise.all([context.waitForEvent("page"), page.click("#pdfDistributor")]);
+  await pop.waitForLoadState("load").catch(() => {});
+  const pdf = await pop.evaluate(() => document.body.innerText);
+  check("distributor PDF lists the company discount, never our cost", /Company discount/i.test(pdf) && pdf.includes("₹500.00") && !/Our cost|3,115/.test(pdf));
+  await pop.close();
+
+  // ---- Calculator: the distributor passes on the company discount ----
+  await page.click("#tabs button[data-tab=calc]");
+  for (const sku of ["FB-HUB", "FB-MN"]) { await page.fill("#addSearch", sku); await page.press("#addSearch", "Enter"); }
+  await until(() => page.$('#lineBody tr[data-i="1"]'), 5000, "two lines");
+  const L = (i, c) => `#lineBody tr[data-i="${i}"] ${c}`;
+  check("each line offers its company discount", (await page.textContent(L(0, "[data-cd]"))).includes("₹500.00"));
+  await page.click(L(0, "[data-cd]"));
+  await page.waitForTimeout(200);
+  check("full company discount: hub at ₹11,500, margin still ₹2,000", (await page.textContent(L(0, "[data-c=net]"))).includes("₹11,500.00")
+    && (await page.textContent(L(0, "[data-c=margin]"))).includes("₹2,000.00") && (await page.textContent(L(0, "[data-c=margin]"))).includes("co. pays ₹500.00"));
+  await page.fill(L(0, "[data-f=value]"), "700");
+  await page.waitForTimeout(200);
+  check("past the company's amount is refused on the line", /lowest allowed price is ₹11,500.00/.test(await page.textContent(L(0, "[data-c=err]"))), await page.textContent(L(0, "[data-c=err]")));
+  await page.fill(L(0, "[data-f=value]"), "300");
+  await page.selectOption(L(1, "[data-f=mode]"), "amt");
+  await page.fill(L(1, "[data-f=value]"), "300");
+  await page.waitForTimeout(200);
+  check("motor node ₹300 off: company ₹200, ₹100 from the margin (₹1,400 left)", (await page.textContent(L(1, "[data-c=margin]"))).includes("₹1,400.00"));
+  const sum = await page.textContent("#sumBody");
+  check("estimate: company discount ₹500 inside, distributor margin ₹3,400", sum.includes("Company discount in it") && sum.includes("₹500.00") && sum.includes("₹3,400.00"), sum.replace(/\s+/g, " ").slice(0, 300));
+  await page.fill("#cuName", `Ravi ${XSS}`);
+  await page.click("#saveQuote");
+  await until(() => page.evaluate(() => !document.getElementById("quoteModal").hidden), 8000, "the saved quote");
+  const doc = await page.textContent("#qmBody");
+  check("the quotation shows Company discount − ₹500 and Additional discount − ₹100", /Company discount[^₹]*− ₹500\.00/.test(doc) && /Additional discount[^₹]*− ₹100\.00/.test(doc), doc.replace(/\s+/g, " ").slice(0, 400));
+  // Hub ₹10,000 - ₹300 company + node ₹3,500 - ₹200 company
+  check("internal note: the distributor buys at ₹13,000 after the company discount", doc.includes("₹13,000.00") && doc.includes("after ₹500.00 company discount"));
+  const q = (await h.pricingDb.query("SELECT totals FROM pricing_quotes ORDER BY id DESC LIMIT 1")).rows[0].totals;
+  check("saved on the server with the same figures", q.companyDiscount === P(500) && q.margin === P(3400) && q.distributorCost === P(13000), JSON.stringify({ c: q.companyDiscount, m: q.margin, d: q.distributorCost }));
+  await page.click("[data-close=quoteModal]");
+
+  await page.click("#tabs button[data-tab=audit]");
+  await until(() => page.evaluate(() => document.getElementById("auditBody").textContent.includes("costing")), 5000, "the audit log");
+  check("production cost changes are in the audit log", true);
+  check("no injected script ran (component, supplier, customer names)", (await page.evaluate(() => window.__xss)) === 0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.click("#tabs button[data-tab=production]");
+  await page.waitForTimeout(400);
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check("Module Pricing doesn't scroll sideways at 390 px", over <= 2, `+${over}px`);
   await page.setViewportSize({ width: 1366, height: 900 });
 });
 

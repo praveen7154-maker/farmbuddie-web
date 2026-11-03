@@ -221,3 +221,31 @@ tr.pr-selected td { background: #f0fdf4 !important; }
 .pr-doc .pr-sum .row.save { background: #f0fdf4; border-radius: 6px; padding-left: 6px; padding-right: 6px; }
 .pr-nowrap { white-space: nowrap; }
 .pr-subhead { font-size: 14px; margin: 18px 0 6px; color: #14532d; }
+/* Production Pricing */
+.pr-tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pr-tag.make { background: #dbeafe; color: #1e40af; }
+.pr-tag.buy { background: #fef3c7; color: #92400e; }
+.pr-tag.none { background: #f3f4f6; color: #6b7280; font-weight: 600; }
+.pr-costing td:last-child { width: 1%; white-space: nowrap; }
+.pr-costing .pr-diff { color: #b45309; }
+.pr-src { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 4px 0 14px; }
+.pr-src-opt { display: flex; gap: 10px; align-items: flex-start; border: 2px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; cursor: pointer; }
+.pr-src-opt span { font-weight: 700; font-size: 15px; color: #111827; }
+.pr-src-opt small { display: block; font-weight: 400; font-size: 12.5px; color: #6b7280; margin-top: 2px; }
+.pr-src-opt:has(input:checked) { border-color: #15803d; background: #f0fdf4; }
+.pr-src-opt input { margin-top: 4px; }
+.pr-bom input { width: 100%; min-width: 70px; padding: 7px 9px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; background: #fff; color: #111827; }
+.pr-bom td.num input { text-align: right; }
+.pr-modal-box h2#cmTitle { font-size: 22px; font-weight: 800; color: #14532d; margin: 0 40px 16px 0; line-height: 1.25; }
+.pr-bom td:first-child { color: #6b7280; width: 28px; }
+.pr-bom td:nth-child(2) { min-width: 200px; }
+.pr-bom td:nth-child(3) { width: 90px; }
+.pr-bom td:nth-child(4) { width: 130px; }
+.pr-bom td:nth-child(5) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pr-bom input.bad { border-color: #dc2626; background: #fef2f2; }
+.pr-cost-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 14px 0 6px; padding: 12px 14px;
+  border-radius: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; font-size: 15px; color: #14532d; }
+.pr-cost-total small { color: #6b7280; }
+.pr-cost-total b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.pr-from-prod { font-size: 11px; color: #1e40af; }
+.pr-cd-use { font-size: 11.5px; padding: 0; margin-top: 2px; white-space: nowrap; display: block; }

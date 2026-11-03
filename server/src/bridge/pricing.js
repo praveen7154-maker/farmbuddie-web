@@ -2,8 +2,8 @@ import express from "express";
 import { isAdmin } from "../adminAuth.js";
 import {
   CATEGORIES, ROLES, VALVE_TYPES, GST_RATES_BP, DEFAULT_GST_BP, HOME_STATE, DISCLAIMER, MAX_PAISE,
-  priceProblems, priceWarnings, floorPrice, maxDiscountPaise, calculateQuote, quickBuild, liveStatus, rangesOverlap,
-  ourProfit, quoteProfit
+  priceProblems, priceWarnings, floorPrice, companyDiscountOf, calculateQuote, quickBuild, liveStatus, rangesOverlap,
+  ourProfit, quoteProfit, costingTotal
 } from "./pricingRules.js";
 
 // Module Pricing - web panel "Module Pricing" and the Irrigo Admin app's
@@ -16,8 +16,9 @@ import {
 //   viewer      - see the catalogue, every list and the audit log
 //   distributor - the current prices (incl. their buying price), the
 //                 calculator and their own quotes; never edits a price
-// Our purchase cost (cost_price) and our profit are seen by editors,
-// approvers and owners only - never by a viewer or a distributor.
+// Our purchase cost (cost_price), Production Pricing (what each product
+// costs us to buy or make) and our profit are seen by editors, approvers and
+// owners only - never by a viewer or a distributor.
 // A farmer's login gets nothing here.
 //
 // Prices are never edited in place: a new version is a draft copy, then
@@ -140,9 +141,12 @@ export function createPricingModule({ store, findDistributor = async () => null,
     }
   };
   const seesCost = (req) => RANK[req.pricingRole] >= RANK.editor;
-  // Removes costPrice anywhere in a value (rows, audit before/after).
+  // Removes our cost anywhere in a value (rows, audit before/after).
+  const COST_KEYS = new Set(["costPrice", "costing", "ourProfit"]);
   const noCost = (v) => (Array.isArray(v) ? v.map(noCost)
-    : v && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== "costPrice").map(([k, x]) => [k, noCost(x)])) : v);
+    : v && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype ? Object.fromEntries(Object.entries(v).filter(([k]) => !COST_KEYS.has(k)).map(([k, x]) => [k, noCost(x)])) : v);
+  // A Production Pricing audit entry is all cost - a viewer sees only that it happened.
+  const auditForViewer = (e) => (e.entity === "costing" ? { ...e, summary: "Production cost changed", before: null, after: null } : noCost(e));
   // Our cost and profit on a quote, from the cost in the quote's own price list.
   const costCache = new Map();   // listId -> { at, map }
   async function costsOf(listId) {
@@ -231,11 +235,13 @@ export function createPricingModule({ store, findDistributor = async () => null,
         basePrice: r.basePrice,
         minPrice: r.minPrice,
         maxPrice: r.maxPrice,
-        maxDiscountType: r.maxDiscountType,
-        maxDiscountValue: r.maxDiscountValue,
-        maxDiscount: maxDiscountPaise(r),
+        companyDiscount: companyDiscountOf(r),
         floorPrice: floorPrice(r),
         margin: r.basePrice - r.distributorPrice,
+        // For app versions that still show "Max discount": everything a sale may take off.
+        maxDiscountType: "amt",
+        maxDiscountValue: r.basePrice - floorPrice(r),
+        maxDiscount: r.basePrice - floorPrice(r),
         ...(seesCost(req) ? { costPrice: r.costPrice, ourProfit: ourProfit(r) } : {})
       }));
     }
@@ -537,7 +543,9 @@ export function createPricingModule({ store, findDistributor = async () => null,
   staff.get("/lists/:id", wrap(async (req, res) => {
     const list = await loadList(req);
     const s = await settings();
-    const [items, cat, { active }] = await Promise.all([store.items(list.id), store.catalogue(), currentLists(list.segment)]);
+    const [items, cat, { active }, costings] = await Promise.all([store.items(list.id), store.catalogue(), currentLists(list.segment),
+      seesCost(req) ? store.costings() : []]);
+    const costingOf = new Map(costings.map((c) => [c.variantId, c]));
     const compare = active && active.id !== list.id ? new Map((await store.items(active.id)).map((i) => [i.variantId, i])) : new Map();
     const variants = new Map(cat.variants.map((v) => [v.id, v]));
     const products = new Map(cat.products.map((p) => [p.id, p]));
@@ -558,6 +566,8 @@ export function createPricingModule({ store, findDistributor = async () => null,
         warnings: i.active ? priceWarnings(full) : [],
         floorPrice: i.active && priceProblems(full).length === 0 ? floorPrice(full) : null,
         current: compare.get(i.variantId) || null,
+        // Our cost comes from Production Pricing when it's been worked out there.
+        costing: costingOf.has(i.variantId) ? { source: costingOf.get(i.variantId).source, total: costingOf.get(i.variantId).total } : null,
         sort: (p?.sortOrder ?? 0) * 100000 + (v?.sortOrder ?? 0)
       };
     }).sort((a, b) => a.sort - b.sort || a.variantId - b.variantId);
@@ -601,34 +611,35 @@ export function createPricingModule({ store, findDistributor = async () => null,
     const cat = await store.catalogue();
     const variantIds = new Set(cat.variants.map((v) => v.id));
     const before = new Map((await store.items(list.id)).map((i) => [i.variantId, i]));
+    const costs = new Map((await store.costings()).map((c) => [c.variantId, c.total]));
     const items = raw.map((i) => {
       const variantId = int(i.variantId, "Variant", 1, 2_000_000_000);
       if (!variantIds.has(variantId)) throw new Bad(`Variant ${variantId} doesn't exist`);
-      const type = i.maxDiscountType === "amt" ? "amt" : "pct";
       const gstBp = Number(i.gstBp);
       if (!GST_RATES_BP.includes(gstBp)) throw new Bad("GST rate must be a GST slab");
+      const was = before.get(variantId);
+      const basePrice = money(i.basePrice, "Farmer selling price");
+      const minPrice = money(i.minPrice, "Minimum price");
       return {
         variantId,
         active: bool(i.active, true),
         mrp: money(i.mrp, "MRP"),
         distributorPrice: money(i.distributorPrice, "Distributor price"),
-        // Left out (an older client) = keep what's saved.
-        costPrice: i.costPrice === undefined ? (before.get(variantId)?.costPrice ?? null) : money(i.costPrice, "Our cost"),
-        basePrice: money(i.basePrice, "Farmer selling price"),
-        minPrice: money(i.minPrice, "Minimum price"),
+        // Production Pricing decides our cost where it has one; left out (an
+        // older client, or a viewer's copy) = keep what's saved.
+        costPrice: costs.has(variantId) ? costs.get(variantId)
+          : i.costPrice === undefined ? (was?.costPrice ?? null) : money(i.costPrice, "Our cost"),
+        basePrice,
+        minPrice,
         maxPrice: money(i.maxPrice, "Maximum price"),
-        maxDiscountType: type,
-        maxDiscountValue: type === "pct" ? int(i.maxDiscountValue ?? 0, "Max discount %", 0, 10000) : (money(i.maxDiscountValue, "Max discount") ?? 0),
+        companyDiscount: i.companyDiscount === undefined ? (was?.companyDiscount ?? 0) : (money(i.companyDiscount, "Company discount") ?? 0),
+        // No longer a limit of its own (the minimum price is) - kept for the
+        // record as selling price - minimum price.
+        maxDiscountType: "amt",
+        maxDiscountValue: Number.isSafeInteger(basePrice) && Number.isSafeInteger(minPrice) ? Math.max(0, basePrice - minPrice) : (was?.maxDiscountValue ?? 0),
         gstBp
       };
     });
-    // Max discount is always worked out: farmer selling price - minimum price.
-    for (const i of items) {
-      if (Number.isSafeInteger(i.basePrice) && Number.isSafeInteger(i.minPrice)) {
-        i.maxDiscountType = "amt";
-        i.maxDiscountValue = Math.max(0, i.basePrice - i.minPrice);
-      }
-    }
     const changed = items.filter((i) => {
       const b = before.get(i.variantId);
       return !b || Object.keys(i).some((k) => i[k] !== b[k]);
@@ -727,13 +738,74 @@ export function createPricingModule({ store, findDistributor = async () => null,
     res.json({ ok: true, status });
   }));
 
+  // ---------- staff: production pricing (our cost) ----------
+  // One unit of each variant: bought (supplier + purchase price, plus any
+  // extra costs like freight) or made (components / materials). All before
+  // GST. The total becomes "Our cost" in every draft price list.
+
+  function costingInput(b, variantId) {
+    const source = b?.source === "buy" || b?.source === "make" ? b.source : null;
+    if (!source) throw new Bad("Choose Buying or Manufacturing");
+    const supplier = text(b.supplier, "Supplier", 80);
+    const purchasePrice = money(b.purchasePrice, "Purchase price");
+    if (source === "buy" && !supplier) throw new Bad("Enter the supplier");
+    if (source === "buy" && purchasePrice === null) throw new Bad("Enter the purchase price");
+    const raw = b.components === undefined || b.components === null ? [] : b.components;
+    if (!Array.isArray(raw)) throw new Bad("Components must be a list");
+    if (raw.length > 200) throw new Bad("At most 200 components");
+    const components = raw.map((c, i) => {
+      const name = text(c?.name, `Line ${i + 1}: name`, 80, { required: true });
+      const q = Number(c?.qty ?? 1);
+      if (!Number.isFinite(q) || q <= 0 || q > 100000 || Math.abs(q * 1000 - Math.round(q * 1000)) > 1e-6) {
+        throw new Bad(`${name}: quantity must be more than 0 (up to 3 decimals)`);
+      }
+      const cost = money(c?.cost, `${name}: cost`);
+      if (cost === null) throw new Bad(`${name}: enter the cost`);
+      return { name, qty: Math.round(q * 1000) / 1000, cost };
+    });
+    if (source === "make" && !components.length) throw new Bad("Add at least one component or material");
+    const c = {
+      variantId, source, supplier: source === "buy" ? supplier : null, purchasePrice: source === "buy" ? purchasePrice : null,
+      components, notes: text(b.notes, "Notes", 500)
+    };
+    c.total = costingTotal(c);
+    if (c.total > MAX_PAISE) throw new Bad("The total cost is too large");
+    return c;
+  }
+
+  staff.get("/costing", need("editor"), wrap(async (req, res) => {
+    res.json({ items: await store.costings() });
+  }));
+
+  staff.put("/costing/:variantId", need("editor"), wrap(async (req, res) => {
+    const variantId = int(req.params.variantId, "Variant", 1, 2_000_000_000);
+    const v = await store.getVariant(variantId);
+    if (!v) throw new Bad("Product not found", 404);
+    const c = costingInput(req.body, variantId);
+    const before = await store.getCosting(variantId);
+    const drafts = await store.saveCosting(c, actorOf(req));
+    await audit(req, before ? "update" : "create", "costing", variantId,
+      `${v.sku}: ${c.source === "buy" ? `bought from ${c.supplier}` : `made from ${c.components.length} component(s)`}, our cost ${c.total / 100} INR`,
+      before, c);
+    res.json({ ok: true, total: c.total, drafts, costing: await store.getCosting(variantId) });
+  }));
+
+  staff.delete("/costing/:variantId", need("editor"), wrap(async (req, res) => {
+    const variantId = int(req.params.variantId, "Variant", 1, 2_000_000_000);
+    const before = await store.getCosting(variantId);
+    if (!before || !(await store.deleteCosting(variantId))) throw new Bad("No production cost saved for this product", 404);
+    const v = await store.getVariant(variantId);
+    await audit(req, "delete", "costing", variantId, `${v?.sku || variantId}: production cost removed`, before);
+    res.json({ ok: true });
+  }));
+
   // ---------- staff: audit, roles, settings ----------
 
   staff.get("/audit", wrap(async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 60) || null : null;
     const { entries, total } = await store.auditLog(search, PAGE, (page - 1) * PAGE);
-    res.json({ entries: seesCost(req) ? entries : noCost(entries), total, page, pageSize: PAGE });
+    res.json({ entries: seesCost(req) ? entries : entries.map(auditForViewer), total, page, pageSize: PAGE });
   }));
 
   // body: { ids: [..] } or { all: true }. Admins only; the deletion itself

@@ -89,6 +89,6 @@ export async function newPage(context, issues) {
     if (r.status() >= 400 && /api\.farmbuddie\.com|\/__fs|\/__auth/.test(r.url())) issues.push({ page: where(), kind: `HTTP ${r.status()}`, text: `${r.request().method()} ${r.url().replace(/^https:\/\/api\.farmbuddie\.com/, "")}` });
     else if (r.status() === 404) issues.push({ page: where(), kind: "HTTP 404", text: r.url().replace(/^http:\/\/127\.0\.0\.1:\d+/, "") });
   });
-  page.on("dialog", (d) => { issues.push({ page: where(), kind: "dialog", text: `${d.type()}: ${d.message().slice(0, 200)}` }); d.accept().catch(() => {}); });
+  page.on("dialog", (d) => { issues.push({ page: where(), kind: "dialog", text: `${d.type()}: ${d.message().slice(0, 200)}` }); d.accept(d.type() === "prompt" ? d.defaultValue() : undefined).catch(() => {}); });   // OK, keeping a prompt's suggested text
   return page;
 }

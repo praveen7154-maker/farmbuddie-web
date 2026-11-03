@@ -93,6 +93,26 @@ export async function ensurePricingSchema() {
   // Farm Buddie's own purchase cost per unit (before GST) - for our profit
   // figures; never sent to distributors (see pricing.js).
   await pool.query(`ALTER TABLE price_list_items ADD COLUMN IF NOT EXISTS cost_price BIGINT CHECK (cost_price >= 0)`);
+  // The most Farm Buddie pays per unit when a distributor passes a discount
+  // on to the customer (optional on each sale; 0 = none). Older lists have
+  // 0, so their prices work exactly as before.
+  await pool.query(`ALTER TABLE price_list_items ADD COLUMN IF NOT EXISTS company_discount BIGINT NOT NULL DEFAULT 0 CHECK (company_discount >= 0)`);
+  // Production Pricing: what one unit of a variant costs us, before GST -
+  // bought from a supplier, or made from components. Its total is "Our
+  // cost" in every draft price list (approved lists keep theirs).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pricing_costing (
+      variant_id      INTEGER PRIMARY KEY REFERENCES pricing_variants(id) ON DELETE CASCADE,
+      source          TEXT NOT NULL CHECK (source IN ('make', 'buy')),
+      supplier        TEXT,
+      purchase_price  BIGINT CHECK (purchase_price >= 0),
+      components      JSONB NOT NULL DEFAULT '[]',
+      notes           TEXT,
+      total_cost      BIGINT NOT NULL CHECK (total_cost >= 0),
+      updated_by      TEXT,
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS pricing_quotes (
       id              SERIAL PRIMARY KEY,
@@ -275,10 +295,14 @@ const toItem = (r) => ({
   basePrice: num(r.base_price),
   minPrice: num(r.min_price),
   maxPrice: num(r.max_price),
+  companyDiscount: num(r.company_discount) ?? 0,
   maxDiscountType: r.max_discount_type,
   maxDiscountValue: num(r.max_discount_value),
   gstBp: r.gst_bp
 });
+const costingCols = `variant_id AS "variantId", source, supplier, purchase_price AS "purchasePrice", components, notes,
+  total_cost AS "total", updated_by AS "updatedBy", updated_at AS "updatedAt"`;
+const toCosting = (r) => ({ ...r, purchasePrice: num(r.purchasePrice), total: num(r.total) });
 const quoteCols = `id, quote_no AS "quoteNo", list_id AS "listId", segment, created_by AS "createdBy", distributor_id AS "distributorId",
   customer_name AS "customerName", customer_phone AS "customerPhone", customer_place AS "customerPlace",
   customer_state AS "customerState", notes, lines, totals, valid_until AS "validUntil", status, status_by AS "statusBy",
@@ -423,8 +447,9 @@ export const pgPricingStore = {
       if (basedOnId) {
         await c.query(
           `INSERT INTO price_list_items (list_id, variant_id, active, mrp, distributor_price, base_price, min_price, max_price,
-             max_discount_type, max_discount_value, gst_bp, cost_price)
-           SELECT $1, variant_id, active, mrp, distributor_price, base_price, min_price, max_price, max_discount_type, max_discount_value, gst_bp, cost_price
+             max_discount_type, max_discount_value, gst_bp, cost_price, company_discount)
+           SELECT $1, variant_id, active, mrp, distributor_price, base_price, min_price, max_price, max_discount_type, max_discount_value, gst_bp,
+             cost_price, company_discount
            FROM price_list_items WHERE list_id = $2`,
           [id, basedOnId]
         );
@@ -433,6 +458,11 @@ export const pgPricingStore = {
         `INSERT INTO price_list_items (list_id, variant_id, gst_bp)
          SELECT $1, v.id, p.gst_bp FROM pricing_variants v JOIN pricing_products p ON p.id = v.product_id
          WHERE v.active AND p.active ON CONFLICT DO NOTHING`,
+        [id]
+      );
+      // Our cost from Production Pricing, where it's been worked out.
+      await c.query(
+        `UPDATE price_list_items i SET cost_price = c.total_cost FROM pricing_costing c WHERE i.list_id = $1 AND i.variant_id = c.variant_id`,
         [id]
       );
       return id;
@@ -465,12 +495,13 @@ export const pgPricingStore = {
       for (const i of items) {
         await c.query(
           `INSERT INTO price_list_items (list_id, variant_id, active, mrp, distributor_price, base_price, min_price, max_price,
-             max_discount_type, max_discount_value, gst_bp, cost_price)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             max_discount_type, max_discount_value, gst_bp, cost_price, company_discount)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
            ON CONFLICT (list_id, variant_id) DO UPDATE SET active = $3, mrp = $4, distributor_price = $5, base_price = $6,
-             min_price = $7, max_price = $8, max_discount_type = $9, max_discount_value = $10, gst_bp = $11, cost_price = $12`,
+             min_price = $7, max_price = $8, max_discount_type = $9, max_discount_value = $10, gst_bp = $11, cost_price = $12,
+             company_discount = $13`,
           [id, i.variantId, i.active, i.mrp, i.distributorPrice, i.basePrice, i.minPrice, i.maxPrice, i.maxDiscountType, i.maxDiscountValue, i.gstBp,
-            i.costPrice ?? null]
+            i.costPrice ?? null, i.companyDiscount ?? 0]
         );
       }
       return true;
@@ -494,6 +525,7 @@ export const pgPricingStore = {
       const lists = await c.query(`SELECT count(DISTINCT list_id)::int AS n FROM price_list_items WHERE variant_id = ANY($1::int[])`, [ids]);
       await c.query(`DELETE FROM pricing_accessories WHERE product_id = $1 OR accessory_variant_id = ANY($2::int[])`, [id, ids]);
       await c.query(`DELETE FROM price_list_items WHERE variant_id = ANY($1::int[])`, [ids]);
+      await c.query(`DELETE FROM pricing_costing WHERE variant_id = ANY($1::int[])`, [ids]);
       await c.query(`DELETE FROM pricing_variants WHERE product_id = $1`, [id]);
       const del = await c.query(`DELETE FROM pricing_products WHERE id = $1`, [id]);
       return del.rowCount === 1 ? { lists: lists.rows[0].n } : null;
@@ -505,6 +537,7 @@ export const pgPricingStore = {
       const lists = await c.query(`SELECT count(DISTINCT list_id)::int AS n FROM price_list_items WHERE variant_id = $1`, [id]);
       await c.query(`DELETE FROM pricing_accessories WHERE accessory_variant_id = $1`, [id]);
       await c.query(`DELETE FROM price_list_items WHERE variant_id = $1`, [id]);
+      await c.query(`DELETE FROM pricing_costing WHERE variant_id = $1`, [id]);
       const del = await c.query(`DELETE FROM pricing_variants WHERE id = $1`, [id]);
       return del.rowCount === 1 ? { lists: lists.rows[0].n } : null;
     });
@@ -621,6 +654,42 @@ export const pgPricingStore = {
       category: r.category,
       role: r.role
     }));
+  },
+
+  // ---- production pricing ----
+  async costings() {
+    const { rows } = await pool.query(`SELECT ${costingCols} FROM pricing_costing ORDER BY variant_id`);
+    return rows.map(toCosting);
+  },
+
+  async getCosting(variantId) {
+    const { rows } = await pool.query(`SELECT ${costingCols} FROM pricing_costing WHERE variant_id = $1`, [variantId]);
+    return rows[0] ? toCosting(rows[0]) : null;
+  },
+
+  /** Saves one variant's costing and makes its total "Our cost" in every draft list. Returns how many draft rows changed. */
+  async saveCosting(c, by) {
+    return tx(async (cl) => {
+      await cl.query(
+        `INSERT INTO pricing_costing (variant_id, source, supplier, purchase_price, components, notes, total_cost, updated_by, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         ON CONFLICT (variant_id) DO UPDATE SET source = $2, supplier = $3, purchase_price = $4, components = $5, notes = $6,
+           total_cost = $7, updated_by = $8, updated_at = now()`,
+        [c.variantId, c.source, c.supplier, c.purchasePrice, JSON.stringify(c.components), c.notes, c.total, by]
+      );
+      const r = await cl.query(
+        `UPDATE price_list_items i SET cost_price = $2 FROM price_lists l
+         WHERE l.id = i.list_id AND l.status = 'draft' AND i.variant_id = $1 AND i.cost_price IS DISTINCT FROM $2`,
+        [c.variantId, c.total]
+      );
+      return r.rowCount;
+    });
+  },
+
+  /** Draft lists keep the cost they have. */
+  async deleteCosting(variantId) {
+    const { rowCount } = await pool.query(`DELETE FROM pricing_costing WHERE variant_id = $1`, [variantId]);
+    return rowCount === 1;
   },
 
   // ---- quotes ----

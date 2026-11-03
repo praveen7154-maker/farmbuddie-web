@@ -9,6 +9,14 @@ cd server && npm install         # once - the server modules run inside the harn
 bash tools/web_sim/run.sh        # report: /tmp/web_sim/report.txt (+ screenshots on a failure)
 ```
 
+Module Pricing runs on a real Postgres when `WEB_SIM_PG` points at a throwaway
+database whose name ends in `test` or `sim` (its pricing tables are wiped):
+
+```
+WEB_SIM_PG=postgres://user:pass@127.0.0.1:5432/websim bash tools/web_sim/run.sh
+WEB_SIM_ONLY=16 WEB_SIM_PG=... bash tools/web_sim/run.sh     # only phase 16 (quick re-run)
+```
+
 ## What is real, what is not
 
 | Part | In the simulation |
@@ -21,7 +29,8 @@ bash tools/web_sim/run.sh        # report: /tmp/web_sim/report.txt (+ screenshot
 | Firestore security rules | **Not** simulated - the server's own checks are |
 | The hub (event log replies) | `fake-hub.js` - 60 records incl. the butterfly "valve stuck" |
 | OTA signing key | A throwaway key made for each run - never the fleet key |
-| MQTT / TBMQ / Postgres | Recorded / faked (commands are captured, not sent) |
+| MQTT / TBMQ | Recorded / faked (commands are captured, not sent) |
+| Postgres (Module Pricing) | **Real** with `WEB_SIM_PG`, else an empty store |
 | CDN libraries (Chart.js, xlsx, qrcode, html2pdf) | **Real** files, fetched once |
 
 ## The flows (run.js)
@@ -41,6 +50,10 @@ bash tools/web_sim/run.sh        # report: /tmp/web_sim/report.txt (+ screenshot
 13. Message Broadcast
 14. VPS status, Module Pricing (loads), Ctrl+K search, theme, sign out
 15. A switched-off onboarding member refused by the server; no page scrolls sideways at 390 px
+16. Module Pricing on a real database (`WEB_SIM_PG`): Production Pricing (a made product's components, a
+    bought one's supplier + freight, an edit, a refused entry), a price list with company discounts and our
+    cost taken from Production Pricing, publish, the distributors' PDF, the calculator passing on the company
+    discount (distributor margin unchanged), the saved quotation's Company / Additional discount rows
 
 Throughout: names carrying `<img src=x onerror=...>` (a farmer, a distributor,
 a team member, a broadcast) must never run, and any code that puts that text
