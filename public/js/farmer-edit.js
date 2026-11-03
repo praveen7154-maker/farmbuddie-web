@@ -884,29 +884,33 @@ window.updateFarmer = async function () {
         (the ICCID) against a 13-digit MSISDN-length check, which
         rejected every real ICCID and made this form un-saveable for
         any farmer whose SIM data was actually filled in correctly. */
+    // The same rules as the Production module and the SIM inventory
+    // (server production.js checkFields): ICCIDs are 18-22 digits (19 and
+    // 20 are both common), MSISDNs 8-15, IMSIs 14-15. Exactly 19/13/15 here
+    // used to make a farm with a 20-digit ICCID impossible to edit.
     const simNumberRaw = document.getElementById("simNumber").value.trim();
-    const cleanedSimNumber = simNumberRaw.replace(/\D/g, "").slice(0, 19);
+    const cleanedSimNumber = simNumberRaw.replace(/\D/g, "");
     const simMsisdnRaw = document.getElementById("simMsisdn").value.trim();
-    const cleanedSimMsisdn = simMsisdnRaw.replace(/\D/g, "").slice(0, 13);
+    const cleanedSimMsisdn = simMsisdnRaw.replace(/\D/g, "");
     const simImsiRaw = document.getElementById("simImsi").value.trim();
-    const cleanedSimImsi = simImsiRaw.replace(/\D/g, "").slice(0, 15);
+    const cleanedSimImsi = simImsiRaw.replace(/\D/g, "");
 
     if (networkType === "SIM") {
 
-        if (!/^\d{19}$/.test(cleanedSimNumber)) {
-          alert("SIM Number (ICCID) must be exactly 19 digits");
+        if (!/^\d{18,22}$/.test(cleanedSimNumber)) {
+          alert("SIM Number (ICCID) must be 18-22 digits");
           hideLoader();
           return resetUpdateButton(btn);
         }
 
-        if (!/^\d{13}$/.test(cleanedSimMsisdn)) {
-          alert("SIM MSISDN must be exactly 13 digits");
+        if (!/^\d{8,15}$/.test(cleanedSimMsisdn)) {
+          alert("SIM MSISDN must be 8-15 digits");
           hideLoader();
           return resetUpdateButton(btn);
         }
 
-        if (!/^\d{15}$/.test(cleanedSimImsi)) {
-          alert("SIM IMSI must be exactly 15 digits");
+        if (!/^\d{14,15}$/.test(cleanedSimImsi)) {
+          alert("SIM IMSI must be 15 digits");
           hideLoader();
           return resetUpdateButton(btn);
         }

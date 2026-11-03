@@ -48,23 +48,23 @@ async function loadDistributor() {
 
     <div class="section-title">🏢 Basic Distributor Details</div>
     <div class="info-grid">
-      <div class="info-item"><b>Distributor ID:</b> ${d.distributorId || "-"}</div>
-      <div class="info-item"><b>Status:</b> ${d.status || "-"}</div>
-      <div class="info-item"><b>Irrigo Admin app login:</b> ${d.distributorId || "-"} (first password = the same ID, changed on first login)</div>
-      <div class="info-item"><b>Name:</b> ${d.name || "-"}</div>
-      <div class="info-item"><b>Phone:</b> ${d.primaryMobile || "-"}</div>
-      <div class="info-item"><b>Email:</b> ${d.email || "-"}</div>
-      <div class="info-item"><b>GST:</b> ${d.gstNumber || "-"}</div>
-      <div class="info-item"><b>PAN:</b> ${d.panNumber || "-"}</div>
-      <div class="info-item"><b>Aadhaar:</b> ${d.aadhaarNumber || "-"}</div>
-      <div class="info-item"><b>MSME:</b> ${d.msmeNumber || "-"}</div>
+      <div class="info-item"><b>Distributor ID:</b> ${esc(d.distributorId || "-")}</div>
+      <div class="info-item"><b>Status:</b> ${esc(d.status || "-")}</div>
+      <div class="info-item"><b>Irrigo Admin app login:</b> ${esc(d.distributorId || "-")} (first password = the same ID, changed on first login)</div>
+      <div class="info-item"><b>Name:</b> ${esc(d.name || "-")}</div>
+      <div class="info-item"><b>Phone:</b> ${esc(d.primaryMobile || "-")}</div>
+      <div class="info-item"><b>Email:</b> ${esc(d.email || "-")}</div>
+      <div class="info-item"><b>GST:</b> ${esc(d.gstNumber || "-")}</div>
+      <div class="info-item"><b>PAN:</b> ${esc(d.panNumber || "-")}</div>
+      <div class="info-item"><b>Aadhaar:</b> ${esc(d.aadhaarNumber || "-")}</div>
+      <div class="info-item"><b>MSME:</b> ${esc(d.msmeNumber || "-")}</div>
     </div>
 
     <div class="section-title">📍 Company Address</div>
   <div class="info-grid">
   <div class="info-item full">
     <b>Address:</b> 
-    ${
+    ${esc(
       [
         d.address?.line1,
         d.address?.line2,
@@ -74,17 +74,17 @@ async function loadDistributor() {
       ]
         .filter(Boolean)
         .join(", ")
-    }
-    ${d.address?.pincode ? " - " + d.address.pincode : ""}
+    )}
+    ${d.address?.pincode ? " - " + esc(d.address.pincode) : ""}
   </div>
 </div>
 
       <div class="section-title">🏦 Bank Details</div>
       <div class="info-grid">
-        <div class="info-item"><b>Account Holder:</b> ${d.bankDetails?.accountName || "-"}</div>
-        <div class="info-item"><b>Account Number:</b> ${d.bankDetails?.accountNumber || "-"}</div>
-        <div class="info-item"><b>IFSC:</b> ${d.bankDetails?.ifsc || "-"}</div>
-        <div class="info-item"><b>Branch:</b> ${d.bankDetails?.branchLocation || "-"}</div>
+        <div class="info-item"><b>Account Holder:</b> ${esc(d.bankDetails?.accountName || "-")}</div>
+        <div class="info-item"><b>Account Number:</b> ${esc(d.bankDetails?.accountNumber || "-")}</div>
+        <div class="info-item"><b>IFSC:</b> ${esc(d.bankDetails?.ifsc || "-")}</div>
+        <div class="info-item"><b>Branch:</b> ${esc(d.bankDetails?.branchLocation || "-")}</div>
       </div>
 
     ${d.hardcopies ? `
@@ -122,7 +122,7 @@ function renderDoc(label, url) {
   return `
     <div class="info-item">
       <b>${label}:</b>
-      ${url ? `<a href="${url}" target="_blank">View Document</a>` : "-"}
+      ${safeUrl(url) ? `<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener">View Document</a>` : "-"}
     </div>
   `;
 }
@@ -169,3 +169,9 @@ window.downloadPDF = async function () {
 
   html2pdf().set(opt).from(element).save();
 };
+
+// Record fields (typed in by whoever onboarded the farm / distributor) are
+// never inserted as HTML; links only as http(s). Declarations, so usable
+// from anywhere in this file.
+function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }
+function safeUrl(u) { return /^https?:\/\//i.test(String(u || "")) ? String(u) : ""; }

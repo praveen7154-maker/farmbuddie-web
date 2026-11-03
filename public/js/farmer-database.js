@@ -628,7 +628,7 @@ window.openPhoneAuth = async function(id){
 
   let farmerHtml = `
   <div class="fb-popup-farmer main">
-    ⭐ ${f.name || "Unknown"}
+    ⭐ ${esc(f.name || "Unknown")}
   </div>
   `;
 
@@ -637,7 +637,7 @@ window.openPhoneAuth = async function(id){
       if(u.name){
         farmerHtml += `
         <div class="fb-popup-farmer sub">
-          👤 ${u.name}
+          👤 ${esc(u.name)}
         </div>`;
       }
     });
@@ -648,7 +648,7 @@ window.openPhoneAuth = async function(id){
 
   let phoneHtml = `
   <div class="fb-popup-phone main">
-    ${f.primaryMobile || "-"}
+    ${esc(f.primaryMobile || "-")}
   </div>
   `;
 
@@ -657,7 +657,7 @@ window.openPhoneAuth = async function(id){
       if(u.mobile){
         phoneHtml += `
         <div class="fb-popup-phone sub">
-          ${u.mobile}
+          ${esc(u.mobile)}
         </div>`;
       }
     });
@@ -712,7 +712,7 @@ modal.innerHTML = `
       </div>
 
       <div class="fb-popup-id">
-        ${f.farmBuddieId}
+        ${esc(f.farmBuddieId)}
       </div>
 
       <div class="fb-popup-badge">

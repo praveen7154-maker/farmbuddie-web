@@ -144,7 +144,7 @@ async function renderStock() {
     }).join("");
   } catch (err) {
     console.error("Stock count error:", err);
-    grid.innerHTML = `<p class="fb-stock-wait">Couldn't count the stock - ${err.message}</p>`;
+    grid.innerHTML = `<p class="fb-stock-wait">Couldn't count the stock - ${esc(err.message)}</p>`;
   }
 }
 
@@ -293,13 +293,13 @@ function renderFarmerTable(data) {
 
     tr.innerHTML = `
       <td>${index++}</td>
-      <td>${f.farmBuddieId || "-"}</td>
-      <td>${f.name || "-"}</td>
-      <td>${f.controller?.variant || "-"}</td>
-      <td>${f.primaryMobile || "-"}</td>
+      <td>${esc(f.farmBuddieId || "-")}</td>
+      <td>${esc(f.name || "-")}</td>
+      <td>${esc(f.controller?.variant || "-")}</td>
+      <td>${esc(f.primaryMobile || "-")}</td>
       <td>
-        <span class="status ${f.status}">
-          ${f.status || "-"}
+        <span class="status ${esc(f.status)}">
+          ${esc(f.status || "-")}
         </span>
       </td>
     `;
@@ -334,12 +334,12 @@ function renderDistributorTable(data) {
 
     tr.innerHTML = `
       <td>${index++}</td>
-      <td>${d.distributorId || "-"}</td>
-      <td>${d.name || "-"}</td>
-      <td>${d.primaryMobile || "-"}</td>
+      <td>${esc(d.distributorId || "-")}</td>
+      <td>${esc(d.name || "-")}</td>
+      <td>${esc(d.primaryMobile || "-")}</td>
       <td>
-        <span class="status ${d.status}">
-          ${d.status || "-"}
+        <span class="status ${esc(d.status)}">
+          ${esc(d.status || "-")}
         </span>
       </td>
     `;
@@ -397,3 +397,8 @@ document.getElementById("closePanelBtn")?.addEventListener("click", () => {
 const PAGE_DATA = ["farmers", "distributors"];
 subscribe(renderDashboard);
 warmDataStore(PAGE_DATA);
+
+// Record fields (typed in by whoever onboarded the farm / distributor) are
+// never inserted as HTML. A declaration, so usable
+// from anywhere in this file.
+function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }

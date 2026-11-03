@@ -417,12 +417,12 @@ function pairedHardwareHtml(f) {
     const first = (u.valveOffset ?? 0) + 1;
     const last = (u.valveOffset ?? 0) + (u.valveCount ?? 0);
     const range = u.valveCount ? ` · V${first}${last > first ? `–V${last}` : ""}` : "";
-    const hw = `${u.channelCount || "?"}-ch ${escHtml(u.valveType || "")}`.trim();
+    const hw = `${escHtml(u.channelCount || "?")}-ch ${escHtml(u.valveType || "")}`.trim();
     const extra = u.bleDeviceName ? ` · ${escHtml(u.bleDeviceName)}` : "";
     const live = liveUnits.find((x) => x.u === u.unitLabel);
     rows.push(`
       <div class="info-item">
-        <b>${escHtml(u.unitLabel)}</b> (${u.hasPressureSensors ? "Filter Backwash" : "Valve"}) - ${hw}, ${u.valveCount} valve(s)${range}${extra}
+        <b>${escHtml(u.unitLabel)}</b> (${u.hasPressureSensors ? "Filter Backwash" : "Valve"}) - ${hw}, ${esc(u.valveCount)} valve(s)${range}${extra}
         ${live ? onlinePill(live.on && isDeviceOnline(ds)) : ""}
       </div>
     `);
@@ -782,7 +782,7 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
 
   const appUsersHtml = (f.appUsers?.length)
     ? f.appUsers.map(u =>
-        `<div class="info-item"><b>${u.name}</b>: ${u.mobile}</div>`
+        `<div class="info-item"><b>${esc(u.name)}</b>: ${esc(u.mobile)}</div>`
       ).join("")
     : `<div class="info-item full">No additional app users</div>`;
 
@@ -791,13 +791,13 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
   <!-- FARMER IDENTITY -->
   <div class="section-title">👨‍🌾 Farmer Identity</div>
   <div class="info-grid">
-    <div class="info-item"><b>Farm Buddie ID:</b> ${f.farmBuddieId || "-"}</div>
-    <div class="info-item"><b>Title:</b> ${f.title || "-"}</div>
-    <div class="info-item"><b>Name:</b> ${f.name || "-"}</div>
-    <div class="info-item"><b>Status:</b> ${f.status || "-"}</div>
-    <div class="info-item"><b>Primary Mobile:</b> ${f.primaryMobile || "-"}</div>
-    <div class="info-item"><b>Secondary Mobile:</b> ${f.secondaryMobile || "-"}</div>
-    <div class="info-item"><b>Aadhaar Number:</b> ${f.aadhaarNumber || "-"}</div>
+    <div class="info-item"><b>Farm Buddie ID:</b> ${esc(f.farmBuddieId || "-")}</div>
+    <div class="info-item"><b>Title:</b> ${esc(f.title || "-")}</div>
+    <div class="info-item"><b>Name:</b> ${esc(f.name || "-")}</div>
+    <div class="info-item"><b>Status:</b> ${esc(f.status || "-")}</div>
+    <div class="info-item"><b>Primary Mobile:</b> ${esc(f.primaryMobile || "-")}</div>
+    <div class="info-item"><b>Secondary Mobile:</b> ${esc(f.secondaryMobile || "-")}</div>
+    <div class="info-item"><b>Aadhaar Number:</b> ${esc(f.aadhaarNumber || "-")}</div>
 
       <div class="info-item">
         <b>Lead Source:</b> ${
@@ -811,13 +811,13 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
         f.leadSource?.type === "DISTRIBUTOR"
           ? `
             <div class="info-item">
-              <b>Distributor Name:</b> ${f.leadSource?.distributorName || "-"}
+              <b>Distributor Name:</b> ${esc(f.leadSource?.distributorName || "-")}
             </div>
           `
           : ""
       }
 
-      <div class="info-item full"><b>Address:</b> ${f.address || "-"}</div>
+      <div class="info-item full"><b>Address:</b> ${esc(f.address || "-")}</div>
   </div>
 
   <!-- APP USERS -->
@@ -827,7 +827,7 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
       Array.isArray(f.appUsers) && f.appUsers.length
         ? f.appUsers.map(u => `
             <div class="info-item">
-              <b>${u.name || "User"}:</b> ${u.mobile || "-"}
+              <b>${esc(u.name || "User")}:</b> ${esc(u.mobile || "-")}
             </div>
           `).join("")
         : `<div class="info-item full">No additional app users</div>`
@@ -838,15 +838,15 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
     <div class="section-title">🌾 Farm & App User Details</div>
     <div class="info-grid">
       <div class="info-item full">
-        <b>Farm Location:</b> ${f.farmDetails?.location || "-"}
+        <b>Farm Location:</b> ${esc(f.farmDetails?.location || "-")}
         </div>
 
         <div class="info-item">
-          <b>Farm Latitude:</b> ${f.farmDetails?.latitude || "-"}
+          <b>Farm Latitude:</b> ${esc(f.farmDetails?.latitude || "-")}
         </div>
 
         <div class="info-item">
-          <b>Farm Longitude:</b> ${f.farmDetails?.longitude || "-"}
+          <b>Farm Longitude:</b> ${esc(f.farmDetails?.longitude || "-")}
         </div>
 
 
@@ -859,7 +859,7 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
       <b>Aadhaar File:</b>
       ${
         f.documents?.aadhaarUrl
-          ? `<a href="${f.documents.aadhaarUrl}" target="_blank">View Document</a>`
+          ? `<a href="${esc(f.documents.aadhaarUrl)}" target="_blank">View Document</a>`
           : "-"
       }
     </div>
@@ -867,7 +867,7 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
       <b>Other Document:</b>
       ${
         f.documents?.otherDocUrl
-          ? `<a href="${f.documents.otherDocUrl}" target="_blank">View Document</a>`
+          ? `<a href="${esc(f.documents.otherDocUrl)}" target="_blank">View Document</a>`
           : "-"
       }
     </div>
@@ -876,38 +876,38 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
   <!-- NETWORK -->
   <div class="section-title">🌐 Network Management</div>
   <div class="info-grid">
-    <div class="info-item"><b>Network Type:</b> ${f.network?.type || "-"}</div>
+    <div class="info-item"><b>Network Type:</b> ${esc(f.network?.type || "-")}</div>
   </div>
 
   <!-- SIM DETAILS -->
   <div class="section-title">📶 SIM Management</div>
   <div class="info-grid">
-   <div class="info-item"><b>SIM Number (ICCID):</b> ${f.sim?.simNumber || "-"}</div>
-    <div class="info-item"><b>MSISDN:</b> ${f.sim?.msisdn || "-"}</div>
-    <div class="info-item"><b>IMSI:</b> ${f.sim?.simImsi || "-"}</div>
-    <div class="info-item"><b>IMEI:</b> ${f.sim?.imeiNumber || "-"}</div>
-    <div class="info-item"><b>SIM Type:</b> ${f.sim?.simType || "-"}</div>
-    <div class="info-item"><b>Billing Cycle:</b> ${f.sim?.billingCycle || "-"}</div>
-    <div class="info-item"><b>SIM/AMC Activation Date:</b> ${f.sim?.activationDate || "-"}</div>
+   <div class="info-item"><b>SIM Number (ICCID):</b> ${esc(f.sim?.simNumber || "-")}</div>
+    <div class="info-item"><b>MSISDN:</b> ${esc(f.sim?.msisdn || "-")}</div>
+    <div class="info-item"><b>IMSI:</b> ${esc(f.sim?.simImsi || "-")}</div>
+    <div class="info-item"><b>IMEI:</b> ${esc(f.sim?.imeiNumber || "-")}</div>
+    <div class="info-item"><b>SIM Type:</b> ${esc(f.sim?.simType || "-")}</div>
+    <div class="info-item"><b>Billing Cycle:</b> ${esc(f.sim?.billingCycle || "-")}</div>
+    <div class="info-item"><b>SIM/AMC Activation Date:</b> ${esc(f.sim?.activationDate || "-")}</div>
   </div>
 
   <!-- CONTROLLER -->
 <div class="section-title">🧠 MCU / Device Mapping</div>
 <div class="info-grid">
-  <div class="info-item"><b>Variant:</b> ${f.controller?.variant || "-"}</div>
-  <div class="info-item"><b>Serial Number:</b> ${f.controller?.serialNumber || "-"}</div>
-  <div class="info-item full"><b>Unique Device ID:</b> ${f.controller?.uniqueId || "-"}</div>
+  <div class="info-item"><b>Variant:</b> ${esc(f.controller?.variant || "-")}</div>
+  <div class="info-item"><b>Serial Number:</b> ${esc(f.controller?.serialNumber || "-")}</div>
+  <div class="info-item full"><b>Unique Device ID:</b> ${esc(f.controller?.uniqueId || "-")}</div>
 
-  <div class="info-item"><b>Warranty Start:</b> ${f.controller?.warranty?.start || "-"}</div>
-  <div class="info-item"><b>Warranty End:</b> ${f.controller?.warranty?.end || "-"}</div>
+  <div class="info-item"><b>Warranty Start:</b> ${esc(f.controller?.warranty?.start || "-")}</div>
+  <div class="info-item"><b>Warranty End:</b> ${esc(f.controller?.warranty?.end || "-")}</div>
 </div>
 
 <!-- MQTT DETAILS -->
 <div class="section-title">📡 MQTT Configuration</div>
 <div class="info-grid">
-  <div class="info-item full"><b>Broker URL:</b> ${f.controller?.mqtt?.brokerUrl || "-"}</div>
-  <div class="info-item"><b>Port:</b> ${f.controller?.mqtt?.port || "-"}</div>
-  <div class="info-item full"><b>Username:</b> ${f.controller?.mqtt?.username || "-"}</div>
+  <div class="info-item full"><b>Broker URL:</b> ${esc(f.controller?.mqtt?.brokerUrl || "-")}</div>
+  <div class="info-item"><b>Port:</b> ${esc(f.controller?.mqtt?.port || "-")}</div>
+  <div class="info-item full"><b>Username:</b> ${esc(f.controller?.mqtt?.username || "-")}</div>
 </div>
 <div class="mqtt-actions">
   <span class="mqtt-status-pill ${f.controller?.mqtt?.username ? "issued" : "none"}">
@@ -917,7 +917,7 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
     // A farm's login is always FBIRG<its uniqueId>. Anything else was written
     // here by mistake (old Add Farm bug) - ask the server, which returns and
     // stores the right one.
-    f.controller?.mqtt?.username && f.controller.mqtt.username === `FBIRG${f.controller?.uniqueId}`
+    f.controller?.mqtt?.username && f.controller.mqtt.username === `FBIRG${esc(f.controller?.uniqueId)}`
       ? `<button class="fb-btn-primary small" onclick="fetchMqttCredentials()">📥 Fetch MQTT Credentials</button>`
       : `<button class="fb-btn-primary small" onclick="generateInitialMqttCredentials()">🔑 Generate MQTT Credentials</button>`
   }
@@ -940,14 +940,14 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
 
   <!-- Motors -->
   <div class="info-item">
-    <b>No of Motors:</b> ${f.motorConfig?.motorCount || 0}
+    <b>No of Motors:</b> ${esc(f.motorConfig?.motorCount || 0)}
   </div>
 
   ${
     f.motorConfig?.pumpHp?.length
       ? f.motorConfig.pumpHp.map((hp, i) => `
           <div class="info-item">
-            <b>Pump ${i+1} HP:</b> ${hp || "-"}
+            <b>Pump ${i+1} HP:</b> ${esc(hp || "-")}
           </div>
         `).join("")
       : `<div class="info-item full">No pump configuration</div>`
@@ -955,14 +955,14 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
 
   <!-- Services -->
   <div class="info-item">
-    <b>No of Services:</b> ${f.tnebServices?.serviceCount || 0}
+    <b>No of Services:</b> ${esc(f.tnebServices?.serviceCount || 0)}
   </div>
 
   ${
     f.tnebServices?.services?.length
       ? f.tnebServices.services.map(service => `
           <div class="info-item">
-            <b>Service ${service.serviceNumber} HP:</b> ${service.sanctionedHp || "-"}
+            <b>Service ${esc(service.serviceNumber)} HP:</b> ${esc(service.sanctionedHp || "-")}
           </div>
         `).join("")
       : `<div class="info-item full">No service configuration</div>`
@@ -977,7 +977,7 @@ window.openFarmerPanel = async function (farmBuddieId, controllerDocId) {
         f.pumpServiceMapping?.length
           ? f.pumpServiceMapping.map(map => `
               <div class="info-item">
-                <b>Pump ${map.pumpNumber} (${map.hp}) →</b> Service ${map.service}
+                <b>Pump ${esc(map.pumpNumber)} (${esc(map.hp)}) →</b> Service ${esc(map.service)}
               </div>
             `).join("")
           : `<div class="info-item full">No mapping data</div>`

@@ -160,13 +160,13 @@ if (snap.empty) {
 
     div.innerHTML = `
       <div class="search-card-header">
-        <strong>${data.name}</strong>
+        <strong>${esc(data.name)}</strong>
         <span class="farm-badge ${isPrimary ? 'primary-farm' : ''}">
           ${farmLabel}
         </span>
       </div>
-      <div>Mobile: ${data.primaryMobile}</div>
-      <div>Farm ID: ${data.farmBuddieId}</div>
+      <div>Mobile: ${esc(data.primaryMobile)}</div>
+      <div>Farm ID: ${esc(data.farmBuddieId)}</div>
     `;
 
     div.onclick = async () => {
@@ -1099,3 +1099,7 @@ function resetButton(btn) {
 
 });
 
+// Record fields (typed in by whoever onboarded the farm / distributor) are
+// never inserted as HTML. A declaration, so usable
+// from anywhere in this file.
+function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }

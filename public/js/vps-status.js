@@ -58,10 +58,10 @@ function renderConnectedClients(connectedClients) {
     .sort((a, b) => (a.clientId || "").localeCompare(b.clientId || ""))
     .map((c) => `
       <tr>
-        <td>${c.clientId}</td>
+        <td>${esc(c.clientId)}</td>
         <td>${/^FBIRG\d+$/.test(c.clientId) ? "Farm Device" : "Infrastructure"}</td>
-        <td>${c.subscriptionsCount ?? "-"}</td>
-        <td>${c.clientIpAdr || "-"}</td>
+        <td>${esc(c.subscriptionsCount ?? "-")}</td>
+        <td>${esc(c.clientIpAdr || "-")}</td>
         <td>${fmtDateTime(c.connectedAt, { seconds: true })}</td>
       </tr>
     `)
@@ -129,3 +129,8 @@ async function refreshStatus() {
     lastChecked.textContent = "Last checked: failed to reach status API";
   }
 }
+
+// Record fields (typed in by whoever onboarded the farm / distributor) are
+// never inserted as HTML. A declaration, so usable
+// from anywhere in this file.
+function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }

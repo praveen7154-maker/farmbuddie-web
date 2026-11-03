@@ -38,12 +38,16 @@ export async function provisionDeviceCredentials(auth, controllerDocId, { rotate
  * simply reopened - founders can look at or re-share it anytime, no
  * Rotate (which actually changes the password) needed just to view it.
  */
+// Values below come from the farm record (the farmer's name is typed in by
+// whoever onboarded them) - never inserted as HTML.
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 export async function renderMqttCredentialReveal(container, data) {
   container.innerHTML = `
     <div class="mqtt-reveal-box">
       <div class="mqtt-creds">
-        <div><b>Broker:</b> ${data.brokerUrl}:${data.port}</div>
-        <div><b>Client ID / Username:</b> ${data.username}</div>
+        <div><b>Broker:</b> ${esc(data.brokerUrl)}:${esc(data.port)}</div>
+        <div><b>Client ID / Username:</b> ${esc(data.username)}</div>
         <div>
           <b>Password:</b>
           <span id="mqttPasswordMask">${"•".repeat(data.password.length)}</span>
@@ -59,8 +63,8 @@ export async function renderMqttCredentialReveal(container, data) {
         </div>
         <div class="mqtt-qr-info">
           <div class="mqtt-qr-title">Scan for Irrigo Login</div>
-          <div class="mqtt-qr-field"><span>Farm Buddie ID</span><b>${data.farmBuddieId || "-"}</b></div>
-          <div class="mqtt-qr-field"><span>Farmer Name</span><b>${data.farmerName || "-"}</b></div>
+          <div class="mqtt-qr-field"><span>Farm Buddie ID</span><b>${esc(data.farmBuddieId || "-")}</b></div>
+          <div class="mqtt-qr-field"><span>Farmer Name</span><b>${esc(data.farmerName || "-")}</b></div>
           <div class="mqtt-qr-hint">Scan this with the Irrigo app to pair this device to the farmer's account.</div>
         </div>
       </div>
@@ -125,7 +129,7 @@ export async function renderMqttCredentialReveal(container, data) {
     // Never just an empty box - say why, and how to retry.
     const visual = container.querySelector(".mqtt-qr-visual");
     if (visual) {
-      visual.innerHTML = `<div class="mqtt-qr-error">QR code couldn't be drawn (${qrErr.message || "error"}).<br>
+      visual.innerHTML = `<div class="mqtt-qr-error">QR code couldn't be drawn (${esc(qrErr.message || "error")}).<br>
         Check the internet connection and press Fetch MQTT Credentials again.</div>`;
     }
   }

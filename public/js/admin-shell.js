@@ -197,11 +197,9 @@
     "farmer-edit": { parent: "farmer-database", from: [] },
     "add-farm": { parent: "farmer-database", from: ["controller-database", "farmer-onboarding", "index"] },
     "device-view": { parent: "analytics", from: ["farmer-database", "controller-database", "event-log", "index", "ota"] },
-    "controller-view": { parent: "controller-database", from: ["farmer-database", "analytics", "index"] },
     "distributor-view": { parent: "distributor-database", from: [] },
     "distributor-edit": { parent: "distributor-database", from: [] },
-    "distributor-onboarding": { parent: "distributor-database", from: [] },
-    "phone-auth": { parent: null, from: [] }
+    "distributor-onboarding": { parent: "distributor-database", from: [] }
   };
 
   function pageId(path) {

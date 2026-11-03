@@ -78,7 +78,7 @@ async function loadFarmer() {
       ${
         documentsData?.farmerPhotoUrl
           ? `<img 
-              src="${documentsData.farmerPhotoUrl}" 
+              src="${esc(safeUrl(documentsData.farmerPhotoUrl))}" 
               crossorigin="anonymous"
               alt="Farmer Photo"
               style="width:160px;height:180px;object-fit:cover;border-radius:18px;border:2px solid #2e7d32;box-shadow:0 8px 22px rgba(0,0,0,0.18);"
@@ -93,15 +93,15 @@ async function loadFarmer() {
     </div>
 
     <div class="info-grid">
-      <div class="info-item"><b>Farm Buddie ID:</b> ${f.farmBuddieId || "-"}</div>
-      <div class="info-item"><b>Farm Number:</b> ${f.farmNumber || "-"}</div>
-      <div class="info-item"><b>Title:</b> ${f.title || "-"}</div>
-      <div class="info-item"><b>Name:</b> ${f.name || "-"}</div>
-      <div class="info-item"><b>Status:</b> ${f.status || "-"}</div>
-      <div class="info-item"><b>Primary Mobile:</b> ${f.primaryMobile || "-"}</div>
-      <div class="info-item"><b>Secondary Mobile:</b> ${f.secondaryMobile || "-"}</div>
-      <div class="info-item"><b>Aadhaar Number:</b> ${f.aadhaarNumber || "-"}</div>
-      <div class="info-item"><b>Email ID:</b> ${f.emailId || "-"}</div>
+      <div class="info-item"><b>Farm Buddie ID:</b> ${esc(f.farmBuddieId || "-")}</div>
+      <div class="info-item"><b>Farm Number:</b> ${esc(f.farmNumber || "-")}</div>
+      <div class="info-item"><b>Title:</b> ${esc(f.title || "-")}</div>
+      <div class="info-item"><b>Name:</b> ${esc(f.name || "-")}</div>
+      <div class="info-item"><b>Status:</b> ${esc(f.status || "-")}</div>
+      <div class="info-item"><b>Primary Mobile:</b> ${esc(f.primaryMobile || "-")}</div>
+      <div class="info-item"><b>Secondary Mobile:</b> ${esc(f.secondaryMobile || "-")}</div>
+      <div class="info-item"><b>Aadhaar Number:</b> ${esc(f.aadhaarNumber || "-")}</div>
+      <div class="info-item"><b>Email ID:</b> ${esc(f.emailId || "-")}</div>
 
       <div class="info-item">
           <b>Lead Source:</b> ${
@@ -115,28 +115,28 @@ async function loadFarmer() {
           f.leadSource?.type === "DISTRIBUTOR"
             ? `
               <div class="info-item">
-                <b>Distributor Name:</b> ${f.leadSource?.distributorName || "-"}
+                <b>Distributor Name:</b> ${esc(f.leadSource?.distributorName || "-")}
               </div>
             `
             : ""
         }
 
-      <div class="info-item full"><b>Address:</b> ${f.address || "-"}</div>
+      <div class="info-item full"><b>Address:</b> ${esc(f.address || "-")}</div>
     </div>
 
 <!-- FARM & APP USER DETAILS -->
     <div class="section-title">🌾 Farm & App User Details</div>
     <div class="info-grid">
       <div class="info-item full">
-        <b>Farm Location:</b> ${f.farmDetails?.location || "-"}
+        <b>Farm Location:</b> ${esc(f.farmDetails?.location || "-")}
         </div>
 
         <div class="info-item">
-          <b>Farm Latitude:</b> ${f.farmDetails?.latitude || "-"}
+          <b>Farm Latitude:</b> ${esc(f.farmDetails?.latitude || "-")}
         </div>
 
         <div class="info-item">
-          <b>Farm Longitude:</b> ${f.farmDetails?.longitude || "-"}
+          <b>Farm Longitude:</b> ${esc(f.farmDetails?.longitude || "-")}
         </div>
 
 
@@ -149,7 +149,7 @@ async function loadFarmer() {
         Array.isArray(f.appUsers) && f.appUsers.length
           ? f.appUsers.map(u => `
               <div class="info-item">
-                <b>${u.name || "User"}:</b> ${u.mobile || "-"}
+                <b>${esc(u.name || "User")}:</b> ${esc(u.mobile || "-")}
               </div>
             `).join("")
           : `<div class="info-item full">No additional app users</div>`
@@ -166,14 +166,14 @@ async function loadFarmer() {
       <div class="info-item">
         <b>Aadhaar File:</b> 
         ${documentsData?.aadhaarUrl
-          ? `<a href="${documentsData.aadhaarUrl}" target="_blank">View Document</a>`
+          ? `<a href="${esc(safeUrl(documentsData.aadhaarUrl))}" target="_blank" rel="noopener">View Document</a>`
           : "-"}
       </div>
 
       <div class="info-item">
         <b>Other Document:</b> 
         ${documentsData?.otherDocUrl
-          ? `<a href="${documentsData.otherDocUrl}" target="_blank">View Document</a>`
+          ? `<a href="${esc(safeUrl(documentsData.otherDocUrl))}" target="_blank" rel="noopener">View Document</a>`
           : "-"}
       </div>
     </div>
@@ -182,26 +182,26 @@ async function loadFarmer() {
     <div class="section-title">🌐 Network Management</div>
 
     <div class="info-grid">
-      <div class="info-item"><b>Network Type:</b> ${f.network?.type || "SIM"}</div>
+      <div class="info-item"><b>Network Type:</b> ${esc(f.network?.type || "SIM")}</div>
     </div>
     
    <!-- MCU -->
 <div class="section-title">🧠 MCU / Device Mapping</div>
 <div class="info-grid">
-  <div class="info-item"><b>Variant:</b> ${f.controller?.variant || "-"}</div>
-  <div class="info-item"><b>Serial Number:</b> ${f.controller?.serialNumber || "-"}</div>
-  <div class="info-item full"><b>Unique Device ID:</b> ${f.controller?.uniqueId || "-"}</div>
+  <div class="info-item"><b>Variant:</b> ${esc(f.controller?.variant || "-")}</div>
+  <div class="info-item"><b>Serial Number:</b> ${esc(f.controller?.serialNumber || "-")}</div>
+  <div class="info-item full"><b>Unique Device ID:</b> ${esc(f.controller?.uniqueId || "-")}</div>
 
-  <div class="info-item"><b>Warranty Start:</b> ${f.controller?.warranty?.start || "-"}</div>
-  <div class="info-item"><b>Warranty End:</b> ${f.controller?.warranty?.end || "-"}</div>
+  <div class="info-item"><b>Warranty Start:</b> ${esc(f.controller?.warranty?.start || "-")}</div>
+  <div class="info-item"><b>Warranty End:</b> ${esc(f.controller?.warranty?.end || "-")}</div>
 </div>
 
 <!-- MQTT -->
 <div class="section-title">📡 MQTT Configuration</div>
 <div class="info-grid">
-  <div class="info-item full"><b>Broker URL:</b> ${f.controller?.mqtt?.brokerUrl || "-"}</div>
-  <div class="info-item"><b>Port:</b> ${f.controller?.mqtt?.port || "-"}</div>
-  <div class="info-item full"><b>Username:</b> ${f.controller?.mqtt?.username || "-"}</div>
+  <div class="info-item full"><b>Broker URL:</b> ${esc(f.controller?.mqtt?.brokerUrl || "-")}</div>
+  <div class="info-item"><b>Port:</b> ${esc(f.controller?.mqtt?.port || "-")}</div>
+  <div class="info-item full"><b>Username:</b> ${esc(f.controller?.mqtt?.username || "-")}</div>
   <div class="info-item full muted-note">Password is shown once at issuance (MCU / Controller page) and is never stored — it can't be displayed here.</div>
 </div>
 
@@ -209,24 +209,24 @@ async function loadFarmer() {
     <div class="section-title">📶 SIM Management</div>
 
     <div class="info-grid">
-      <div class="info-item"><b>SIM Number (ICCID):</b> ${f.sim?.simNumber || "-"}</div>
+      <div class="info-item"><b>SIM Number (ICCID):</b> ${esc(f.sim?.simNumber || "-")}</div>
        <div class="info-item">
     <b>SIM MSISDN:</b>
-    ${f.sim?.msisdn || "-"}
+    ${esc(f.sim?.msisdn || "-")}
   </div>
 
   <div class="info-item">
     <b>SIM IMSI:</b>
-    ${f.sim?.simImsi || "-"}
+    ${esc(f.sim?.simImsi || "-")}
   </div>
 
   <div class="info-item">
     <b>SIM IMEI:</b>
-    ${f.sim?.imeiNumber || "-"}
+    ${esc(f.sim?.imeiNumber || "-")}
   </div>
-      <div class="info-item"><b>SIM Type:</b> ${f.sim?.simType || "-"}</div>
-      <div class="info-item"><b>Billing Cycle:</b> ${f.sim?.billingCycle || "-"}</div>
-      <div class="info-item"><b>SIM/AMC Activation Date:</b> ${f.sim?.activationDate || "-"}</div>
+      <div class="info-item"><b>SIM Type:</b> ${esc(f.sim?.simType || "-")}</div>
+      <div class="info-item"><b>Billing Cycle:</b> ${esc(f.sim?.billingCycle || "-")}</div>
+      <div class="info-item"><b>SIM/AMC Activation Date:</b> ${esc(f.sim?.activationDate || "-")}</div>
     </div>
 
     <!-- MOTOR & TNEB CONFIG -->
@@ -235,14 +235,14 @@ async function loadFarmer() {
 
   <!-- Motors -->
   <div class="info-item">
-    <b>No of Motors:</b> ${f.motorConfig?.motorCount || 0}
+    <b>No of Motors:</b> ${esc(f.motorConfig?.motorCount || 0)}
   </div>
 
   ${
     f.motorConfig?.pumpHp?.length
       ? f.motorConfig.pumpHp.map((hp, i) => `
           <div class="info-item">
-            <b>Pump ${i+1} HP:</b> ${hp || "-"}
+            <b>Pump ${i+1} HP:</b> ${esc(hp || "-")}
           </div>
         `).join("")
       : `<div class="info-item full">No pump configuration</div>`
@@ -250,14 +250,14 @@ async function loadFarmer() {
 
   <!-- Services -->
   <div class="info-item">
-    <b>No of Services:</b> ${f.tnebServices?.serviceCount || 0}
+    <b>No of Services:</b> ${esc(f.tnebServices?.serviceCount || 0)}
   </div>
 
   ${
     f.tnebServices?.services?.length
       ? f.tnebServices.services.map(service => `
           <div class="info-item">
-            <b>Service ${service.serviceNumber} HP:</b> ${service.sanctionedHp || "-"}
+            <b>Service ${esc(service.serviceNumber)} HP:</b> ${esc(service.sanctionedHp || "-")}
           </div>
         `).join("")
       : `<div class="info-item full">No service configuration</div>`
@@ -272,7 +272,7 @@ async function loadFarmer() {
         f.pumpServiceMapping?.length
           ? f.pumpServiceMapping.map(map => `
               <div class="info-item">
-                <b>Pump ${map.pumpNumber} (${map.hp}) →</b> Service ${map.service}
+                <b>Pump ${esc(map.pumpNumber)} (${esc(map.hp)}) →</b> Service ${esc(map.service)}
               </div>
             `).join("")
           : `<div class="info-item full">No mapping data</div>`
@@ -331,3 +331,9 @@ window.downloadPDF = async function () {
 
   html2pdf().set(opt).from(element).save();
 };
+
+// Record fields (typed in by whoever onboarded the farm / distributor) are
+// never inserted as HTML; links only as http(s). Declarations, so usable
+// from anywhere in this file.
+function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }
+function safeUrl(u) { return /^https?:\/\//i.test(String(u || "")) ? String(u) : ""; }
