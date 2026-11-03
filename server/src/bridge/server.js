@@ -365,7 +365,7 @@ app.get("/farm/:farmId/electrical", async (req, res) => {
 /**
  * GET /firmware/latest
  * The newest firmware released from the web OTA page for each product
- * ({ hub, "motor-node", valve, "filter-backwash" }) - the Irrigo app's node
+ * ({ hub, "motor-node", valve, "filter-backwash", "butterfly-valve" }) - the Irrigo app's node
  * cards show "Update available" when a node reports an older version. Any
  * signed-in user; versions only, nothing farm-specific.
  */

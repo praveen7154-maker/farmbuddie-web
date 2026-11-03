@@ -51,6 +51,10 @@ export function farmUnitCounts(farmer) {
 export function unitsForProduct(units, product) {
   if (product === "motor-node") return units?.motorNodes || 0;
   if (product === "valve") return units?.valves || 0;
+  // Butterfly valve nodes are valve units on the farm (the hub can't tell
+  // the two kinds apart in its unit count) - a solenoid unit ignores an
+  // image for another product.
+  if (product === "butterfly-valve") return units?.valves || 0;
   if (product === "filter-backwash") return units?.backwash || 0;
   return null;
 }

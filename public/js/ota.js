@@ -50,8 +50,8 @@ const ERROR_TEXT = {
 };
 // How many units of the chosen kind a farm has (server: farmUnits.js);
 // null for a hub image - every farm has a hub.
-const UNIT_KEY = { "motor-node": "motorNodes", valve: "valves", "filter-backwash": "backwash" };
-const UNIT_WORD = { "motor-node": ["motor node", "motor nodes"], valve: ["valve unit", "valve units"], "filter-backwash": ["backwash node", "backwash nodes"] };
+const UNIT_KEY = { "motor-node": "motorNodes", valve: "valves", "filter-backwash": "backwash", "butterfly-valve": "valves" };
+const UNIT_WORD = { "motor-node": ["motor node", "motor nodes"], valve: ["valve unit", "valve units"], "filter-backwash": ["backwash node", "backwash nodes"], "butterfly-valve": ["valve unit", "valve units"] };
 const unitCount = (f, p = product()) => (UNIT_KEY[p] ? Number(f.units?.[UNIT_KEY[p]] || 0) : null);
 // Which chip a hub image is built for (its header, bytes 12-13) and which
 // board each hub reports in its health - see imageChip()/boardChip() in the
@@ -93,7 +93,7 @@ function productLabels(bytes) {
   }
   return [...found];
 }
-const PRODUCT_TEXT = { hub: "Hub / Master Motor", "motor-node": "Motor Node", valve: "Valve Node", "filter-backwash": "Filter Backwash Node" };
+const PRODUCT_TEXT = { hub: "Hub / Master Motor", "motor-node": "Motor Node", valve: "Valve Node", "filter-backwash": "Filter Backwash Node", "butterfly-valve": "Butterfly Valve Node" };
 const NODE_STATE_TEXT = {
   receiving: "Receiving", installed: "Installed - waiting", validated: "Updated", current: "Already on it",
   failed: "Failed", rolled_back: "Rolled back"

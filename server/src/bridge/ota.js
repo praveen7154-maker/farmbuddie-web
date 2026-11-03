@@ -53,9 +53,9 @@ const FARM_RE = /^\d{1,6}$/;
 const ACTIVE_STATES = new Set(["starting", "downloading", "verifying", "flashing", "downloaded"]);
 const BUSY_ERRORS = new Set(["pump_running", "already_in_progress", "hub_slot_busy"]);
 
-export const PRODUCTS = ["hub", "motor-node", "valve", "filter-backwash"];
+export const PRODUCTS = ["hub", "motor-node", "valve", "filter-backwash", "butterfly-valve"];
 export const isNodeProduct = (p) => PRODUCTS.includes(p) && p !== "hub";
-const PRODUCT_NAMES = { "motor-node": "motor node", valve: "valve unit", "filter-backwash": "filter backwash node" };
+const PRODUCT_NAMES = { "motor-node": "motor node", valve: "valve unit", "filter-backwash": "filter backwash node", "butterfly-valve": "butterfly valve node" };
 
 // Every image says which device it is for (FW_PRODUCT_MARKER in each repo's
 // config.h): "FARMBUDDIE-FW-PRODUCT=<product>;". The signature only proves
