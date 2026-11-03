@@ -360,6 +360,11 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(detail.compareWith.id, listId);
     const hubRow = detail.items.find((i) => i.sku === "FB-HUB");
     assert.equal(hubRow.current.basePrice, P(1500));
+    // A company discount only on a product we make: the hub isn't tagged yet, so it's dropped
+    await call(OWNER, `/pricing/admin/lists/${v2}/items`, "PUT", { items: [{ ...hubRow, companyDiscount: P(100) }] });
+    assert.equal((await call(OWNER, `/pricing/admin/lists/${v2}`)).body.items.find((i) => i.sku === "FB-HUB").companyDiscount, 0);
+    // Tagged Manufacturing (our cost ₹600, as typed before) it may have one
+    assert.equal((await call(OWNER, `/pricing/admin/costing/${vid("FB-HUB")}`, "PUT", { source: "make", components: [{ name: "Board", cost: P(600) }] })).status, 200);
     // Company discount can't be more than the distributor price
     await call(OWNER, `/pricing/admin/lists/${v2}/items`, "PUT", { items: [{ ...hubRow, companyDiscount: P(1001) }] });
     await call(OWNER, `/pricing/admin/lists/${v2}`, "PUT", { name: "Diwali prices", effectiveFrom: "2026-10-20T00:00:00+05:30" });
@@ -427,7 +432,19 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
       components: [{ name: "Freight", qty: 1, cost: P(5) }] });
     assert.equal(r.body.total, P(60));
     const costs = (await call(OWNER, "/pricing/admin/costing")).body.items;
-    assert.equal(costs.length, 2);
+    assert.equal(costs.length, 3);
+    // A bought product gets no company discount, even if one is sent
+    let antRow = (await call(OWNER, `/pricing/admin/lists/${draftBefore}`)).body.items.find((i) => i.sku === "FB-ANT");
+    await call(OWNER, `/pricing/admin/lists/${draftBefore}/items`, "PUT", { items: [{ ...antRow, companyDiscount: P(20) }] });
+    antRow = (await call(OWNER, `/pricing/admin/lists/${draftBefore}`)).body.items.find((i) => i.sku === "FB-ANT");
+    assert.equal(antRow.companyDiscount, 0);
+    // The hub (made) kept its ₹100 in the copied draft; re-tagged Buying, it loses it there - the published list keeps it
+    const hubIn = async (id) => (await call(OWNER, `/pricing/admin/lists/${id}`)).body.items.find((i) => i.sku === "FB-HUB").companyDiscount;
+    assert.equal(await hubIn(draftBefore), P(100));
+    await call(OWNER, `/pricing/admin/costing/${vid("FB-HUB")}`, "PUT", { source: "buy", supplier: "Test", purchasePrice: P(600) });
+    assert.equal(await hubIn(draftBefore), 0);
+    assert.equal(await hubIn(v2), P(100));
+    await call(OWNER, `/pricing/admin/costing/${vid("FB-HUB")}`, "PUT", { source: "make", components: [{ name: "Board", cost: P(600) }] });
     assert.deepEqual(costs.find((c) => c.variantId === mnId).components[2], { name: "Enclosure", qty: 1, cost: P(60) });
     // Not for distributors or viewers
     assert.equal((await call(DIST, "/pricing/admin/costing")).status, 403);

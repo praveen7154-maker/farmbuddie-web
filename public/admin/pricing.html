@@ -224,17 +224,17 @@
         <button class="pr-btn" id="csvExport">⬇ CSV</button>
       </span>
     </div>
-    <details class="pr-help" open>
+    <details class="pr-help">
       <summary>📘 How to fill a row (example: Motor Master Hub)</summary>
       <ol>
         <li><b>MRP</b> - the printed price <u>including GST</u>, e.g. ₹14,160 (₹12,000 without GST).</li>
         <li><b>Distributor price</b> - what the distributor pays you, <u>before GST</u>, e.g. ₹10,000.</li>
         <li><b>Farmer selling price</b> - what the farmer normally pays, <u>before GST</u>, e.g. ₹12,000 (farmer pays ₹12,000 + 18% = ₹14,160).
-          Distributor margin = ₹12,000 − ₹10,000 = ₹2,000.</li>
-        <li><b>Company discount</b> (optional) - the most <u>Farm Buddie</u> pays per unit, before GST, when the customer asks for a discount,
-          e.g. ₹500. The distributor may give any amount up to it, or none. Whatever they give, they pay Farm Buddie that much less
-          (₹10,000 − ₹500 = ₹9,500), so <b>their margin stays ₹2,000</b>. Our profit on that sale drops by the same amount.
-          Leave it empty for no company discount.</li>
+          Fills itself from the MRP (MRP without GST) - type a lower one if needed. Distributor margin = ₹12,000 − ₹10,000 = ₹2,000.</li>
+        <li><b>Company discount</b> (optional, <u>only for 🏭 Manufacturing products</u> - bought ones get none) - the most <u>Farm Buddie</u>
+          pays per unit, before GST, when the customer asks for a discount, e.g. ₹500. It doesn't change the farmer selling price: the
+          distributor may give any amount up to it, or none. Whatever they give, they pay Farm Buddie that much less
+          (₹10,000 − ₹500 = ₹9,500), so <b>their margin stays ₹2,000</b>. Our profit on that sale drops by the same amount. 0 = none.</li>
         <li><b>Minimum price</b> - the lowest a distributor may go <u>out of their own margin</u>. Nothing from their margin? Make it the same as the
           farmer selling price (it fills itself when left empty). E.g. ₹11,700 lets them give ₹300 more of their own.</li>
         <li><b>Maximum price</b> - the highest before GST; normally MRP without GST (₹14,160 ÷ 1.18 = ₹12,000). Fills itself from the MRP.</li>
@@ -451,8 +451,8 @@
     <button class="pr-modal-close" data-close="costModal" aria-label="Close">✕</button>
     <h2 id="cmTitle">Production cost</h2>
     <div class="pr-src" role="radiogroup" aria-label="How we get it">
-      <label class="pr-src-opt"><input type="radio" name="cmSource" value="make"><span>🏭 Manufacturing<small>we make it - list the components / materials</small></span></label>
-      <label class="pr-src-opt"><input type="radio" name="cmSource" value="buy"><span>🛒 Buying<small>we buy it ready-made from a supplier</small></span></label>
+      <label class="pr-src-opt"><input type="radio" name="cmSource" value="make"><span>🏭 Manufacturing<small>we make it - list the components / materials. Can have a company discount.</small></span></label>
+      <label class="pr-src-opt"><input type="radio" name="cmSource" value="buy"><span>🛒 Buying<small>we buy it ready-made from a supplier. No company discount.</small></span></label>
     </div>
     <div class="pr-grid2" id="cmBuy" hidden>
       <label class="ota-field"><span>Supplier</span><input type="text" id="cmSupplier" maxlength="80" placeholder="Supplier name"></label>

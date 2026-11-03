@@ -308,6 +308,11 @@ const quoteCols = `id, quote_no AS "quoteNo", list_id AS "listId", segment, crea
   customer_state AS "customerState", notes, lines, totals, valid_until AS "validUntil", status, status_by AS "statusBy",
   status_at AS "statusAt", created_at AS "createdAt"`;
 
+// A product that isn't (any longer) made by us: no company discount in drafts.
+const clearCompanyDiscount = (c, variantId) => c.query(
+  `UPDATE price_list_items i SET company_discount = 0 FROM price_lists l
+   WHERE l.id = i.list_id AND l.status = 'draft' AND i.variant_id = $1 AND i.company_discount <> 0`, [variantId]);
+
 // Runs fn(client) in one transaction.
 async function tx(fn) {
   const client = await pool.connect();
@@ -469,12 +474,22 @@ export const pgPricingStore = {
     });
   },
 
-  /** Max discount = farmer selling price - minimum price, on every priced row of a draft. */
+  /**
+   * On every row of a draft: max discount (kept for the record) = farmer
+   * selling price - minimum price; a company discount only on a product we
+   * make (Production Pricing: Manufacturing).
+   */
   async normalizeDiscounts(listId) {
     await pool.query(
       `UPDATE price_list_items i SET max_discount_type = 'amt', max_discount_value = GREATEST(0, base_price - min_price)
        FROM price_lists l WHERE l.id = i.list_id AND l.id = $1 AND l.status = 'draft'
          AND base_price IS NOT NULL AND min_price IS NOT NULL`,
+      [listId]
+    );
+    await pool.query(
+      `UPDATE price_list_items i SET company_discount = 0
+       FROM price_lists l WHERE l.id = i.list_id AND l.id = $1 AND l.status = 'draft' AND i.company_discount <> 0
+         AND NOT EXISTS (SELECT 1 FROM pricing_costing c WHERE c.variant_id = i.variant_id AND c.source = 'make')`,
       [listId]
     );
   },
@@ -682,14 +697,18 @@ export const pgPricingStore = {
          WHERE l.id = i.list_id AND l.status = 'draft' AND i.variant_id = $1 AND i.cost_price IS DISTINCT FROM $2`,
         [c.variantId, c.total]
       );
+      if (c.source !== "make") await clearCompanyDiscount(cl, c.variantId);
       return r.rowCount;
     });
   },
 
-  /** Draft lists keep the cost they have. */
+  /** Draft lists keep the cost they have (and lose the company discount - it's not a made product any more). */
   async deleteCosting(variantId) {
-    const { rowCount } = await pool.query(`DELETE FROM pricing_costing WHERE variant_id = $1`, [variantId]);
-    return rowCount === 1;
+    return tx(async (cl) => {
+      const { rowCount } = await cl.query(`DELETE FROM pricing_costing WHERE variant_id = $1`, [variantId]);
+      if (rowCount === 1) await clearCompanyDiscount(cl, variantId);
+      return rowCount === 1;
+    });
   },
 
   // ---- quotes ----

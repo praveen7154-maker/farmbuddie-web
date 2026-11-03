@@ -611,7 +611,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
     const cat = await store.catalogue();
     const variantIds = new Set(cat.variants.map((v) => v.id));
     const before = new Map((await store.items(list.id)).map((i) => [i.variantId, i]));
-    const costs = new Map((await store.costings()).map((c) => [c.variantId, c.total]));
+    const costings = new Map((await store.costings()).map((c) => [c.variantId, c]));
     const items = raw.map((i) => {
       const variantId = int(i.variantId, "Variant", 1, 2_000_000_000);
       if (!variantIds.has(variantId)) throw new Bad(`Variant ${variantId} doesn't exist`);
@@ -627,12 +627,14 @@ export function createPricingModule({ store, findDistributor = async () => null,
         distributorPrice: money(i.distributorPrice, "Distributor price"),
         // Production Pricing decides our cost where it has one; left out (an
         // older client, or a viewer's copy) = keep what's saved.
-        costPrice: costs.has(variantId) ? costs.get(variantId)
+        costPrice: costings.has(variantId) ? costings.get(variantId).total
           : i.costPrice === undefined ? (was?.costPrice ?? null) : money(i.costPrice, "Our cost"),
         basePrice,
         minPrice,
         maxPrice: money(i.maxPrice, "Maximum price"),
-        companyDiscount: i.companyDiscount === undefined ? (was?.companyDiscount ?? 0) : (money(i.companyDiscount, "Company discount") ?? 0),
+        // Only a product we make (Production Pricing: Manufacturing) has a company discount.
+        companyDiscount: costings.get(variantId)?.source !== "make" ? 0
+          : i.companyDiscount === undefined ? (was?.companyDiscount ?? 0) : (money(i.companyDiscount, "Company discount") ?? 0),
         // No longer a limit of its own (the minimum price is) - kept for the
         // record as selling price - minimum price.
         maxDiscountType: "amt",
@@ -741,7 +743,8 @@ export function createPricingModule({ store, findDistributor = async () => null,
   // ---------- staff: production pricing (our cost) ----------
   // One unit of each variant: bought (supplier + purchase price, plus any
   // extra costs like freight) or made (components / materials). All before
-  // GST. The total becomes "Our cost" in every draft price list.
+  // GST. The total becomes "Our cost" in every draft price list. Only a made
+// product may have a company discount: a bought one's is cleared in drafts.
 
   function costingInput(b, variantId) {
     const source = b?.source === "buy" || b?.source === "make" ? b.source : null;
