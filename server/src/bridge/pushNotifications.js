@@ -24,7 +24,8 @@ const PUSH_EVENTS = new Set([
   68,              // a due schedule could not start - another program was running
   69,              // manual valve switch: the new valve did not open, the old one was kept open
   70,              // a sequence valve did not open (tried twice) - skipped, others continue
-  71               // phase order fault released - the order is right again (phase reversal protection)
+  71,              // phase order fault released - the order is right again (phase reversal protection)
+  72               // a butterfly valve did not reach the end it was sent to (no feedback), or can't be driven
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
@@ -90,8 +91,20 @@ const EVENT_TEXT = {
   68: "A scheduled cyclic could not start - another cyclic program was already running",
   69: "The new valve did not open - the previous valve was kept open and the motor keeps running",
   70: "A valve did not open (tried twice) - skipped, the other valves continue. Please check it",
-  71: "Phase order is correct again - the motor can start"
+  71: "Phase order is correct again - the motor can start",
+  72: "A valve did not move as commanded - please check it"
 };
+
+// EVENT_VALVE_STUCK (72): "action" open/close, "reason" no_feedback/not_drivable.
+function valveStuckText(valve, payload) {
+  if (payload.reason === "not_drivable") {
+    return `Valve ${valve} can't be operated by its valve unit - please check the unit`;
+  }
+  if (payload.action === "open") {
+    return `Valve ${valve} did not open - no open signal from the valve in 30 s. Please check Valve ${valve}`;
+  }
+  return `Valve ${valve} did not close - no closed signal from the valve in 30 s, it may still be open. Please check Valve ${valve}`;
+}
 
 export function buildNotification(nodeId, motorNum, payload) {
   const motorLabel = `Motor ${normalizeMotorNum(motorNum)}`;
@@ -107,6 +120,9 @@ export function buildNotification(nodeId, motorNum, payload) {
   const previous = typeof payload.previous_valve === "number" && payload.previous_valve > 0 ? payload.previous_valve : null;
   if (valve && previous && event === 69) {
     return { title: motorLabel, body: `Valve ${valve} did not open - Valve ${previous} was kept open and the motor keeps running` };
+  }
+  if (valve && event === 72) {
+    return { title: motorLabel, body: valveStuckText(valve, payload) };
   }
   if (valve && event === 70) {
     return { title: motorLabel, body: `Valve ${valve} did not open (tried twice) - skipped, the other valves continue. Please check Valve ${valve}` };

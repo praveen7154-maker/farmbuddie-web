@@ -19,7 +19,7 @@ export const CODES = {
   57: "Valve closed mid run", 58: "Backwash started", 60: "Backwash valves failed",
   62: "Backwash timed out", 63: "Backwash complete", 64: "Voltage restored", 65: "Restarted while running",
   66: "Load limit stop", 67: "Load limit blocked", 68: "Schedule not started", 69: "Valve did not open",
-  70: "Valve not opening", 71: "Phase order OK",
+  70: "Valve not opening", 71: "Phase order OK", 72: "Valve stuck",
   128: "Boot", 129: "Firmware changed", 130: "OTA start", 131: "OTA failed", 132: "OTA ok",
   133: "OTA rollback", 134: "Cloud back", 135: "Node offline", 136: "Node online", 137: "Node OTA ok",
   138: "Node OTA failed", 139: "EEPROM error", 140: "RTC error", 141: "Clock corrected",
@@ -32,7 +32,7 @@ export const CODES = {
 export const CRITICAL = new Set([1, 2, 3, 4, 5, 6, 22, 34, 35, 54, 55, 57, 65, 128, 129, 130, 131, 132, 133,
   137, 138, 139, 140, 142, 143, 146, 147, 148, 149]);
 // Shown in red: something went wrong (not just "a reset happened").
-export const FAULTS = new Set([1, 2, 3, 4, 5, 6, 22, 34, 35, 54, 55, 57, 65, 131, 133, 138, 139, 140]);
+export const FAULTS = new Set([1, 2, 3, 4, 5, 6, 22, 34, 35, 54, 55, 57, 65, 72, 131, 133, 138, 139, 140]);
 
 const RESET_REASONS = ["unknown", "power on", "reset pin", "software", "crash", "interrupt watchdog",
   "task watchdog", "watchdog", "deep sleep", "brownout", "sdio", "usb", "jtag", "efuse", "power glitch", "cpu lockup"];
@@ -77,6 +77,8 @@ export function describe(code, value, aux) {
     case 1: case 2: return `${(value / 100).toFixed(2)} A (limit ${(aux / 100).toFixed(2)} A)`;
     case 3: case 4: return `${value} V (limit ${aux} V)`;
     case 5: case 6: return `lowest ${value} V, highest ${aux} V`;
+    case 72: return aux & 2 ? `valve ${value} - its unit can't drive it`
+      : `valve ${value} did not ${aux & 1 ? "open" : "close"} - no feedback`;
     case 128: {
       const cause = RESTART_CAUSES[aux] ?? "other";
       return (RESET_REASONS[value] || "unknown") + (cause ? ` - ${cause}` : "");
