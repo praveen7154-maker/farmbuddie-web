@@ -8,6 +8,7 @@ import { onAuthStateChanged, signOut }
 import { doc, getDoc, collection, query, where, getDocs }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { fmtDateTime } from "/js/time-format.js";
+import { loadCompany, sectionsFromView, recordDocHtml, printRecord, pdfRecord } from "/js/record-doc.js";
 
 /* ================= AUTH GUARD ================= */
 onAuthStateChanged(auth, (user) => {
@@ -26,6 +27,8 @@ const docId = params.get("id");
 const viewBox = document.getElementById("viewBox");
 
 let currentFarmBuddieId = "";
+let currentFarmer = null;      // the record, for the printed document
+let currentPhoto = "";
 
 if (!docId) {
   viewBox.innerHTML = "<p>❌ Farmer record not found.</p>";
@@ -45,6 +48,7 @@ async function loadFarmer() {
 
   const f = snap.data();
   currentFarmBuddieId = f.farmBuddieId || docId;
+  currentFarmer = f;
 
   /* ===== DOCUMENT FALLBACK LOGIC ===== */
   let documentsData = f.documents || {};
@@ -68,6 +72,8 @@ async function loadFarmer() {
       if (!hardcopies && farmData.hardcopies) hardcopies = farmData.hardcopies;
     });
   }
+
+  currentPhoto = safeUrl(documentsData?.farmerPhotoUrl);
 
   /* ===== RENDER VIEW ===== */
   viewBox.innerHTML = `
@@ -300,36 +306,37 @@ async function loadFarmer() {
 
 loadFarmer();
 
-/* ================= PRINT ================= */
-window.printFarmer = function () {
-  window.print();
+/* ================= PRINT / PDF ================= */
+// A proper A4 farmer record (letterhead, reference, tables) - the same
+// document for both. See record-doc.js.
+async function farmerDoc() {
+  const f = currentFarmer;
+  if (!f) return null;
+  const company = await loadCompany();
+  return recordDocHtml({
+    title: "FARMER RECORD",
+    refLabel: "Farm Buddie ID",
+    ref: f.farmBuddieId || docId,
+    meta: [
+      ["Farmer", [f.title, f.name].filter(Boolean).join(" ")],
+      ["Farm number", f.farmNumber],
+      ["Device ID", f.controller?.uniqueId],
+      ["Status", f.status]
+    ],
+    photoUrl: currentPhoto,
+    sections: sectionsFromView(viewBox),
+    company,
+    signLeft: "Farmer's signature"
+  });
+}
+const fileName = () => `Farmer_${String(currentFarmBuddieId || "record").replace(/[^\w-]+/g, "_")}`;
+window.printFarmer = async function () {
+  const html = await farmerDoc();
+  if (html) printRecord(html, fileName());
 };
-
-/* ================= PDF ================= */
 window.downloadPDF = async function () {
-
-  const element = document.getElementById("viewBox");
-
-  const images = element.querySelectorAll("img");
-  await Promise.all(
-    Array.from(images).map(img => {
-      if (img.complete) return Promise.resolve();
-      return new Promise(resolve => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
-    })
-  );
-
-  const opt = {
-    margin: 10,
-    filename: `${currentFarmBuddieId || "Farmer_Details"}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  html2pdf().set(opt).from(element).save();
+  const html = await farmerDoc();
+  if (html) await pdfRecord(html, `${fileName()}.pdf`);
 };
 
 // Record fields (typed in by whoever onboarded the farm / distributor) are

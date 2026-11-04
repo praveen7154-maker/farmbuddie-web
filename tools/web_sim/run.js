@@ -134,6 +134,22 @@ function luhnImei(body14) {
 }
 const SIMS = Array.from({ length: 6 }, (_, i) => ({ iccid: `899191${String(1000000000000 + i * 7919).padStart(13, "0")}`, msisdn: `5754${String(100000 + i)}`, imsi: `40445${String(1000000000 + i)}` }));
 
+// Print / Save as PDF on a record page: the print window's text, and the PDF's size.
+async function recordDocs(printSel, pdfSel) {
+  const [pop] = await Promise.all([context.waitForEvent("page"), page.click(printSel)]);
+  await pop.waitForLoadState("load").catch(() => {});
+  await pop.waitForTimeout(400);
+  const text = await pop.evaluate(() => document.body.innerText);
+  const popXss = await pop.evaluate(() => window.__xss || 0);
+  await pop.close();
+  const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 30000 }), page.click(pdfSel)]);
+  const file = await dl.path();
+  if (file) fs.copyFileSync(file, path.join(OUT, dl.suggestedFilename()));   // kept with the report, to look at
+  const size = file ? fs.statSync(file).size : 0;
+  const head = file ? fs.readFileSync(file).subarray(0, 5).toString() : "";
+  return { text, popXss, size, isPdf: head === "%PDF-", name: dl.suggestedFilename() };
+}
+
 // ======================================================================
 await run("1. Admin sign-in and Home", async () => {
   await expecting([/__auth\/login/, /status of 400/, /LOGIN ERROR/], async () => {
@@ -461,9 +477,21 @@ await run("6. Farmer Database, View, Edit (admin)", async () => {
   await until(async () => (await page.textContent("#viewBox")).includes(FARM1.farmBuddieId), 8000, "farmer details");
   const view = await page.textContent("#viewBox");
   check("view shows name, controller and distributor", view.includes("Kumar Farmer") && view.includes("IRRIGO26AA10001") && view.includes("Ravi Agencies"), "");
+  {
+    const doc = await recordDocs("text=🖨 Print", "text=Save as PDF");
+    check("farmer print: letterhead, title, reference and sections", /Farm Buddie/.test(doc.text) && doc.text.includes("FARMER RECORD") && doc.text.includes(FARM1.farmBuddieId)
+      && /Erode/.test(doc.text) && /MCU \/ Device Mapping/i.test(doc.text) && doc.text.includes("IRRIGO26AA10001") && /Authorised signatory/.test(doc.text), doc.text.replace(/\s+/g, " ").slice(0, 200));
+    check("farmer print: Aadhaar shows only the last 4 digits", !/\b\d{4}\s?\d{4}\s?\d{4}\b/.test(doc.text) || /XXXX XXXX \d{4}/.test(doc.text));
+    check("farmer print: no on-screen emoji headings or links", !/👨‍🌾|📂|View Document/.test(doc.text));
+    check("farmer PDF: a real A4 PDF, named by the Farm Buddie ID", doc.isPdf && doc.size > 20000 && doc.name.includes(FARM1.farmBuddieId), `${doc.name} ${doc.size} bytes`);
+  }
   await go(`/admin/farmer-view.html?id=${XSS_FARMER.id}`);
   await page.waitForTimeout(1500);
   check("the injected-name farmer's view runs no script", (await page.evaluate(() => window.__xss)) === 0);
+  {
+    const doc = await recordDocs("text=🖨 Print", "text=Save as PDF");
+    check("the injected-name farmer's print and PDF run no script", doc.popXss === 0 && (await page.evaluate(() => window.__xss)) === 0 && doc.isPdf);
+  }
   // Edit: secondary mobile, and two nodes mapped.
   await go(`/admin/farmer-edit.html?id=${FARM1.id}`);
   await until(async () => (await page.inputValue("#farmerName")) === "Kumar Farmer", 8000, "the edit form filled in");
@@ -507,6 +535,11 @@ await run("7. Distributor Database, View, Edit, app password", async () => {
   await until(async () => (await page.textContent("#viewBox")).includes(d.data.distributorId), 8000, "distributor details");
   const v = await page.textContent("#viewBox");
   check("view shows the distributor's details", v.includes("Ravi Agencies") && v.includes("ABCDE1234F") && v.includes("Erode"), v.replace(/\s+/g, " ").slice(0, 160));
+  {
+    const doc = await recordDocs("text=🖨 Print", "text=Save as PDF");
+    check("distributor print: letterhead, title and details", doc.text.includes("DISTRIBUTOR RECORD") && doc.text.includes(d.data.distributorId) && doc.text.includes("ABCDE1234F"), doc.text.replace(/\s+/g, " ").slice(0, 160));
+    check("distributor PDF: a real PDF", doc.isPdf && doc.size > 20000, `${doc.name} ${doc.size} bytes`);
+  }
   await expecting([/reset|password|Irrigo Admin/i], async () => {
     await page.click("text=Reset app password");
     await page.waitForTimeout(1500);

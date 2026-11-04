@@ -7,6 +7,7 @@ import { doc, getDoc }
 import { BRIDGE_BASE_URL } from "/js/config.js";
 import { hardcopyRows, DISTRIBUTOR_DOCS } from "/js/upload-prep.js";
 import { fmtDateTime } from "/js/time-format.js";
+import { loadCompany, sectionsFromView, recordDocHtml, printRecord, pdfRecord } from "/js/record-doc.js";
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -24,6 +25,7 @@ const docId = params.get("id");
 const viewBox = document.getElementById("viewBox");
 
 let currentDistributorId = "";
+let currentDistributor = null;   // the record, for the printed document
 
 if (!docId) {
   viewBox.innerHTML = "<p>❌ Distributor record not found.</p>";
@@ -43,6 +45,7 @@ async function loadDistributor() {
 
   const d = snap.data();
   currentDistributorId = d.distributorId || docId;
+  currentDistributor = d;
 
   viewBox.innerHTML = `
 
@@ -150,24 +153,30 @@ window.resetAppPassword = async function () {
   }
 };
 
-window.printDistributor = function () {
-  window.print();
+// A proper A4 distributor record (letterhead, reference, tables) - the same
+// document for Print and Save as PDF. See record-doc.js.
+async function distributorDoc() {
+  const d = currentDistributor;
+  if (!d) return null;
+  const company = await loadCompany();
+  return recordDocHtml({
+    title: "DISTRIBUTOR RECORD",
+    refLabel: "Distributor ID",
+    ref: d.distributorId || docId,
+    meta: [["Distributor", d.name], ["Phone", d.primaryMobile], ["GST", d.gstNumber], ["Status", d.status]],
+    sections: sectionsFromView(viewBox),
+    company,
+    signLeft: "Distributor's signature"
+  });
+}
+const fileName = () => `Distributor_${String(currentDistributorId || "record").replace(/[^\w-]+/g, "_")}`;
+window.printDistributor = async function () {
+  const html = await distributorDoc();
+  if (html) printRecord(html, fileName());
 };
-
-/* ================= PDF ================= */
 window.downloadPDF = async function () {
-
-  const element = document.getElementById("viewBox");
-
-  const opt = {
-    margin: 10,
-    filename: `${currentDistributorId || "Distributor_Details"}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  html2pdf().set(opt).from(element).save();
+  const html = await distributorDoc();
+  if (html) await pdfRecord(html, `${fileName()}.pdf`);
 };
 
 // Record fields (typed in by whoever onboarded the farm / distributor) are
