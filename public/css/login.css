@@ -1,0 +1,277 @@
+/* Sign in (login.html) - admins and the team. Its own sheet: no admin
+   shell here. Brand: the Farm Buddie console for the Irrigo platform -
+   Irrigo green / orange on the left, the form on the right. */
+
+:root {
+  --g900: #0b3d26;
+  --g800: #0f5132;
+  --g700: #15803d;
+  --g600: #16a34a;
+  --orange: #f59e0b;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --bg: #f6faf7;
+  --card: #ffffff;
+  --field: #f8fafc;
+  --focus: rgba(22, 163, 74, 0.18);
+  --err-bg: #fef2f2;
+  --err: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e5efe9;
+    --muted: #94a3a0;
+    --line: #26332d;
+    --bg: #0c1411;
+    --card: #121c18;
+    --field: #0f1814;
+    --focus: rgba(34, 197, 94, 0.25);
+    --err-bg: #3a1414;
+    --err: #fca5a5;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body.lg {
+  margin: 0;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.lg-shell {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(380px, 1.05fr) 1fr;
+}
+
+/* ---------- brand side ---------- */
+.lg-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 44px 56px;
+  color: #ecfdf5;
+  background:
+    radial-gradient(900px 500px at 110% 110%, rgba(245, 158, 11, 0.28), transparent 60%),
+    radial-gradient(700px 500px at -10% -10%, rgba(34, 197, 94, 0.35), transparent 60%),
+    linear-gradient(150deg, var(--g800), var(--g900));
+}
+/* Field rows, faintly */
+.lg-hero::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: repeating-linear-gradient(120deg, rgba(255, 255, 255, 0.045) 0 2px, transparent 2px 34px);
+  transform: rotate(-4deg);
+  pointer-events: none;
+}
+.lg-hero > * { position: relative; }
+.lg-chip {
+  display: inline-flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 16px;
+  padding: 12px 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+.lg-chip img { height: 44px; display: block; }
+.lg-hero h1 {
+  font-size: clamp(30px, 3.2vw, 44px);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+  font-weight: 800;
+  color: #fff;
+}
+.lg-hero p {
+  max-width: 460px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #bbf7d0;
+  margin: 0 0 26px;
+}
+.lg-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.lg-points li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  color: #ecfdf5;
+}
+.lg-points span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 16px;
+}
+.lg-hero-foot { font-size: 13px; color: #86efac; letter-spacing: 0.02em; }
+
+/* ---------- sign-in side ---------- */
+.lg-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px 24px;
+}
+.lg-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 36px 34px 28px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 24px 60px rgba(15, 81, 50, 0.1);
+  animation: lg-in 0.35s ease-out both;
+}
+@keyframes lg-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.lg-logo { height: 52px; display: block; margin-bottom: 22px; }
+.lg-logo-irrigo { display: none; }
+.lg-card h2 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.01em; }
+.lg-sub { margin: 6px 0 18px; color: var(--muted); font-size: 15px; }
+
+.lg-who {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.lg-who span {
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+}
+.lg-who b { color: var(--g700); font-weight: 700; }
+
+.lg-field { display: block; margin-bottom: 16px; }
+.lg-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.lg-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.lg-input > svg {
+  position: absolute;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  fill: #94a3b8;
+  pointer-events: none;
+}
+.lg-input input {
+  width: 100%;
+  height: 50px;
+  padding: 0 46px 0 42px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--field);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.lg-input input::placeholder { color: #94a3b8; }
+.lg-input input:focus { border-color: var(--g600); background: var(--card); box-shadow: 0 0 0 4px var(--focus); }
+.lg-input:focus-within > svg { fill: var(--g600); }
+.lg-eye {
+  position: absolute;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.lg-eye svg { width: 19px; height: 19px; fill: #94a3b8; }
+.lg-eye:hover { background: rgba(148, 163, 184, 0.15); }
+.lg-eye.on svg { fill: var(--g600); }
+.lg-mode { display: block; min-height: 16px; margin-top: 5px; font-size: 12px; font-weight: 600; }
+.lg-mode.admin { color: var(--g700); }
+.lg-mode.team { color: #b45309; }
+
+.lg-error {
+  margin: 2px 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--err-bg);
+  color: var(--err);
+  font-size: 13.5px;
+  line-height: 1.4;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+.lg-btn {
+  width: 100%;
+  height: 52px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--g600), var(--g800));
+  box-shadow: 0 10px 24px rgba(21, 128, 61, 0.28);
+  cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.15s, filter 0.15s;
+}
+.lg-btn:hover { filter: brightness(1.06); box-shadow: 0 12px 28px rgba(21, 128, 61, 0.34); }
+.lg-btn:active { transform: translateY(1px); }
+.lg-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.lg-btn:disabled { cursor: default; filter: saturate(0.6); }
+.lg-btn.busy::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 10px;
+  vertical-align: -3px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: lg-spin 0.7s linear infinite;
+}
+@keyframes lg-spin { to { transform: rotate(360deg); } }
+
+.lg-help { margin: 18px 0 0; font-size: 13px; color: var(--muted); text-align: center; }
+.lg-foot { margin-top: 22px; font-size: 12px; color: var(--muted); text-align: center; }
+
+/* ---------- tablets and phones: the form, with the Irrigo name on top ---------- */
+@media (max-width: 900px) {
+  .lg-shell { grid-template-columns: 1fr; }
+  .lg-hero { display: none; }
+  .lg-side {
+    min-height: 100vh;
+    justify-content: flex-start;
+    padding: 28px 16px 20px;
+    background:
+      radial-gradient(600px 260px at 50% -40px, rgba(22, 163, 74, 0.16), transparent 70%),
+      var(--bg);
+  }
+  /* Irrigo first, Farm Buddie under it */
+  .lg-logo-irrigo { display: block; height: 40px; margin: 0 auto 8px; }
+  .lg-card { padding: 28px 22px 24px; border-radius: 18px; }
+  .lg-logo { height: 34px; margin: 0 auto 18px; order: 2; }
+  .lg-card h2, .lg-sub { text-align: center; }
+  .lg-who { justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg-card { animation: none; }
+}

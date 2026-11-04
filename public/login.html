@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Sign in | Farm Buddie</title>
+  <title>Sign in | Farm Buddie · Irrigo</title>
 
   <!-- Main CSS -->
   <!-- Start downloading Firebase straight away (it is otherwise found one
@@ -12,47 +12,76 @@
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js">
   <link rel="modulepreload" href="/js/firebase-init.js">
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
-  <link rel="stylesheet" href="/css/main.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f5132">
+  <link rel="icon" href="/assets/logo_icon.png" type="image/png">
+  <link rel="stylesheet" href="/css/login.css">
 </head>
 
-<body class="login-body login-page">
+<body class="lg">
 
-  <div class="login-container">
+  <main class="lg-shell">
+    <!-- Brand side: the Irrigo platform, by Farm Buddie -->
+    <section class="lg-hero" aria-hidden="true">
+      <div class="lg-hero-top">
+        <span class="lg-chip"><img src="/assets/irrigo-logo.png" alt=""></span>
+      </div>
+      <div class="lg-hero-mid">
+        <h1>Smart irrigation,<br>controlled from anywhere.</h1>
+        <p>The Farm Buddie console for the Irrigo platform - farms, motors and valves, production, onboarding and pricing in one place.</p>
+        <ul class="lg-points">
+          <li><span>💧</span>Live motor &amp; valve status for every farm</li>
+          <li><span>🏭</span>Production and farmer onboarding by your team</li>
+          <li><span>📈</span>Pricing, quotes and firmware updates</li>
+        </ul>
+      </div>
+      <div class="lg-hero-foot">Irrigo · by Farm Buddie</div>
+    </section>
 
-    <!-- LOGO -->
-    <img src="/assets/logo.png" alt="Farm Buddie Logo" class="login-logo">
+    <!-- Sign-in side -->
+    <section class="lg-side">
+      <div class="lg-card">
+        <img src="/assets/irrigo-logo.png" alt="Irrigo" class="lg-logo-irrigo">
+        <img src="/assets/logo.png" alt="Farm Buddie" class="lg-logo">
+        <h2>Welcome back</h2>
+        <p class="lg-sub">Sign in to the Farm Buddie console</p>
 
-    <h2>Sign in</h2>
-    <p class="login-subtitle">Admin: your email &middot; Production team: your username</p>
+        <div class="lg-who" role="note">
+          <span><b>Admin</b> · your email</span>
+          <span><b>Team</b> · your username</span>
+        </div>
 
-    <!-- EMAIL (admin) or USERNAME (production team) -->
-    <input
-      type="text"
-      id="email"
-      placeholder="Email or username"
-      autocomplete="username"
-      autocapitalize="none"
-      spellcheck="false"
-    >
+        <form id="loginForm" novalidate>
+          <label class="lg-field">
+            <span class="lg-label">Email or username</span>
+            <span class="lg-input">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"/></svg>
+              <input type="text" id="email" placeholder="you@farmbuddie.com or username" autocomplete="username" autocapitalize="none" spellcheck="false">
+            </span>
+            <span class="lg-mode" id="loginMode"></span>
+          </label>
 
-    <!-- PASSWORD -->
-    <input
-      type="password"
-      id="password"
-      placeholder="Password"
-      autocomplete="current-password"
-    >
+          <label class="lg-field">
+            <span class="lg-label">Password</span>
+            <span class="lg-input">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Zm2 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z"/></svg>
+              <input type="password" id="password" placeholder="Your password" autocomplete="current-password">
+              <button type="button" class="lg-eye" id="pwToggle" aria-label="Show password" title="Show password">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.3 1.5 12c1.2 2.7 5 7 10.5 7s9.3-4.3 10.5-7C21.3 9.3 17.5 5 12 5Zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-6a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg>
+              </button>
+            </span>
+          </label>
 
-    <!-- ERROR MESSAGE -->
-    <div id="error-msg" class="error-text" style="display:none;"></div>
+          <div id="error-msg" class="lg-error" role="alert" style="display:none;"></div>
 
-    <!-- LOGIN BUTTON -->
-    <button class="login-btn" id="loginBtn" type="button">
-      Login
-    </button>
+          <button class="lg-btn" id="loginBtn" type="submit">Sign in</button>
+        </form>
 
-  </div>
-
+        <p class="lg-help">No account yet, or forgot the password? Ask your Farm Buddie admin.</p>
+      </div>
+      <footer class="lg-foot">© <span id="lgYear"></span> Farm Buddie · Irrigo Smart Irrigation</footer>
+    </section>
+  </main>
   <!-- Firebase Login Logic (CORRECT VERSION) -->
   <script type="module">
     import { auth } from "/js/firebase-init.js";
@@ -81,7 +110,8 @@
       }
 
       loginBtn.disabled = true;
-      loginBtn.textContent = "Signing in...";
+      loginBtn.classList.add("busy");
+      loginBtn.textContent = "Signing in…";
 
       // No "@": a team member (an account the admin made in User Roles) -
       // checked by our server: the production team goes to the Production
@@ -109,7 +139,8 @@
         })
         .finally(() => {
           loginBtn.disabled = false;
-          loginBtn.textContent = "Login";
+          loginBtn.classList.remove("busy");
+          loginBtn.textContent = "Sign in";
         });
     }
 
@@ -138,14 +169,34 @@
         errorMsg.textContent = err.message === "Failed to fetch" ? "Can't reach the server - check the internet connection" : err.message;
         errorMsg.style.display = "block";
         loginBtn.disabled = false;
-        loginBtn.textContent = "Login";
+        loginBtn.classList.remove("busy");
+        loginBtn.textContent = "Sign in";
       }
     }
 
-    loginBtn.addEventListener("click", login);
-    [emailInput, passwordInput].forEach((el) => el.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") login();
-    }));
+    // The form's submit covers the button and Enter in either box.
+    document.getElementById("loginForm").addEventListener("submit", (e) => { e.preventDefault(); login(); });
+
+    // Which sign-in this will be, as they type.
+    const mode = document.getElementById("loginMode");
+    emailInput.addEventListener("input", () => {
+      const v = emailInput.value.trim();
+      mode.textContent = !v ? "" : v.includes("@") ? "Admin sign-in" : "Team sign-in";
+      mode.className = "lg-mode" + (v ? (v.includes("@") ? " admin" : " team") : "");
+    });
+
+    // Show / hide the password.
+    const eye = document.getElementById("pwToggle");
+    eye.addEventListener("click", () => {
+      const show = passwordInput.type === "password";
+      passwordInput.type = show ? "text" : "password";
+      eye.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      eye.title = eye.getAttribute("aria-label");
+      eye.classList.toggle("on", show);
+      passwordInput.focus();
+    });
+    document.getElementById("lgYear").textContent = new Date().getFullYear();
+    emailInput.focus();
   </script>
 
 </body>
