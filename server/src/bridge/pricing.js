@@ -233,7 +233,7 @@ export function createPricingModule({ store, findDistributor = async () => null,
         mrp: r.mrp,
         distributorPrice: r.distributorPrice,
         basePrice: r.basePrice,
-        minPrice: r.minPrice,
+        minPrice: floorPrice(r),   // older app versions: the lowest price
         maxPrice: r.maxPrice,
         companyDiscount: companyDiscountOf(r),
         floorPrice: floorPrice(r),
@@ -619,7 +619,9 @@ export function createPricingModule({ store, findDistributor = async () => null,
       if (!GST_RATES_BP.includes(gstBp)) throw new Bad("GST rate must be a GST slab");
       const was = before.get(variantId);
       const basePrice = money(i.basePrice, "Farmer selling price");
-      const minPrice = money(i.minPrice, "Minimum price");
+      // No minimum price any more (the lowest price is selling - company
+      // discount); stored as the selling price for older readers.
+      const minPrice = basePrice;
       return {
         variantId,
         active: bool(i.active, true),
@@ -635,10 +637,9 @@ export function createPricingModule({ store, findDistributor = async () => null,
         // Only a product we make (Production Pricing: Manufacturing) has a company discount.
         companyDiscount: costings.get(variantId)?.source !== "make" ? 0
           : i.companyDiscount === undefined ? (was?.companyDiscount ?? 0) : (money(i.companyDiscount, "Company discount") ?? 0),
-        // No longer a limit of its own (the minimum price is) - kept for the
-        // record as selling price - minimum price.
+        // Not used any more (the company discount is the limit).
         maxDiscountType: "amt",
-        maxDiscountValue: Number.isSafeInteger(basePrice) && Number.isSafeInteger(minPrice) ? Math.max(0, basePrice - minPrice) : (was?.maxDiscountValue ?? 0),
+        maxDiscountValue: 0,
         gstBp
       };
     });

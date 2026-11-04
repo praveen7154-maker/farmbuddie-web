@@ -268,7 +268,7 @@ function renderLines() {
         <select data-f="mode"><option value="pct" ${l.mode === "pct" ? "selected" : ""}>% off</option>
           <option value="amt" ${l.mode === "amt" ? "selected" : ""}>₹ off</option>
           <option value="price" ${l.mode === "price" ? "selected" : ""}>₹ price</option></select></span>
-        ${p?.companyDiscount ? `<button class="pr-link pr-cd-use" data-cd="${i}" title="Give the company discount (up to ${rs(p.companyDiscount)}): Farm Buddie pays it, the distributor's margin stays the same">🎁 Company ${rs(p.companyDiscount)}</button>` : ""}
+        ${p?.companyDiscount ? `<button class="pr-link pr-cd-use" data-cd="${i}" title="The customer asked: give the full company discount (up to ${rs(p.companyDiscount)}) - or type less">🎁 Company ${rs(p.companyDiscount)}</button>` : ""}
         <span class="pr-hint">${p ? `up to ${rs(p.basePrice - p.floorPrice)} off` : "–"}</span></td>
       <td class="num" data-c="net"></td>
       <td class="num" data-c="taxable"></td>
@@ -334,7 +334,7 @@ function refreshCalc() {
     cells("taxable").textContent = rs(l.taxable);
     cells("gst").innerHTML = `${rs(l.gst)}<span class="pr-hint">${pct(l.gstBp)}</span>`;
     cells("total").textContent = rs(l.total);
-    cells("margin").innerHTML = `${rs(l.margin)}${l.companyDiscount ? `<span class="pr-hint" title="Farm Buddie pays this part of the discount">co. pays ${rs(l.companyDiscount * l.qty)}</span>` : ""}`;
+    cells("margin").textContent = rs(l.margin);
   });
   renderSummary(calc);
 }
@@ -381,7 +381,6 @@ function totalsHtml(t, internal, head = true) {
   h += row("GST total", rs(t.gst));
   if (t.roundOff) h += row("Round off", `${t.roundOff > 0 ? "+" : "−"} ${rs(Math.abs(t.roundOff))}`, "sub");
   h += row("Estimated total (incl. GST)", rs(t.payable), "total");
-  if (internal && t.companyDiscount) h += row("🔒 Company discount in it (Farm Buddie pays)", rs(t.companyDiscount), "internal");
   if (internal && t.margin !== undefined) h += row("🔒 Distributor margin (not printed)", rs(t.margin), "internal");
   return h;
 }
@@ -573,7 +572,7 @@ function showQuote(q) {
   $("qmBody").innerHTML = quoteDocHtml(q) +
     (q.profit ? `<p class="pr-hint">🔒 Our cost ${rs(q.profit.ourCost)} · our revenue ${rs(q.profit.ourRevenue)} · <b>our profit ${rs(q.profit.ourProfit)}</b>
       (${q.profit.viaDistributor ? "sold to the distributor at distributor price" : "direct sale"})</p>` : "") +
-    `<p class="pr-hint">🔒 Internal: distributor margin ${rs(q.totals.margin)} · distributor buys at ${rs(q.totals.distributorCost)}${q.totals.companyDiscount ? ` (after ${rs(q.totals.companyDiscount)} company discount)` : ""} · status
+    `<p class="pr-hint">🔒 Internal: distributor margin ${rs(q.totals.margin)} · distributor buys at ${rs(q.totals.distributorCost)} · status
       <span class="pr-pill ${expired ? "expired" : q.status}">${expired ? "expired" : q.status}</span>${q.statusBy ? ` by ${esc(q.statusBy)}` : ""}</p>`;
   const a = $("qmActions");
   a.innerHTML = `<button class="pr-btn" data-a="print">🖨️ Print / PDF</button><button class="pr-btn" data-a="wa">🟢 WhatsApp</button>
@@ -795,13 +794,13 @@ async function saveDraft() {
     editing.detailsDirty = false;
   }
   if (editing.dirty.size) {
-    const bad = [...editing.dirty.values()].filter((r) => [r.mrp, r.distributorPrice, r.basePrice, r.minPrice, r.maxPrice, r.costPrice, r.companyDiscount].some((v) => Number.isNaN(v)));
+    const bad = [...editing.dirty.values()].filter((r) => [r.mrp, r.distributorPrice, r.basePrice, r.maxPrice, r.costPrice, r.companyDiscount].some((v) => Number.isNaN(v)));
     if (bad.length) throw new Error(`${bad.length} row(s) have an amount that isn't a number - fix the red boxes first`);
     const items = [...editing.dirty.values()].map((r) => ({
       variantId: r.variantId, active: r.active, mrp: r.mrp, distributorPrice: r.distributorPrice, basePrice: r.basePrice,
       // Our cost: only those who see it send it; Production Pricing's cost wins on the server anyway.
       ...(can("editor") && !r.costing ? { costPrice: r.costPrice ?? null } : {}),
-      minPrice: r.minPrice, maxPrice: r.maxPrice, companyDiscount: r.companyDiscount ?? 0, gstBp: r.gstBp
+      maxPrice: r.maxPrice, companyDiscount: r.companyDiscount ?? 0, gstBp: r.gstBp
     }));
     await put(`/pricing/admin/lists/${id}/items`, { items });
     editing.dirty.clear();
@@ -906,7 +905,12 @@ function shownRows() {
     && (show !== "problems" || (r.active && R.priceProblems(r).length))
     && (show !== "changed" || changedVsCurrent(r)));
 }
-const MONEY = ["mrp", "distributorPrice", "basePrice", "minPrice", "maxPrice", "companyDiscount", "costPrice"];
+const MONEY = ["mrp", "distributorPrice", "basePrice", "maxPrice", "companyDiscount", "costPrice"];
+// The distributor price as % below the lowest price ("15" = 15%), "" when unknown.
+const dpPctText = (r) => {
+  const bp = R.distributorPctBelow(r);
+  return bp === null ? "" : String(Math.round(bp) / 100);
+};
 const changedVsCurrent = (r) => !r.current || MONEY.some((k) => r[k] !== r.current[k]) || r.active !== r.current.active;
 
 function renderItems() {
@@ -932,12 +936,14 @@ function renderItems() {
       <td class="pr-prod"><b>${esc(r.productName)}</b><small>${r.variantName !== "Standard" ? `${esc(r.variantName)} · ` : ""}${esc(r.sku)}${r.catalogueActive ? "" : " · ⚠️ inactive in catalogue"}</small></td>
       <td class="num pr-cost-col">${cost}</td>
       <td class="num">${money("mrp")}<span data-c="mrpex">${mrpExHint(r)}</span></td>
-      <td class="num">${money("distributorPrice")}</td><td class="num">${money("basePrice")}</td>
+      <td class="num">${money("maxPrice")}</td>
       <td class="num">${companyDiscCell(r, draft, was)}</td>
-      <td class="num">${money("minPrice")}</td><td class="num">${money("maxPrice")}</td>
+      <td class="num">${money("basePrice")}</td>
+      <td class="num pr-lowest" data-c="floor"></td>
+      <td class="num">${money("distributorPrice")}${draft ? `<span class="pr-dp-pct"><input class="pr-money pr-pct" data-k="dpPct" value="${esc(dpPctText(r))}" placeholder="%" inputmode="decimal" title="% below the lowest price - fills the distributor price"><small>% below lowest</small></span>` : `<span class="pr-hint">${dpPctText(r) ? `${dpPctText(r)}% below lowest` : ""}</span>`}</td>
       <td>${draft ? `<select data-k="gstBp">${gstOpts(r.gstBp)}</select>` : pct(r.gstBp)}</td>
-      <td class="num" data-c="floor"></td><td class="num" data-c="margin"></td><td class="num pr-cost-col" data-c="profit"></td><td class="pr-checkcell" data-c="check"></td></tr>`;
-  }).join("") : `<tr><td colspan="14" class="ota-muted">No rows match.</td></tr>`;
+      <td class="num" data-c="margin"></td><td class="num pr-cost-col" data-c="profit"></td><td class="pr-checkcell" data-c="check"></td></tr>`;
+  }).join("") : `<tr><td colspan="13" class="ota-muted">No rows match.</td></tr>`;
   showCostCols();
   $("itemsBody").querySelectorAll("tr[data-v]").forEach((tr) => {
     refreshRow(tr);
@@ -950,7 +956,7 @@ function showCostCols() { document.querySelectorAll(".pr-cost-col").forEach((el)
 const profitHtml = (p) => {
   if (!p) return `<span class="ota-muted" title="Enter our cost (or work it out in Production Pricing) to see our profit">–</span>`;
   const c = (v) => `<span style="color:${v < 0 ? "#b91c1c" : "#15803d"}">${rs(v)}</span>`;
-  return `${c(p.direct)}<span class="pr-hint">via dist. ${c(p.viaDistributor)}</span>${p.companyDiscount ? `<span class="pr-hint">− ${rs(p.companyDiscount)} if the full company discount is given</span>` : ""}`;
+  return `${c(p.direct)}<span class="pr-hint">via dist. ${c(p.viaDistributor)}</span>${p.companyDiscount ? `<span class="pr-hint">direct at the lowest: ${c(p.direct - p.companyDiscount)}</span>` : ""}`;
 };
 
 function rowOf(tr) { return editing.rows.find((r) => r.variantId === Number(tr.dataset.v)); }
@@ -989,13 +995,24 @@ function onCell(tr, el) {
   const k = el.dataset.k;
   if (k === "active") { r.active = el.checked; tr.classList.toggle("off", !r.active); }
   else if (k === "gstBp") r.gstBp = Number(el.value);
-  else {
+  else if (k === "dpPct") {
+    // % below the lowest price: the distributor price follows it (also when
+    // the selling price or company discount change later), until typed in ₹.
+    const t = el.value.trim();
+    const ok = /^\d{1,2}(\.\d{1,2})?$/.test(t);
+    el.classList.toggle("bad", t !== "" && !ok);
+    const dpBox = tr.querySelector('[data-k="distributorPrice"]');
+    if (!ok) { if (dpBox) delete dpBox.dataset.pct; }
+    else if (dpBox) { dpBox.dataset.pct = String(Math.round(Number(t) * 100)); followPct(tr, r); }
+  } else {
     r[k] = toPaise(el.value);
     if (k === "companyDiscount" && r[k] === null) r[k] = 0;   // empty = no company discount
+    if (k === "distributorPrice") delete el.dataset.pct;      // typed in ₹ - no longer follows the %
     el.classList.toggle("bad", Number.isNaN(r[k]));
     el.classList.toggle("changed", !!r.current && r.current[k] !== r[k]);
   }
   autoFill(tr, r, k);
+  if (k !== "dpPct") followPct(tr, r);
   editing.dirty.set(r.variantId, r);
   const exBox = tr.querySelector('[data-c="mrpex"]');
   if (exBox && (k === "mrp" || k === "gstBp")) exBox.innerHTML = mrpExHint(r);
@@ -1006,7 +1023,6 @@ function onCell(tr, el) {
 // Fills an EMPTY box from the others, so a row needs only the MRP and the
 // distributor price:
 //   maximum price = farmer selling price = MRP without GST (rounded down to the rupee)
-//   minimum price = farmer selling price (nothing off the distributor's margin)
 // The company discount never changes the selling price (it lowers the lowest
 // price). A box the user typed in, or one already saved, is never overwritten.
 function autoFill(tr, r, k) {
@@ -1022,14 +1038,25 @@ function autoFill(tr, r, k) {
     b.classList.toggle("changed", !!r.current && r.current[key] !== v);
   };
   // Typing in a box yourself makes it yours.
-  if (["maxPrice", "minPrice", "basePrice"].includes(k) && box(k) && r[k] !== null) delete box(k).dataset.auto;
-  let baseChanged = k === "basePrice";
+  if (["maxPrice", "basePrice"].includes(k) && box(k) && r[k] !== null) delete box(k).dataset.auto;
   if ((k === "mrp" || k === "gstBp") && Number.isInteger(r.mrp) && r.mrp > 0) {
     const ex = mrpExGst(r);
     if (free("maxPrice")) set("maxPrice", ex);
-    if (free("basePrice")) { set("basePrice", ex); baseChanged = true; }
+    if (free("basePrice")) set("basePrice", ex);
   }
-  if (baseChanged && Number.isInteger(r.basePrice) && free("minPrice")) set("minPrice", r.basePrice);
+}
+// The distributor price typed as % below the lowest price follows it; typed in ₹, the % shows how far below it is.
+function followPct(tr, r) {
+  const dpBox = tr.querySelector('[data-k="distributorPrice"]');
+  const pctBox = tr.querySelector('[data-k="dpPct"]');
+  if (dpBox?.dataset.pct && Number.isInteger(r.basePrice)) {
+    r.distributorPrice = R.distributorFromPct(r, Number(dpBox.dataset.pct));
+    dpBox.value = paiseInput(r.distributorPrice);
+    dpBox.classList.remove("bad");
+    dpBox.classList.toggle("changed", !!r.current && r.current.distributorPrice !== r.distributorPrice);
+  } else if (pctBox && document.activeElement !== pctBox) {
+    pctBox.value = dpPctText(r);
+  }
 }
 
 function refreshRow(tr) {
@@ -1038,7 +1065,7 @@ function refreshRow(tr) {
   if (!r.active) { cell("floor").textContent = "–"; cell("margin").textContent = "–"; cell("check").innerHTML = `<span class="ota-muted">Not on sale</span>`; return; }
   const pc = tr.querySelector('[data-c="profit"]');
   if (pc) pc.innerHTML = r.active ? profitHtml(R.ourProfit(r)) : "–";
-  if ([r.mrp, r.distributorPrice, r.basePrice, r.minPrice, r.maxPrice].every((v) => v === null)) {
+  if ([r.mrp, r.distributorPrice, r.basePrice, r.maxPrice].every((v) => v === null)) {
     tr.classList.add("has-err");
     cell("floor").textContent = "–"; cell("margin").textContent = "–";
     cell("check").innerHTML = `<span class="e">Enter the prices, or untick “On” if you don't sell it yet</span>`;
@@ -1049,7 +1076,9 @@ function refreshRow(tr) {
   tr.classList.toggle("has-err", errs.length > 0);
   cell("floor").textContent = errs.length ? "–" : rs(R.floorPrice(r));
   const m = Number.isInteger(r.basePrice) && Number.isInteger(r.distributorPrice) ? r.basePrice - r.distributorPrice : null;
-  cell("margin").innerHTML = m === null ? "–" : `${rs(m)}${r.basePrice ? `<span class="pr-hint">${Math.round(m * 1000 / r.basePrice) / 10}%${r.companyDiscount > 0 ? " · same with company discount" : ""}</span>` : ""}`;
+  // At the selling price; with the full company discount the distributor keeps the margin at the lowest price.
+  const atLow = m === null ? null : R.floorPrice(r) - r.distributorPrice;
+  cell("margin").innerHTML = m === null ? "–" : `${rs(m)}${r.basePrice ? `<span class="pr-hint">${Math.round(m * 1000 / r.basePrice) / 10}%${r.companyDiscount > 0 ? ` · ${rs(atLow)} at the lowest` : ""}</span>` : ""}`;
   cell("check").innerHTML = errs.length ? errs.map((e) => `<span class="e">✘ ${esc(e)}</span>`).join("")
     : warns.length ? warns.map((w) => `<span class="w">⚠ ${esc(w)}</span>`).join("") : `<span class="ok">✔ OK</span>`;
 }
@@ -1090,8 +1119,8 @@ function printPriceList(kind) {
   const order = Object.keys(CAT_LABEL);
   const groups = order.map((c) => [c, rows.filter((r) => r.category === c)]).filter(([, g]) => g.length);
   const cols = internal
-    ? ["Our cost", "MRP<br><small>incl. GST</small>", "Distributor price", "Farmer selling price", "Company discount<br><small>up to</small>", "Lowest price", "Distributor margin", "Our profit<br><small>direct</small>", "Our profit<br><small>via distributor</small>", "GST"]
-    : ["MRP<br><small>incl. GST</small>", "Your buying price", "Farmer selling price", "Company discount<br><small>up to</small>", "Lowest selling price", "Your margin", "GST"];
+    ? ["Our cost", "MRP<br><small>incl. GST</small>", "Company discount<br><small>up to</small>", "Farmer selling price", "Lowest price", "Distributor price", "Distributor margin", "Our profit<br><small>direct</small>", "Our profit<br><small>via distributor</small>", "GST"]
+    : ["MRP<br><small>incl. GST</small>", "Company discount<br><small>up to</small>", "Farmer selling price", "Lowest selling price", "Your buying price", "Your margin<br><small>at selling · at lowest</small>", "GST"];
   let n = 0;
   const body = groups.map(([cat, g]) => `<tr class="grp"><td colspan="${cols.length + 2}">${esc(CAT_LABEL[cat] || cat)}</td></tr>` + g.map((r) => {
     n++;
@@ -1102,10 +1131,12 @@ function printPriceList(kind) {
     const withPct = (v, of) => (v === null || v === undefined || !of ? (v === null || v === undefined ? "–" : rs(v))
       : `${rs(v)}<br><small class="pc ${v < 0 ? "neg" : ""}">${(Math.round(v * 1000 / of) / 10).toFixed(1)}%</small>`);
     const dm = r.basePrice - r.distributorPrice;
+    const low = R.floorPrice(r);
+    const margins = disc ? `${withPct(dm, r.basePrice)}<br><small>at lowest ${rs(low - r.distributorPrice)}</small>` : withPct(dm, r.basePrice);
     const cells = internal
-      ? [rs(r.costPrice), r.mrp ? rs(r.mrp) : "–", rs(r.distributorPrice), rs(r.basePrice), disc ? withPct(disc, r.basePrice) : "–", rs(R.floorPrice(r)),
-        withPct(dm, r.basePrice), p ? withPct(p.direct, r.basePrice) : "–", p ? withPct(p.viaDistributor, r.distributorPrice) : "–", pct(r.gstBp)]
-      : [r.mrp ? rs(r.mrp) : "–", rs(r.distributorPrice), rs(r.basePrice), disc ? withPct(disc, r.basePrice) : "–", rs(R.floorPrice(r)), withPct(dm, r.basePrice), pct(r.gstBp)];
+      ? [rs(r.costPrice), r.mrp ? rs(r.mrp) : "–", disc ? withPct(disc, r.basePrice) : "–", rs(r.basePrice), rs(low), rs(r.distributorPrice),
+        margins, p ? withPct(p.direct, r.basePrice) : "–", p ? withPct(p.viaDistributor, r.distributorPrice) : "–", pct(r.gstBp)]
+      : [r.mrp ? rs(r.mrp) : "–", disc ? withPct(disc, r.basePrice) : "–", rs(r.basePrice), rs(low), rs(r.distributorPrice), margins, pct(r.gstBp)];
     return `<tr><td class="c">${n}</td><td>${name}</td>${cells.map((c) => `<td class="num">${c}</td>`).join("")}</tr>`;
   }).join("")).join("");
   const coLines = [co.companyAddress, [co.companyGstin && `GSTIN: ${co.companyGstin}`, co.companyPhone && `Ph: ${co.companyPhone}`].filter(Boolean).join(" · "),
@@ -1166,8 +1197,8 @@ function printPriceList(kind) {
   </table>
   <div class="notes">
     All amounts in Indian Rupees (₹). MRP includes GST; all other prices are before GST - GST is charged extra at the rate shown.
-    ${internal ? "Company discount = the most Farm Buddie pays per unit when a distributor gives the customer a discount (optional; the distributor pays us that much less, so their margin stays the same). Lowest price = minimum price − company discount. Our profit: direct = farmer selling price − our cost; via distributor = distributor price − our cost (less any company discount given). Green % : company discount, distributor margin and direct profit as % of the farmer selling price; profit via distributor as % of the distributor price."
-      : "Company discount = the most Farm Buddie pays per unit when your customer asks for a discount: give any amount up to it, or none - you pay Farm Buddie that much less, so your margin stays the same. A discount beyond it, down to the lowest selling price, comes from your margin. The customer may never be charged more than the MRP. Green % = as a share of the farmer selling price."}
+    ${internal ? "Quotes are at the farmer selling price; if the customer asks, a discount up to the company discount may be given. Lowest price = farmer selling price − company discount. The distributor always buys at the distributor price: selling without a discount, they keep the company discount as extra margin. Our profit: direct = farmer selling price − our cost; via distributor = distributor price − our cost. Green % : company discount, distributor margin and direct profit as % of the farmer selling price; profit via distributor as % of the distributor price."
+      : "Sell at the farmer selling price. If your customer asks for a discount, you may give up to the company discount (never below the lowest selling price). You always buy at your buying price - sell without a discount and the company discount is your extra margin. The customer may never be charged more than the MRP. Green % = as a share of the farmer selling price."}
     Prices are valid for the period shown and may change without notice; this list replaces all earlier price lists.
     ${notes}
   </div>
@@ -1183,14 +1214,14 @@ $("pdfInternal").addEventListener("click", () => printPriceList("internal"));
 $("pdfDistributor").addEventListener("click", () => printPriceList("distributor"));
 
 // ---- CSV ----
-const CSV_COLS = ["sku", "product", "variant", "on_sale", "mrp", "distributor_price", "selling_price", "company_discount", "min_price", "max_price",
-  "lowest_price", "gst_percent"];
+const CSV_COLS = ["sku", "product", "variant", "on_sale", "mrp", "max_price", "company_discount", "selling_price", "lowest_price", "distributor_price",
+  "gst_percent"];
 const csvCell = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
 $("csvExport").addEventListener("click", () => {
-  const rows = editing.rows.map((r) => [r.sku, r.productName, r.variantName, r.active ? "yes" : "no", paiseInput(r.mrp), paiseInput(r.distributorPrice),
-    paiseInput(r.basePrice), paiseInput(r.companyDiscount || 0), paiseInput(r.minPrice), paiseInput(r.maxPrice),
-    Number.isInteger(r.minPrice) ? paiseInput(R.floorPrice(r)) : "", String(r.gstBp / 100)]);
+  const rows = editing.rows.map((r) => [r.sku, r.productName, r.variantName, r.active ? "yes" : "no", paiseInput(r.mrp), paiseInput(r.maxPrice),
+    paiseInput(r.companyDiscount || 0), paiseInput(r.basePrice), Number.isInteger(r.basePrice) ? paiseInput(R.floorPrice(r)) : "",
+    paiseInput(r.distributorPrice), String(r.gstBp / 100)]);
   // Our cost only for those who may see it.
   const withCost = can("editor");
   const head = withCost ? [...CSV_COLS, "our_cost"] : CSV_COLS;

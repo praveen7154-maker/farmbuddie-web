@@ -7,83 +7,89 @@ const R = await import("../src/bridge/pricingRules.js");
 
 // ₹ -> paise
 const P = (r) => Math.round(r * 100);
-const row = (o = {}) => ({
-  mrp: P(2000), distributorPrice: P(1000), basePrice: P(1500), minPrice: P(1200), maxPrice: P(1600),
-  maxDiscountType: "pct", maxDiscountValue: 1000, gstBp: 1800, kind: "goods", ...o
-});
+// A price row. Older test data gave a minimum price; it's now the company
+// discount (selling - minimum), which puts the lowest price where it was.
+const row = (o = {}) => {
+  const r = { mrp: P(2000), distributorPrice: P(1000), basePrice: P(1500), maxPrice: P(1600), companyDiscount: P(300), gstBp: 1800, kind: "goods", ...o };
+  if (o.minPrice !== undefined && o.companyDiscount === undefined) r.companyDiscount = r.basePrice - o.minPrice;
+  delete r.minPrice;
+  return r;
+};
 
 test("price row rules", () => {
   assert.deepEqual(R.priceProblems(row()), []);
   assert.match(R.priceProblems(row({ mrp: -1 }))[0], /negative/);
   assert.match(R.priceProblems(row({ basePrice: null }))[0], /missing/);
   assert.match(R.priceProblems(row({ basePrice: 10.5 }))[0], /negative/);   // not whole paise
-  assert.match(R.priceProblems(row({ minPrice: P(900) })).join(), /loss/);   // floor below distributor price
-  assert.match(R.priceProblems(row({ minPrice: P(1550) })).join(), /above the farmer selling price/);
+  // lowest 1,500 - 600 = 900 < distributor 1,000
+  assert.match(R.priceProblems(row({ companyDiscount: P(600) })).join(), /above the lowest price .* loss/);
+  assert.deepEqual(R.priceProblems(row({ companyDiscount: P(500) })), []);        // lowest = distributor: allowed (warned)
+  assert.match(R.priceProblems(row({ companyDiscount: P(1500) })).join(), /less than the farmer selling price/);
   assert.match(R.priceProblems(row({ maxPrice: P(1400) })).join(), /above the maximum/);
   // ₹1,700 + 18% = ₹2,006 > MRP ₹2,000
   assert.match(R.priceProblems(row({ maxPrice: P(1700) })).join(), /more than the MRP/);
   assert.match(R.priceProblems(row({ gstBp: 1500 })).join(), /GST slab/);
-  // The old max discount is ignored - the minimum price is the limit now.
-  assert.deepEqual(R.priceProblems(row({ maxDiscountType: "x", maxDiscountValue: 99999999 })), []);
-  // Company discount: optional, not negative, never more than the distributor price
-  assert.deepEqual(R.priceProblems(row({ companyDiscount: P(1000) })), []);
+  // A minimum price or the old max discount are ignored
+  assert.deepEqual(R.priceProblems({ ...row(), minPrice: P(5), maxDiscountType: "x", maxDiscountValue: 99999999 }), []);
+  assert.deepEqual(R.priceProblems(row({ companyDiscount: null })), []);
   assert.match(R.priceProblems(row({ companyDiscount: -1 })).join(), /Company discount can't be negative/);
-  assert.match(R.priceProblems(row({ companyDiscount: P(1001) })).join(), /more than the distributor price/);
   // A service has no MRP.
   assert.deepEqual(R.priceProblems(row({ kind: "service", mrp: null })), []);
   assert.match(R.priceProblems(row({ kind: "goods", mrp: null })).join(), /MRP is missing/);
 });
 
-test("floor = minimum price - company discount", () => {
-  assert.equal(R.floorPrice(row({ minPrice: P(1400) })), P(1400));
-  assert.equal(R.floorPrice(row({ minPrice: P(1100) })), P(1100));     // no max discount any more
-  assert.equal(R.floorPrice(row({ minPrice: P(1400), companyDiscount: P(300) })), P(1100));
-  assert.equal(R.floorPrice(row({ minPrice: P(1400), companyDiscount: null })), P(1400));
-  assert.match(R.priceWarnings(row({ minPrice: P(1000) }))[0], /distributor earns nothing/);
-  // Our cost 950: a distributor sale at 1000 is fine, but not with the full ₹100 company discount
-  assert.match(R.priceWarnings(row({ costPrice: P(950), companyDiscount: P(100) })).join(), /full company discount a distributor sale loses ₹50.00/);
-  assert.deepEqual(R.ourProfit(row({ costPrice: P(700), companyDiscount: P(100) })), { direct: P(800), viaDistributor: P(300), companyDiscount: P(100) });
+test("lowest price = farmer selling price - company discount; distributor price from a %", () => {
+  assert.equal(R.floorPrice(row()), P(1200));
+  assert.equal(R.floorPrice(row({ companyDiscount: 0 })), P(1500));
+  assert.equal(R.floorPrice(row({ companyDiscount: null })), P(1500));
+  assert.equal(R.floorPrice({ ...row({ companyDiscount: 0 }), minPrice: P(1000) }), P(1500));   // a minimum price doesn't lower it
+  assert.match(R.priceWarnings(row({ companyDiscount: P(500) }))[0], /At the lowest price the distributor earns nothing/);
+  assert.match(R.priceWarnings(row({ costPrice: P(1250) })).join(), /lowest price is below our cost/);   // lowest 1,200
+  assert.match(R.priceWarnings(row({ costPrice: P(1050) })).join(), /Distributor price is below our cost/);
+  assert.deepEqual(R.ourProfit(row({ costPrice: P(700) })), { direct: P(800), viaDistributor: P(300), companyDiscount: P(300) });
+  // 15% below the lowest ₹11,500 = ₹9,775 (to the rupee)
+  const hub = row({ mrp: P(14160), basePrice: P(12000), maxPrice: P(12000), companyDiscount: P(500), distributorPrice: null });
+  assert.equal(R.distributorFromPct(hub, 1500), P(9775));
+  assert.equal(R.distributorFromPct(hub, 1234), P(10081));          // 10,080.90 -> 10,081
+  assert.equal(R.distributorPctBelow({ ...hub, distributorPrice: P(9775) }), 1500);
+  assert.equal(R.distributorPctBelow(hub), null);
 });
 
-test("company discount: optional, up to the company's amount, and the distributor's margin stays whole", () => {
-  // Selling ₹1,500, distributor ₹1,000 (margin ₹500), minimum ₹1,500 (nothing off the margin),
-  // company discount up to ₹200 -> lowest ₹1,300.
+test("company discount: optional; the distributor buys at their price - no discount is their bonus", () => {
+  // Selling ₹1,500, company discount up to ₹200 -> lowest ₹1,300; distributor ₹1,000.
   const p = new Map([[1, { variantId: 1, sku: "X", productName: "Hub", variantName: "Standard", unit: "pcs", kind: "goods",
-    ...row({ minPrice: P(1500), companyDiscount: P(200) }) }]]);
+    ...row({ companyDiscount: P(200) }) }]]);
   const q = (l) => R.calculateQuote(p, [{ variantId: 1, qty: 2, ...l }]);
-  // No discount: the company pays nothing, the distributor buys at ₹1,000.
+  // No discount: the distributor keeps ₹500 a unit (₹200 of it the bonus).
   let r = q({});
   assert.equal(r.lines[0].companyDiscount, 0);
   assert.equal(r.lines[0].distributorNet, P(1000));
   assert.equal(r.totals.margin, P(1000));
-  // ₹150 off: all company discount - the distributor buys at ₹850, margin still ₹500 a unit.
+  // ₹150 off: margin ₹350 a unit, they still buy at ₹1,000.
   r = q({ discountType: "amt", discountValue: P(150) });
   assert.equal(r.ok, true);
   assert.equal(r.lines[0].unitPrice, P(1350));
   assert.equal(r.lines[0].companyDiscount, P(150));
-  assert.equal(r.lines[0].distributorNet, P(850));
-  assert.equal(r.lines[0].margin, P(1000));
+  assert.equal(r.lines[0].margin, P(700));
   assert.equal(r.totals.companyDiscount, P(300));
-  assert.equal(r.totals.distributorCost, P(1700));
-  // The full ₹200: lowest price, margin unchanged.
+  assert.equal(r.totals.distributorCost, P(2000));
+  // The full ₹200: the lowest price, margin ₹300 a unit.
   r = q({ unitPrice: P(1300) });
   assert.equal(r.ok, true);
-  assert.equal(r.totals.margin, P(1000));
-  // Past the company's amount (and the minimum leaves nothing of their own) - refused.
+  assert.equal(r.totals.margin, P(600));
+  // Past the company discount - refused.
   r = q({ discountType: "amt", discountValue: P(201) });
   assert.equal(r.ok, false);
-  assert.match(r.errors[0].error, /lowest allowed price is ₹1,300.00 per unit \(at most ₹200.00 off, ₹200.00 of it company discount\)/);
-  // With a minimum of ₹1,400 the distributor may go ₹100 further out of their own margin.
-  const p2 = new Map([[1, { ...p.get(1), minPrice: P(1400) }]]);
-  r = R.calculateQuote(p2, [{ variantId: 1, qty: 1, discountType: "amt", discountValue: P(300) }]);
-  assert.equal(r.ok, true);
-  assert.equal(r.lines[0].companyDiscount, P(200));
-  assert.equal(r.lines[0].margin, P(400));
-  assert.equal(R.calculateQuote(p2, [{ variantId: 1, qty: 1, discountType: "amt", discountValue: P(301) }]).ok, false);
-  // Our profit on the distributor's quote: they pay us ₹1,000 - ₹200.
-  assert.equal(R.quoteProfit(r.lines, () => P(600), true).ourProfit, P(200));
-  assert.equal(R.quoteProfit(r.lines, () => P(600), false).ourProfit, P(600));
-  // A quote saved before company discounts: revenue at the distributor price.
+  assert.match(r.errors[0].error, /lowest allowed price is ₹1,300.00 per unit \(company discount up to ₹200.00\)/);
+  // No company discount: no discount at all.
+  const p0 = new Map([[1, { ...p.get(1), companyDiscount: 0 }]]);
+  assert.match(R.calculateQuote(p0, [{ variantId: 1, qty: 1, discountType: "amt", discountValue: 100 }]).errors[0].error, /no discount on this product/);
+  // Our profit on the distributor's quote: ₹1,000 whatever the discount.
+  r = q({ discountType: "amt", discountValue: P(200) });
+  assert.equal(R.quoteProfit(r.lines, () => P(600), true).ourProfit, P(800));
+  assert.equal(R.quoteProfit(r.lines, () => P(600), false).ourProfit, P(1400));
+  // A quote saved while a given discount lowered the distributor's price keeps that.
+  assert.equal(R.quoteProfit([{ variantId: 1, qty: 1, distributorPrice: P(1000), distributorNet: P(900), unitPrice: P(1300) }], () => P(600), true).ourProfit, P(300));
   assert.equal(R.quoteProfit([{ variantId: 1, qty: 1, distributorPrice: P(1000), unitPrice: P(1500) }], () => P(600), true).ourProfit, P(400));
 });
 
@@ -153,10 +159,10 @@ test("quote: per-line prices, discount, GST split, round-off", () => {
 
 test("quote: discount past the floor, bad quantities and unknown products are refused", () => {
   const p = prices();
-  // Hub: selling ₹1,500, minimum ₹1,200 -> at most ₹300 off
+  // Hub: selling ₹1,500, company discount up to ₹300 -> lowest ₹1,200
   const over = R.calculateQuote(p, [{ variantId: 1, qty: 1, discountType: "pct", discountValue: 2100 }]);
   assert.equal(over.ok, false);
-  assert.match(over.errors[0].error, /lowest allowed price is ₹1,200.00 per unit \(at most ₹300.00 off\)/);
+  assert.match(over.errors[0].error, /lowest allowed price is ₹1,200.00 per unit \(company discount up to ₹300.00\)/);
   assert.equal(R.calculateQuote(p, [{ variantId: 1, qty: 1, discountType: "pct", discountValue: 2000 }]).ok, true);
   assert.equal(R.calculateQuote(p, [{ variantId: 1, qty: 1, unitPrice: P(1199) }]).ok, false);
   assert.equal(R.calculateQuote(p, [{ variantId: 1, qty: 1, unitPrice: P(1200) }]).ok, true);
@@ -271,12 +277,19 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
       "FB-VNS-4": [1200, 500, 800, 600, 1000], "FB-VNS-8": [1800, 800, 1300, 1000, 1500],
       "FB-SV24": [600, 250, 400, 300, 500], "FB-TR2A": [500, 200, 300, 250, 400], "FB-ANT": [300, 100, 200, 150, 250]
     };
+    // The hub and motor node are made by us (Production Pricing), so they may
+    // have a company discount: selling - the old minimum (₹150, ₹200). Our
+    // cost = 60% of the distributor price.
+    for (const sku of ["FB-HUB", "FB-MN"]) {
+      const cost = Math.round(P(priced[sku][1]) * 0.6);
+      assert.equal((await call(OWNER, `/pricing/admin/costing/${vid(sku)}`, "PUT", { source: "make", components: [{ name: "Board", cost }] })).status, 200);
+    }
     const items = detail.items.map((i) => {
       const p = priced[i.sku];
       if (!p) return { variantId: i.variantId, active: false, gstBp: i.gstBp };
       const [mrp, dp, b, mn, mx] = p.map(P);
-      return { variantId: i.variantId, active: true, mrp, distributorPrice: dp, basePrice: b, minPrice: mn, maxPrice: mx,
-        maxDiscountType: "pct", maxDiscountValue: 1000, gstBp: 1800, costPrice: Math.round(dp * 0.6) };   // our cost = 60% of the distributor price
+      return { variantId: i.variantId, active: true, mrp, distributorPrice: dp, basePrice: b, companyDiscount: b - mn, maxPrice: mx,
+        gstBp: 1800, costPrice: Math.round(dp * 0.6) };
     });
     // Negative and fractional values are refused outright
     assert.equal((await call(OWNER, `/pricing/admin/lists/${listId}/items`, "PUT", { items: [{ ...items[0], mrp: -5 }] })).status, 400);
@@ -307,13 +320,15 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     // Older app versions still read "max discount": selling - lowest price
     assert.equal(hub.maxDiscountType, "amt");
     assert.equal(hub.maxDiscountValue, P(150));
-    assert.equal(hub.companyDiscount, 0);
+    assert.equal(hub.companyDiscount, P(150));
+    // Bought / untagged products get none, whatever was sent
+    assert.equal(cur.items.find((i) => i.sku === "FB-SV24").companyDiscount, 0);
     // Our cost never reaches a distributor; the owner sees it with our profit
     assert.equal(hub.costPrice, undefined);
     assert.ok(!JSON.stringify(cur).includes("costPrice"));
     const ownerHub = (await call(OWNER, "/pricing/current")).body.items.find((i) => i.sku === "FB-HUB");
     assert.equal(ownerHub.costPrice, P(600));
-    assert.deepEqual(ownerHub.ourProfit, { direct: P(900), viaDistributor: P(400), companyDiscount: 0 });
+    assert.deepEqual(ownerHub.ourProfit, { direct: P(900), viaDistributor: P(400), companyDiscount: P(150) });
     assert.equal(hub.floorPrice, P(1350));
     assert.equal(cur.myState, "Karnataka");
     assert.equal((await call(DIST, `/pricing/admin/lists/${listId}/items`, "PUT", { items })).status, 403);
@@ -360,9 +375,10 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     assert.equal(detail.compareWith.id, listId);
     const hubRow = detail.items.find((i) => i.sku === "FB-HUB");
     assert.equal(hubRow.current.basePrice, P(1500));
-    // A company discount only on a product we make: the hub isn't tagged yet, so it's dropped
-    await call(OWNER, `/pricing/admin/lists/${v2}/items`, "PUT", { items: [{ ...hubRow, companyDiscount: P(100) }] });
-    assert.equal((await call(OWNER, `/pricing/admin/lists/${v2}`)).body.items.find((i) => i.sku === "FB-HUB").companyDiscount, 0);
+    // A company discount only on a product we make: the valve node isn't tagged, so it's dropped
+    const vnsRow = detail.items.find((i) => i.sku === "FB-VNS-4");
+    await call(OWNER, `/pricing/admin/lists/${v2}/items`, "PUT", { items: [{ ...vnsRow, companyDiscount: P(100) }] });
+    assert.equal((await call(OWNER, `/pricing/admin/lists/${v2}`)).body.items.find((i) => i.sku === "FB-VNS-4").companyDiscount, 0);
     // Tagged Manufacturing (our cost ₹600, as typed before) it may have one
     assert.equal((await call(OWNER, `/pricing/admin/costing/${vid("FB-HUB")}`, "PUT", { source: "make", components: [{ name: "Board", cost: P(600) }] })).status, 200);
     // Company discount can't be more than the distributor price
@@ -370,7 +386,7 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     await call(OWNER, `/pricing/admin/lists/${v2}`, "PUT", { name: "Diwali prices", effectiveFrom: "2026-10-20T00:00:00+05:30" });
     r = await call(OWNER, `/pricing/admin/lists/${v2}/submit`, "POST");
     assert.equal(r.status, 400);
-    assert.match(r.body.problems.join(), /Company discount \(₹1,001.00\) is more than the distributor price/);
+    assert.match(r.body.problems.join(), /Distributor price \(₹1,000.00\) is above the lowest price \(₹499.00\)/);
     // The hub up to ₹1,550 with up to ₹100 company discount
     await call(OWNER, `/pricing/admin/lists/${v2}/items`, "PUT", { items: [{ ...hubRow, basePrice: P(1550), companyDiscount: P(100) }] });
     await call(OWNER, `/pricing/admin/lists/${v2}`, "PUT", { name: "Diwali prices", effectiveFrom: "2026-10-20T00:00:00+05:30" });
@@ -393,16 +409,18 @@ test("pricing workflow against a real database", { skip: url ? false : "set PG_T
     const dHub = cur.items.find((i) => i.sku === "FB-HUB");
     assert.equal(dHub.basePrice, P(1550));
     assert.equal(dHub.companyDiscount, P(100));
-    assert.equal(dHub.floorPrice, P(1250));        // minimum 1,350 - company 100
+    assert.equal(dHub.floorPrice, P(1450));        // selling 1,550 - company 100
     assert.equal(dHub.margin, P(550));
-    // The distributor gives the farmer ₹100 off: Farm Buddie pays it, the margin stays ₹550
+    // The distributor gives the farmer ₹100 off: they still buy at ₹1,000 (margin ₹450)
     r = await call(DIST, "/pricing/quotes", "POST", { customerName: "Selvi", lines: [{ variantId: vid("FB-HUB"), qty: 1, discountType: "amt", discountValue: P(100) }] });
     assert.equal(r.status, 200);
-    assert.equal(r.body.quote.totals.margin, P(550));
+    assert.equal(r.body.quote.totals.margin, P(450));
     assert.equal(r.body.quote.totals.companyDiscount, P(100));
-    assert.equal(r.body.quote.totals.distributorCost, P(900));
-    // ...and we get ₹900 for a ₹600 hub
-    assert.equal((await call(OWNER, `/pricing/quotes/${r.body.id}`)).body.quote.profit.ourProfit, P(300));
+    assert.equal(r.body.quote.totals.distributorCost, P(1000));
+    // ...and we get ₹1,000 for a ₹600 hub
+    assert.equal((await call(OWNER, `/pricing/quotes/${r.body.id}`)).body.quote.profit.ourProfit, P(400));
+    // ₹101 off is past the company discount
+    assert.equal((await call(DIST, "/pricing/quote/preview", "POST", { lines: [{ variantId: vid("FB-HUB"), qty: 1, discountType: "amt", discountValue: P(101) }] })).body.ok, false);
     // The old quote kept its prices, and is now past its validity? (15 days not yet)
     assert.equal((await call(DIST, `/pricing/quotes/${quote.id}`)).body.quote.lines[0].unitPrice, P(1500));
 
@@ -617,9 +635,9 @@ test("the web panel's copy of the rules is the same file", async () => {
 
 test("mrpView: MRP without GST as the shown price, totals still add up", async () => {
   const { mrpView, calculateQuote } = await import("../src/bridge/pricingRules.js");
-  const p = (variantId, basePrice, mrp, gstBp = 1800, companyDiscount = 0) => [variantId, {
+  const p = (variantId, basePrice, mrp, gstBp = 1800, companyDiscount = 10000) => [variantId, {
     variantId, sku: `S${variantId}`, productName: `P${variantId}`, variantName: "Standard", unit: "pcs", kind: "device",
-    mrp, basePrice, minPrice: basePrice - 10000, maxPrice: 10000000, companyDiscount,
+    mrp, basePrice, maxPrice: 10000000, companyDiscount,
     distributorPrice: basePrice - 20000, gstBp
   }];
   // MRP 11,800 incl. 18% = 10,000 before GST; selling 9,000 -> MRP discount 1,000 a unit.
@@ -631,15 +649,18 @@ test("mrpView: MRP without GST as the shown price, totals still add up", async (
   assert.deepEqual(m.lines.map((x) => x.unit), [1000000, 50000, 50000]);
   assert.equal(m.mrpDiscount, 200000);
   assert.equal(m.mrpTotal - m.mrpDiscount - q.totals.discount, q.totals.taxable);
-  assert.equal(m.companyDiscount, 200000);
-  assert.equal(m.otherDiscount, q.totals.discount);
-  // A company discount given joins the "Company discount" row; the rest is "Additional discount"
+  // The discount given joins the "Company discount" row (it's all within the company discount)
+  assert.equal(m.companyDiscount, 200000 + 2 * 5000);
+  assert.equal(m.otherDiscount, 0);
   const pc = new Map([p(1, 900000, 1180000, 1800, 20000)]);
-  const qc = calculateQuote(pc, [{ variantId: 1, qty: 2, discountType: "amt", discountValue: 25000 }]);
+  const qc = calculateQuote(pc, [{ variantId: 1, qty: 2, discountType: "amt", discountValue: 20000 }]);
   const mc = mrpView(qc.lines);
   assert.equal(mc.mrpDiscount, 200000);
   assert.equal(mc.companyDiscount, 200000 + 2 * 20000);
-  assert.equal(mc.otherDiscount, 2 * 5000);
+  assert.equal(mc.otherDiscount, 0);
+  // Priced above the selling price (up to the maximum): a price adjustment, not a discount
+  const up = mrpView(calculateQuote(pc, [{ variantId: 1, qty: 1, unitPrice: 950000 }]).lines);
+  assert.equal(up.otherDiscount, -50000);
   assert.equal(mc.mrpTotal - mc.companyDiscount - mc.otherDiscount, qc.totals.taxable);
   // An MRP that isn't a whole rupee after GST is rounded down, never above the real MRP.
   const odd = mrpView([{ mrp: 1000000, gstBp: 1800, listPrice: 800000, qty: 1 }]);

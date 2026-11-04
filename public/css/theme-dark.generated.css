@@ -1819,6 +1819,12 @@ html[data-theme="dark"] .pr-cost-total small {
 html[data-theme="dark"] .pr-from-prod {
   color: #6b88e6;
 }
+html[data-theme="dark"] .pr-dp-pct small {
+  color: #a0aea9;
+}
+html[data-theme="dark"] .pr-items td.pr-lowest {
+  color: #73dd9d;
+}
 
 /* ---- records.css ---- */
 html[data-theme="dark"] .rx-hero {

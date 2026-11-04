@@ -824,25 +824,36 @@ await run("16. Module Pricing on a real database - production cost, company disc
   }
   // The MRP alone fills maximum, farmer selling and minimum price (MRP without GST)
   await page.fill(`${tr("FB-HUB")} [data-k=mrp]`, "14160");
-  const filled = await page.evaluate((sel) => ["maxPrice", "basePrice", "minPrice"].map((k) => document.querySelector(`${sel} [data-k=${k}]`).value), tr("FB-HUB"));
-  check("typing the MRP fills maximum, farmer selling and minimum price (₹12,000)", filled.join() === "12000,12000,12000", filled.join());
+  const filled = await page.evaluate((sel) => ["maxPrice", "basePrice"].map((k) => document.querySelector(`${sel} [data-k=${k}]`).value), tr("FB-HUB"));
+  check("typing the MRP fills maximum and farmer selling price (₹12,000)", filled.join() === "12000,12000", filled.join());
+  check("no minimum price column any more", !(await page.$(`${tr("FB-HUB")} [data-k=minPrice]`)) && !/Minimum/.test(heads));
+  const order = await page.evaluate(() => [...document.querySelectorAll(".pr-items thead th")].map((t) => t.innerText.replace(/\s+/g, " ").trim().split(" ")[0]));
+  check("columns: our cost, MRP, maximum, company discount, farmer selling, lowest, distributor", order.slice(2, 9).join().toUpperCase() === "OUR,MRP,MAXIMUM,COMPANY,FARMER,LOWEST,DISTRIBUTOR", order.join(" | "));
   check("a made product's company discount box shows 0", (await page.inputValue(`${tr("FB-HUB")} [data-k=companyDiscount]`)) === "0");
   check("a bought product has no company discount box", !(await page.$(`${tr("FB-ANT")} [data-k=companyDiscount]`))
-    && (await page.textContent(`${tr("FB-ANT")} td:nth-child(7)`)).includes("bought"));
-  await price("FB-HUB", { distributorPrice: "10000", companyDiscount: "500" });
+    && (await page.textContent(`${tr("FB-ANT")} td:nth-child(6)`)).includes("bought"));
+  await price("FB-HUB", { companyDiscount: "500" });
   check("the company discount leaves the farmer selling price alone", (await page.inputValue(`${tr("FB-HUB")} [data-k=basePrice]`)) === "12000");
-  await price("FB-MN", { mrp: "5900", distributorPrice: "3500", basePrice: "5000", minPrice: "4800", companyDiscount: "200" });
+  // Distributor price as % below the lowest price: 15% of ₹11,500 off = ₹9,775
+  await page.fill(`${tr("FB-HUB")} [data-k=dpPct]`, "15");
+  check("15% below the lowest ₹11,500 -> distributor price ₹9,775", (await page.inputValue(`${tr("FB-HUB")} [data-k=distributorPrice]`)) === "9775");
+  await page.fill(`${tr("FB-HUB")} [data-k=companyDiscount]`, "1000");
+  check("...and it follows the lowest price (₹11,000 -> ₹9,350)", (await page.inputValue(`${tr("FB-HUB")} [data-k=distributorPrice]`)) === "9350");
+  await page.fill(`${tr("FB-HUB")} [data-k=companyDiscount]`, "500");
+  await price("FB-HUB", { distributorPrice: "10000" });
+  check("typed in ₹, the % shows how far below the lowest it is (13.04%)", (await page.inputValue(`${tr("FB-HUB")} [data-k=dpPct]`)) === "13.04");
+  await price("FB-MN", { mrp: "5900", companyDiscount: "200", distributorPrice: "3500" });
   await price("FB-ANT", { mrp: "590", distributorPrice: "300", basePrice: "450" });
   const cell = (sku, c) => page.textContent(`${tr(sku)} [data-c=${c}]`);
-  check("hub: lowest price = minimum - company discount = ₹11,500", (await cell("FB-HUB", "floor")) === "₹11,500.00", await cell("FB-HUB", "floor"));
+  check("hub: lowest price = farmer selling - company discount = ₹11,500", (await cell("FB-HUB", "floor")) === "₹11,500.00", await cell("FB-HUB", "floor"));
   const m = await cell("FB-HUB", "margin");
-  check("hub: distributor margin ₹2,000, the same with the company discount", m.includes("₹2,000.00") && m.includes("same with company discount"), m);
+  check("hub: distributor margin ₹2,000 at the selling price, ₹1,500 at the lowest", m.includes("₹2,000.00") && m.includes("₹1,500.00 at the lowest"), m);
   const pr = await cell("FB-HUB", "profit");
-  check("hub: our profit shows the company discount's effect", pr.includes("₹8,885.00") && pr.includes("₹6,885.00") && pr.includes("− ₹500.00"), pr);
-  check("motor node: lowest ₹4,600 (own ₹200 + company ₹200)", (await cell("FB-MN", "floor")) === "₹4,600.00", await cell("FB-MN", "floor"));
+  check("hub: our profit direct, via distributor, and direct at the lowest", pr.includes("₹8,885.00") && pr.includes("₹6,885.00") && pr.includes("₹8,385.00"), pr);
+  check("motor node: lowest ₹4,800 (₹5,000 - ₹200)", (await cell("FB-MN", "floor")) === "₹4,800.00", await cell("FB-MN", "floor"));
   // Too big a company discount is flagged on the row
   await page.fill(`${tr("FB-HUB")} [data-k=companyDiscount]`, "10001");
-  check("a company discount over the distributor price is flagged", /more than the distributor price/.test(await cell("FB-HUB", "check")));
+  check("a lowest price under the distributor price is flagged", /above the lowest price/.test(await cell("FB-HUB", "check")));
   await page.fill(`${tr("FB-HUB")} [data-k=companyDiscount]`, "500");
   // Off sale: everything else
   for (const el of await page.$$("#itemsBody tr[data-v]")) {
@@ -853,10 +864,11 @@ await run("16. Module Pricing on a real database - production cost, company disc
   await page.dispatchEvent("#edFrom", "input");
   await expecting([/dialog: confirm: Save and publish/], () => page.click("[data-a=quickPublish]"));
   await until(() => page.evaluate(() => !document.getElementById("pageOk").hidden && /published/.test(document.getElementById("pageOk").textContent)), 10000, "published");
-  const items = (await h.pricingDb.query(`SELECT v.sku, i.company_discount, i.cost_price, i.min_price FROM price_list_items i JOIN pricing_variants v ON v.id = i.variant_id
+  const items = (await h.pricingDb.query(`SELECT v.sku, i.company_discount, i.cost_price, i.distributor_price FROM price_list_items i JOIN pricing_variants v ON v.id = i.variant_id
     JOIN price_lists l ON l.id = i.list_id WHERE l.status = 'published' AND i.active ORDER BY v.sku`)).rows;
   check("published with the company discounts and our cost", items.length === 3 && items.find((i) => i.sku === "FB-HUB").company_discount == P(500)
-    && items.find((i) => i.sku === "FB-HUB").cost_price == P(3115) && items.find((i) => i.sku === "FB-MN").company_discount == P(200)
+    && items.find((i) => i.sku === "FB-HUB").cost_price == P(3115) && items.find((i) => i.sku === "FB-HUB").distributor_price == P(10000)
+    && items.find((i) => i.sku === "FB-MN").company_discount == P(200)
     && items.find((i) => i.sku === "FB-ANT").company_discount == 0, JSON.stringify(items));
   // The distributors' PDF: company discount, no cost
   const [pop] = await Promise.all([context.waitForEvent("page"), page.click("#pdfDistributor")]);
@@ -873,8 +885,8 @@ await run("16. Module Pricing on a real database - production cost, company disc
   check("each line offers its company discount", (await page.textContent(L(0, "[data-cd]"))).includes("₹500.00"));
   await page.click(L(0, "[data-cd]"));
   await page.waitForTimeout(200);
-  check("full company discount: hub at ₹11,500, margin still ₹2,000", (await page.textContent(L(0, "[data-c=net]"))).includes("₹11,500.00")
-    && (await page.textContent(L(0, "[data-c=margin]"))).includes("₹2,000.00") && (await page.textContent(L(0, "[data-c=margin]"))).includes("co. pays ₹500.00"));
+  check("full company discount: hub at ₹11,500, margin ₹1,500", (await page.textContent(L(0, "[data-c=net]"))).includes("₹11,500.00")
+    && (await page.textContent(L(0, "[data-c=margin]"))) === "₹1,500.00");
   await page.fill(L(0, "[data-f=value]"), "700");
   await page.waitForTimeout(200);
   check("past the company's amount is refused on the line", /lowest allowed price is ₹11,500.00/.test(await page.textContent(L(0, "[data-c=err]"))), await page.textContent(L(0, "[data-c=err]")));
@@ -882,18 +894,20 @@ await run("16. Module Pricing on a real database - production cost, company disc
   await page.selectOption(L(1, "[data-f=mode]"), "amt");
   await page.fill(L(1, "[data-f=value]"), "300");
   await page.waitForTimeout(200);
-  check("motor node ₹300 off: company ₹200, ₹100 from the margin (₹1,400 left)", (await page.textContent(L(1, "[data-c=margin]"))).includes("₹1,400.00"));
+  check("motor node ₹300 off is past its ₹200 company discount: refused", /lowest allowed price is ₹4,800.00/.test(await page.textContent(L(1, "[data-c=err]"))));
+  await page.fill(L(1, "[data-f=value]"), "200");
+  await page.waitForTimeout(200);
+  check("motor node ₹200 off: margin ₹1,300", (await page.textContent(L(1, "[data-c=margin]"))) === "₹1,300.00");
   const sum = await page.textContent("#sumBody");
-  check("estimate: company discount ₹500 inside, distributor margin ₹3,400", sum.includes("Company discount in it") && sum.includes("₹500.00") && sum.includes("₹3,400.00"), sum.replace(/\s+/g, " ").slice(0, 300));
+  check("estimate: discount ₹500, distributor margin ₹3,000 (₹1,700 + ₹1,300)", sum.includes("− ₹500.00") && sum.includes("₹3,000.00"), sum.replace(/\s+/g, " ").slice(0, 300));
   await page.fill("#cuName", `Ravi ${XSS}`);
   await page.click("#saveQuote");
   await until(() => page.evaluate(() => !document.getElementById("quoteModal").hidden), 8000, "the saved quote");
   const doc = await page.textContent("#qmBody");
-  check("the quotation shows Company discount − ₹500 and Additional discount − ₹100", /Company discount[^₹]*− ₹500\.00/.test(doc) && /Additional discount[^₹]*− ₹100\.00/.test(doc), doc.replace(/\s+/g, " ").slice(0, 400));
-  // Hub ₹10,000 - ₹300 company + node ₹3,500 - ₹200 company
-  check("internal note: the distributor buys at ₹13,000 after the company discount", doc.includes("₹13,000.00") && doc.includes("after ₹500.00 company discount"));
+  check("the quotation shows Company discount − ₹500 (no additional discount)", /Company discount[^₹]*− ₹500\.00/.test(doc) && !/Additional discount/.test(doc), doc.replace(/\s+/g, " ").slice(0, 400));
+  check("internal note: the distributor buys at ₹13,500 whatever the discount", doc.includes("₹13,500.00"));
   const q = (await h.pricingDb.query("SELECT totals FROM pricing_quotes ORDER BY id DESC LIMIT 1")).rows[0].totals;
-  check("saved on the server with the same figures", q.companyDiscount === P(500) && q.margin === P(3400) && q.distributorCost === P(13000), JSON.stringify({ c: q.companyDiscount, m: q.margin, d: q.distributorCost }));
+  check("saved on the server with the same figures", q.companyDiscount === P(500) && q.margin === P(3000) && q.distributorCost === P(13500), JSON.stringify({ c: q.companyDiscount, m: q.margin, d: q.distributorCost }));
   await page.click("[data-close=quoteModal]");
 
   await page.click("#tabs button[data-tab=audit]");
