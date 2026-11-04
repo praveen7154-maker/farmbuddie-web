@@ -354,8 +354,8 @@ function renderSummary(calc) {
   const profit = can("editor") ? R.quoteProfit(calc.lines, (v) => prices.get(v)?.costPrice, false) : null;
   if (profit) {
     $("sumBody").insertAdjacentHTML("beforeend", `<div class="row internal"><span>🔒 Our cost</span><span>${rs(profit.ourCost)}</span></div>
-      <div class="row internal"><span>🔒 Our profit - direct sale (before GST)</span><span><b>${rs(profit.ourProfit)}</b></span></div>
-      <div class="row internal"><span>🔒 Our profit if a distributor sells it</span><span>${rs(R.quoteProfit(calc.lines, (v) => prices.get(v)?.costPrice, true).ourProfit)}</span></div>`);
+      <div class="row internal"><span>🔒 Our profit - direct sale (before GST)</span><span><b>${rs(profit.ourProfit)}</b> (${profitPct(profit.ourProfit, profit.ourRevenue)})</span></div>
+      <div class="row internal"><span>🔒 Our profit if a distributor sells it</span><span>${(() => { const d = R.quoteProfit(calc.lines, (v) => prices.get(v)?.costPrice, true); return `${rs(d.ourProfit)} (${profitPct(d.ourProfit, d.ourRevenue)})`; })()}</span></div>`);
   } else if (can("editor")) {
     $("sumBody").insertAdjacentHTML("beforeend", `<div class="row internal"><span>🔒 Our profit</span><span class="ota-muted">enter "Our cost" for every product</span></div>`);
   }
@@ -953,10 +953,13 @@ function renderItems() {
 
 // Our cost / profit - editors, approvers and admins only (the server leaves it out for anyone else).
 function showCostCols() { document.querySelectorAll(".pr-cost-col").forEach((el) => { el.hidden = !can("editor"); }); }
-const profitHtml = (p) => {
+// Our profit as % of the price that sale is at (profit margin): 1,500 on 12,000 -> "12.5%".
+const profitPct = (v, of) => (Number.isInteger(of) && of > 0 ? `${(Math.round(v * 1000 / of) / 10).toFixed(1)}%` : "");
+const profitHtml = (p, r) => {
   if (!p) return `<span class="ota-muted" title="Enter our cost (or work it out in Production Pricing) to see our profit">–</span>`;
-  const c = (v) => `<span style="color:${v < 0 ? "#b91c1c" : "#15803d"}">${rs(v)}</span>`;
-  return `${c(p.direct)}<span class="pr-hint">via dist. ${c(p.viaDistributor)}</span>${p.companyDiscount ? `<span class="pr-hint">direct at the lowest: ${c(p.direct - p.companyDiscount)}</span>` : ""}`;
+  const c = (v, of) => `<span style="color:${v < 0 ? "#b91c1c" : "#15803d"}" title="% of the price it's sold at">${rs(v)}${of ? ` (${profitPct(v, of)})` : ""}</span>`;
+  const low = R.floorPrice(r);
+  return `${c(p.direct, r.basePrice)}<span class="pr-hint">via dist. ${c(p.viaDistributor, r.distributorPrice)}</span>${p.companyDiscount ? `<span class="pr-hint">direct at the lowest: ${c(p.direct - p.companyDiscount, low)}</span>` : ""}`;
 };
 
 function rowOf(tr) { return editing.rows.find((r) => r.variantId === Number(tr.dataset.v)); }
@@ -1064,7 +1067,7 @@ function refreshRow(tr) {
   const cell = (c) => tr.querySelector(`[data-c="${c}"]`);
   if (!r.active) { cell("floor").textContent = "–"; cell("margin").textContent = "–"; cell("check").innerHTML = `<span class="ota-muted">Not on sale</span>`; return; }
   const pc = tr.querySelector('[data-c="profit"]');
-  if (pc) pc.innerHTML = r.active ? profitHtml(R.ourProfit(r)) : "–";
+  if (pc) pc.innerHTML = r.active ? profitHtml(R.ourProfit(r), r) : "–";
   if ([r.mrp, r.distributorPrice, r.basePrice, r.maxPrice].every((v) => v === null)) {
     tr.classList.add("has-err");
     cell("floor").textContent = "–"; cell("margin").textContent = "–";

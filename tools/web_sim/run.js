@@ -850,6 +850,8 @@ await run("16. Module Pricing on a real database - production cost, company disc
   check("hub: distributor margin ₹2,000 at the selling price, ₹1,500 at the lowest", m.includes("₹2,000.00") && m.includes("₹1,500.00 at the lowest"), m);
   const pr = await cell("FB-HUB", "profit");
   check("hub: our profit direct, via distributor, and direct at the lowest", pr.includes("₹8,885.00") && pr.includes("₹6,885.00") && pr.includes("₹8,385.00"), pr);
+  // ...each with its % of the price it's sold at: 8,885/12,000, 6,885/10,000, 8,385/11,500
+  check("hub: our profit % at each level (74.0%, 68.9%, 72.9%)", pr.includes("(74.0%)") && pr.includes("(68.9%)") && pr.includes("(72.9%)"), pr);
   check("motor node: lowest ₹4,800 (₹5,000 - ₹200)", (await cell("FB-MN", "floor")) === "₹4,800.00", await cell("FB-MN", "floor"));
   // Too big a company discount is flagged on the row
   await page.fill(`${tr("FB-HUB")} [data-k=companyDiscount]`, "10001");
