@@ -119,6 +119,20 @@ test("pins and lines aren't measured; zones without a clear image are waiting", 
   assert.deepEqual(z[2].points, []);
 });
 
+test("valves are compared only with valves of the same crop", () => {
+  const zones = [zone(1, { crop: "coconut" }), zone(2, { crop: "coconut" }), zone(3, { crop: "watermelon", sowing_date: "2026-11-01" }),
+    zone(4), zone(5)];
+  const latest = [obs(1, 0.7, 2, "S2"), obs(2, 0.56, 2, "S2"), obs(3, 0.25, 2, "S2"), obs(4, 0.6, 2, "S2"), obs(5, 0.3, 2, "S2")];
+  const z = byValve(rep({ zones, latest }));
+  assert.equal(z[2].vsFarm, -0.14);          // coconut vs coconut
+  assert.equal(z[2].level, "low");
+  assert.equal(z[3].vsFarm, null);           // the only watermelon: no comparison with the coconut
+  assert.equal(z[3].level, "good");
+  assert.ok(z[3].advice.some((a) => a.code === "young_crop"));
+  assert.equal(z[5].vsFarm, -0.3);           // no crop set: compared with the other unset valve
+  assert.equal(z[5].level, "low");
+});
+
 test("an old reading says so", () => {
   const z = byValve(rep({ zones: [zone(1)], latest: [obs(1, 0.7, 30, "S30")], scene: [] }));
   assert.equal(z[1].advice.find((a) => a.code === "old_observation").params.days, 30);
@@ -226,6 +240,7 @@ test("endpoints: save zones, set crop, read report / map / history / status", as
     assert.deepEqual(store.calls[0], ["save", "0003", 2, "+919999999999"]);
     r = await s.call("PUT", "/zones/0003-1/crop", { crop: "turmeric", sowingDate: "2026-07-01" });
     assert.deepEqual(r.body, { zoneId: "0003-1", crop: "turmeric", sowingDate: "2026-07-01" });
+    assert.equal((await s.call("PUT", "/zones/0003-2/crop", { crop: "turmeric" })).status, 200);   // same crop: compared
     assert.equal((await s.call("PUT", "/zones/0003-9/crop", { crop: "paddy" })).status, 404);
     assert.equal((await s.call("PUT", "/zones/0003-1/crop", { crop: "x" })).status, 400);
 

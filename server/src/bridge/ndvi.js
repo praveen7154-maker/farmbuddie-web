@@ -268,6 +268,7 @@ const advice = (code, params = {}) => ({ code, params, text: adviceText(code, pa
  */
 export function buildFarmReport({ farmId, zones, latest, previous, recent = new Map(), sceneRows = [], water = null, status = null, latestScene = null, now = Date.now() }) {
   const sceneMeans = new Map(sceneRows.map((r) => [r.valve, r.mean]));
+  const cropOf = new Map(zones.map((z) => [z.valve, z.crop || null]));
   const farmMedian = sceneMeans.size >= 2 ? median([...sceneMeans.values()]) : null;
   // A zone is compared with the median of the farm's OTHER zones (with two
   // zones, the farm median would sit halfway and hide the difference).
@@ -293,7 +294,12 @@ export function buildFarmReport({ farmId, zones, latest, previous, recent = new 
     const curMs = toMs(cur.acquired_at);
     const ageDays = cropAgeDays(sowing, curMs);
     const crop = CROPS[z.crop] || null;
-    const othersMean = sceneMeans.has(z.valve) && sceneMeans.size >= 2 ? others(sceneMeans, z.valve) : null;
+    // Compared only with valves growing the same crop (a just-sown plot next
+    // to a coconut garden always looks "low"). A crop with no other valve on
+    // the farm is judged by its own trend and the crop's typical range only.
+    // Valves with no crop set are compared with each other.
+    const peers = new Map([...sceneMeans].filter(([v]) => v === z.valve || (cropOf.get(v) ?? null) === (z.crop ?? null)));
+    const othersMean = peers.has(z.valve) && peers.size >= 2 ? others(peers, z.valve) : null;
     const vsFarm = othersMean !== null ? round(sceneMeans.get(z.valve) - othersMean, 3) : null;
     const change = prev ? round(cur.mean - prev.mean, 3) : null;
     const changeDays = prev ? Math.round((curMs - toMs(prev.acquired_at)) / DAY_MS) : null;

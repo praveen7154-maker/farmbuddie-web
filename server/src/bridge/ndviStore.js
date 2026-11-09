@@ -61,7 +61,7 @@ export function createNdviStore(db = pool) {
       await client.query("DELETE FROM ndvi_maps WHERE farm_id = $1", [farmId]);
       await client.query(
         `INSERT INTO ndvi_status (farm_id, refresh_requested) VALUES ($1, now())
-         ON CONFLICT (farm_id) DO UPDATE SET refresh_requested = now()`, [farmId]);
+         ON CONFLICT (farm_id) DO UPDATE SET refresh_requested = now(), last_obs_at = NULL, last_success_at = NULL`, [farmId]);
     },
 
     async deleteZone(farmId, valve) {
