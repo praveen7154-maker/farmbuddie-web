@@ -61,6 +61,11 @@ CREATE TABLE IF NOT EXISTS ndvi_history (
   usable       BOOLEAN NOT NULL,
   PRIMARY KEY (farm_id, valve, scene_id)
 );
+-- Weak spots inside the zone (worker raster.weak_spots): [{pixels, area_m2,
+-- mean, min, drop, lat, lng}], the zone's median and the % they cover.
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS median REAL;
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS weak_spots JSONB;
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS weak_pct REAL;
 CREATE INDEX IF NOT EXISTS ndvi_history_zone_time_idx ON ndvi_history (farm_id, valve, acquired_at DESC);
 
 CREATE TABLE IF NOT EXISTS ndvi_maps (

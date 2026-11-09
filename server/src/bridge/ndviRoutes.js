@@ -50,14 +50,14 @@ export function createNdviRouter({ store, canAccessFarm, water = async () => nul
   }
 
   async function report(farmId) {
-    const [zones, { latest, previous }, latestScene, status] = await Promise.all([
+    const [zones, { latest, previous, recent }, latestScene, status] = await Promise.all([
       store.zones(farmId), store.latestAndPrevious(farmId), store.latestOkScene(farmId), store.status(farmId)
     ]);
     const [sceneRows, waterMap] = await Promise.all([
       latestScene ? store.sceneRows(farmId, latestScene.scene_id) : [],
       water(farmId, WATER_DAYS).catch((e) => { log.warn?.("ndvi water lookup failed:", e?.message); return null; })
     ]);
-    return { zones, rep: buildFarmReport({ farmId, zones, latest, previous, sceneRows, water: waterMap, status, latestScene, now: now() }) };
+    return { zones, rep: buildFarmReport({ farmId, zones, latest, previous, recent, sceneRows, water: waterMap, status, latestScene, now: now() }) };
   }
 
   r.get("/ndvi/crops", (req, res) => res.json({ crops: Object.entries(CROPS).map(([id, c]) => ({ id, ...c })) }));

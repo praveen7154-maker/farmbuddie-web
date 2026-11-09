@@ -140,6 +140,36 @@ def test_cloudy_zone_is_not_usable_but_others_are():
     assert worker.classify(per_zone, farm) == "cloudy"
 
 
+def test_weak_spot_found_inside_a_zone():
+    from shapely.geometry import box
+    big = {1: box(500003, 1300003, 500123, 1300123)}          # 120 x 120 m, ~12 x 12 pixels inside
+    fr = synthetic_farm({1: 0.72}, zones_m=big)
+    # a 3 x 2 pixel weak patch, and a single weak pixel (too small to count)
+    fr.ndvi[10:12, 3:6] = 0.40
+    fr.ndvi[5, 9] = 0.30
+    per_zone, _ = raster.analyse(fr, 60)
+    z = per_zone[1]
+    assert z["median"] == pytest.approx(0.72)
+    assert len(z["weak_spots"]) == 1
+    sp = z["weak_spots"][0]
+    assert sp["pixels"] == 6 and sp["area_m2"] == 600
+    assert sp["mean"] == pytest.approx(0.40) and sp["drop"] == pytest.approx(0.32)
+    # the spot's centre is where the patch is (UTM 43N around E 500 km = 75 deg E)
+    assert 74.99 < sp["lng"] < 75.01 and 11.7 < sp["lat"] < 11.8
+    assert 0 < z["weak_pct"] < 10
+
+
+def test_no_weak_spots_on_a_bare_or_even_field():
+    from shapely.geometry import box
+    big = {1: box(500003, 1300003, 500123, 1300123)}
+    fr = synthetic_farm({1: 0.18}, zones_m=big)                # bare field: nothing is "weak"
+    fr.ndvi[10:12, 3:6] = 0.05
+    assert raster.analyse(fr, 60)[0][1]["weak_spots"] == []
+    fr = synthetic_farm({1: 0.7}, zones_m=big)                 # even crop: small dips aren't spots
+    fr.ndvi[10:12, 3:6] = 0.65
+    assert raster.analyse(fr, 60)[0][1]["weak_spots"] == []
+
+
 def test_heatmap_png_covers_zones():
     fr = synthetic_farm({1: 0.75, 2: 0.15, 3: 0.5}, clouds=[3])
     png, (w, s, e, n) = render.render(fr)
@@ -244,6 +274,9 @@ def test_worker_processes_each_image_once(conn):
     assert reads == ["S2X_TEST_4"] and res == {"S2X_TEST_3": "ok", "S2X_TEST_4": "ok"}
 
     with conn.cursor() as cur:
+        cur.execute("SELECT weak_spots, median FROM ndvi_history WHERE usable AND valve = 1 LIMIT 1")
+        spots, med = cur.fetchone()
+        assert spots == [] and med == pytest.approx(0.7)    # an even zone: no weak spots
         cur.execute("SELECT valve, count(*) FILTER (WHERE usable), count(*) FROM ndvi_history GROUP BY valve ORDER BY valve")
         assert cur.fetchall() == [(1, 3, 4), (2, 3, 4), (3, 3, 4)]
         cur.execute("SELECT count(*) FROM ndvi_maps WHERE farm_id = '0003'")

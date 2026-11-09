@@ -113,6 +113,37 @@ test("an old reading says so", () => {
   assert.equal(z[1].advice.find((a) => a.code === "old_observation").params.days, 30);
 });
 
+test("weak spots inside a valve: labelled, new vs seen again, valve goes to watch", () => {
+  const spotA = { pixels: 30, area_m2: 3000, mean: 0.38, min: 0.3, drop: 0.3, lat: 11.4501, lng: 77.6801 };
+  const spotB = { pixels: 5, area_m2: 500, mean: 0.5, min: 0.45, drop: 0.18, lat: 11.4504, lng: 77.6806 };
+  const cur = obs(1, 0.66, 2, "S2", { median: 0.68, weak_spots: [spotA, spotB], weak_pct: 12.5 });
+  // spot A (moved 10 m) was there on the two earlier images; B is new
+  const near = { ...spotA, lat: spotA.lat + 0.00009 };
+  const recent = [cur, obs(1, 0.7, 12, "S12", { weak_spots: [near] }), obs(1, 0.7, 22, "S22", { weak_spots: [near] }), obs(1, 0.7, 32, "S32", { weak_spots: [] })];
+  const r = buildFarmReport({
+    farmId: "0003", zones: [zone(1)], latest: new Map([[1, cur]]), previous: new Map(), recent: new Map([[1, recent]]),
+    sceneRows: [cur], now: NOW
+  });
+  const z = r.zones[0];
+  assert.equal(z.level, "watch");                          // 12.5 % of the land is weak
+  assert.equal(z.uniformPct, 88);
+  assert.deepEqual(z.weakSpots.map((w) => [w.label, w.seenTimes, w.outOf, w.persistent]), [["1A", 3, 4, true], ["1B", 1, 4, false]]);
+  assert.equal(z.weakSpots[0].advice.code, "spot_persistent");
+  assert.equal(z.weakSpots[1].advice.code, "spot_new");
+  assert.equal(z.weakSpots[0].areaAcres, 0.74);
+  assert.match(z.weakSpots[1].advice.text, /Weak spot 1B .*0\.5 against 0\.68/);
+  const g = buildMapGeoJson(r, new Map([[1, zone(1).points]]), null, []);
+  assert.deepEqual(g.features.filter((f) => f.properties.kind === "weak_spot").map((f) => f.properties.label), ["1A", "1B"]);
+});
+
+test("a valve with small weak spots stays good; one without any says 100 % even", () => {
+  const cur = obs(1, 0.7, 2, "S2", { median: 0.7, weak_spots: [{ pixels: 3, area_m2: 300, mean: 0.5, min: 0.5, drop: 0.2, lat: 11.45, lng: 77.68 }], weak_pct: 2 });
+  const r = buildFarmReport({ farmId: "0003", zones: [zone(1), zone(2)], latest: new Map([[1, cur], [2, obs(2, 0.7, 2, "S2")]]), previous: new Map(), sceneRows: [cur, obs(2, 0.7, 2, "S2")], now: NOW });
+  assert.equal(r.zones[0].level, "good");
+  assert.equal(r.zones[0].weakSpots.length, 1);
+  assert.equal(r.zones[1].uniformPct, 100);
+});
+
 test("history keeps one reading per day, the clearer tile", () => {
   const h = historyView([obs(1, 0.6, 5, "A", { valid_pixels: 10 }), obs(1, 0.62, 5, "B", { valid_pixels: 25 }), obs(1, 0.5, 15, "C")]);
   assert.equal(h.length, 2);

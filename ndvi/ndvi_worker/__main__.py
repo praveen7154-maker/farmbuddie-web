@@ -18,6 +18,7 @@ def main(argv=None):
     c = sub.add_parser("check")
     c.add_argument("farm_id")
     c.add_argument("--days", type=int, default=None, help="look this many days back (first check of a farm)")
+    c.add_argument("--reprocess", action="store_true", help="re-read every image (e.g. after a worker update)")
     s = sub.add_parser("status")
     s.add_argument("farm_id", nargs="?")
     a = p.parse_args(argv)
@@ -30,6 +31,8 @@ def main(argv=None):
         print("NDVI tables not found - update and restart the bridge first", file=sys.stderr)
         return 1
     if a.cmd == "check":
+        if a.reprocess:
+            store.forget_farm_images(conn, a.farm_id)
         res = worker.check_farm(conn, a.farm_id, backfill_days=a.days)
         counts = {}
         for st in res.values():

@@ -134,6 +134,70 @@ def zone_stats(ndvi, valid, nodata, mask, min_clear_pct):
     return out
 
 
+# ---------------------------------------------------------------- weak spots inside a zone
+
+# A weak spot: neighbouring pixels of one valve's land clearly below the rest
+# of that land on the same image (so haze, season and crop stage cancel
+# out), big enough to walk to and find. Not a diagnosis - a place to look.
+WEAK_DROP = 0.12          # this far below the zone's median NDVI
+WEAK_MIN_PIXELS = 3       # 300 m^2 (~0.07 acre) or more
+WEAK_MIN_MEDIAN = 0.3     # a bare / just-sown field has no "weak" parts yet
+WEAK_MIN_ZONE_PIXELS = 20
+MAX_WEAK_SPOTS = 6
+
+
+def _components(mask):
+    """4-connected groups of True pixels -> list of (rows, cols) arrays."""
+    seen = np.zeros(mask.shape, dtype=bool)
+    out = []
+    h, w = mask.shape
+    for r0, c0 in zip(*np.nonzero(mask)):
+        if seen[r0, c0]:
+            continue
+        stack, rows, cols = [(r0, c0)], [], []
+        seen[r0, c0] = True
+        while stack:
+            r, c = stack.pop()
+            rows.append(r)
+            cols.append(c)
+            for rr, cc in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
+                if 0 <= rr < h and 0 <= cc < w and mask[rr, cc] and not seen[rr, cc]:
+                    seen[rr, cc] = True
+                    stack.append((rr, cc))
+        out.append((np.array(rows), np.array(cols)))
+    return out
+
+
+def weak_spots(ndvi, valid, mask, transform, crs):
+    """The zone's median NDVI, its weak spots (largest / worst first) and the % of its clear area they cover."""
+    zone_valid = mask & valid
+    vals = ndvi[zone_valid]
+    if vals.size < WEAK_MIN_ZONE_PIXELS:
+        return None, [], 0.0
+    med = float(np.median(vals))
+    if med < WEAK_MIN_MEDIAN:
+        return round(med, 4), [], 0.0
+    weak = zone_valid & (ndvi < med - WEAK_DROP)
+    to_ll = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+    spots = []
+    for rows, cols in _components(weak):
+        n = rows.size
+        if n < WEAK_MIN_PIXELS:
+            continue
+        v = ndvi[rows, cols]
+        # centre of the spot: the pixel centres' mean, in the image's metres, then lat/lng
+        cx, cy = float(np.mean(cols)) + 0.5, float(np.mean(rows)) + 0.5
+        x = transform.c + transform.a * cx + transform.b * cy
+        y = transform.f + transform.d * cx + transform.e * cy
+        lng, lat = to_ll.transform(x, y)
+        spots.append({"pixels": int(n), "area_m2": int(n * 100), "mean": round(float(v.mean()), 3),
+                      "min": round(float(v.min()), 3), "drop": round(med - float(v.mean()), 3),
+                      "lat": round(lat, 7), "lng": round(lng, 7)})
+    spots.sort(key=lambda sp: sp["pixels"] * sp["drop"], reverse=True)
+    weak_px = sum(sp["pixels"] for sp in spots)
+    return round(med, 4), spots[:MAX_WEAK_SPOTS], round(100.0 * weak_px / vals.size, 1)
+
+
 # ---------------------------------------------------------------- reading
 
 def _snap(win):
@@ -190,7 +254,10 @@ def analyse(fr, min_clear_pct):
     for valve, poly in fr.zones_native.items():
         m = zone_mask(poly, fr.transform, shape)
         all_mask |= m
-        per_zone[valve] = zone_stats(fr.ndvi, fr.valid, fr.nodata, m, min_clear_pct)
+        st = zone_stats(fr.ndvi, fr.valid, fr.nodata, m, min_clear_pct)
+        med, spots, weak_pct = weak_spots(fr.ndvi, fr.valid, m, fr.transform, fr.crs) if st["usable"] else (None, [], 0.0)
+        st.update(median=med, weak_spots=spots, weak_pct=weak_pct)
+        per_zone[valve] = st
     total = int(all_mask.sum())
     clear = int((all_mask & fr.valid).sum())
     farm = {"pixels": total, "clear_pct": round(100.0 * clear / total, 1) if total else 0.0,

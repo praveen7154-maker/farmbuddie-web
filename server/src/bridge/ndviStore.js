@@ -99,12 +99,15 @@ export function createNdviStore(db = pool) {
           WHERE rn <= 12 ORDER BY valve, acquired_at DESC`, [farmId]);
       const latest = new Map();
       const previous = new Map();
+      const recent = new Map();     // valve -> its usable rows, newest first (for weak spots seen again)
       for (const r of rows) {
+        if (!recent.has(r.valve)) recent.set(r.valve, []);
+        recent.get(r.valve).push(r);
         const cur = latest.get(r.valve);
         if (!cur) { latest.set(r.valve, r); continue; }
         if (!previous.has(r.valve) && cur.acquired_at - r.acquired_at >= 4 * 86400000) previous.set(r.valve, r);
       }
-      return { latest, previous };
+      return { latest, previous, recent };
     },
 
     async latestOkScene(farmId) {

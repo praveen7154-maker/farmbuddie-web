@@ -67,6 +67,42 @@ export const WATER_DAYS = 14;
 // Older than this, the reading is flagged (clouds hid the farm since).
 export const OLD_OBS_DAYS = 20;
 export const YOUNG_CROP_DAYS = 30;
+// Weak spots covering this much of a valve's land make the valve "watch".
+export const WEAK_AREA_WATCH_PCT = 10;
+// A spot within this distance of one on an earlier image is the same spot.
+export const SAME_SPOT_M = 25;
+const RECENT_IMAGES = 4;
+
+const metresBetween = (a, b) => {
+  const k = Math.PI / 180;
+  const x = (b.lng - a.lng) * k * Math.cos(((a.lat + b.lat) / 2) * k);
+  const y = (b.lat - a.lat) * k;
+  return Math.sqrt(x * x + y * y) * 6371008.8;
+};
+
+/**
+ * The valve's weak spots on its newest image, labelled 1A, 1B, ... (largest /
+ * worst first), each with how many of the last few clear images also had a
+ * weak spot there: new (1) = something recent - pests, disease, a blocked
+ * dripper; seen again and again = a lasting cause - soil, a dry line, gaps.
+ * [recent]: the valve's usable rows, newest first (the current one included).
+ */
+export function weakSpotsView(valve, cur, recent) {
+  const spots = Array.isArray(cur.weak_spots) ? cur.weak_spots : [];
+  const earlier = recent.filter((r) => r.scene_id !== cur.scene_id).slice(0, RECENT_IMAGES - 1);
+  return spots.map((sp, i) => {
+    const label = `${valve}${String.fromCharCode(65 + i)}`;
+    const seen = 1 + earlier.filter((r) => (Array.isArray(r.weak_spots) ? r.weak_spots : [])
+      .some((o) => metresBetween(o, sp) <= SAME_SPOT_M)).length;
+    const params = { label, acres: round(sp.area_m2 / 4046.86, 2), ndvi: round(sp.mean, 2), rest: round((cur.median ?? sp.mean + sp.drop), 2), times: seen };
+    return {
+      label, lat: sp.lat, lng: sp.lng, areaM2: sp.area_m2, areaAcres: params.acres, ndvi: params.ndvi,
+      rest: params.rest, drop: round(sp.drop, 2), seenTimes: seen, outOf: 1 + earlier.length,
+      persistent: seen >= 2,
+      advice: advice(seen >= 2 ? "spot_persistent" : "spot_new", params)
+    };
+  });
+}
 
 const bad = (message) => ({ status: 400, message });
 const round = (x, d = 2) => (x === null || x === undefined ? null : Math.round(x * 10 ** d) / 10 ** d);
@@ -207,6 +243,10 @@ export function adviceText(code, p = {}) {
       return "Young crop: a low value is normal until the canopy covers the ground.";
     case "old_observation":
       return `This reading is ${p.days} days old - clouds have hidden the farm since. It updates with the next clear image.`;
+    case "spot_new":
+      return `Weak spot ${p.label} (about ${p.acres} acre, ${p.ndvi} against ${p.rest} in the rest of this valve) is new since the last clear image. Walk to it soon: check for pests, disease, or a blocked or broken dripper / lateral there.`;
+    case "spot_persistent":
+      return `Weak spot ${p.label} (about ${p.acres} acre, ${p.ndvi} against ${p.rest}) was weak in ${p.times} of the last clear images - a lasting cause. Check the soil there (salt, water-logging, hard layer), whether the drip line reaches it, and for gaps in planting.`;
     case "small_zone":
       return "This zone is small for 10 m satellite pixels, so its value is approximate.";
     default:
@@ -224,7 +264,7 @@ const advice = (code, params = {}) => ({ code, params, text: adviceText(code, pa
  *   sceneRows: usable history rows of the farm's newest clear image (every zone in it)
  *   water:     Map valve -> water seconds in the last WATER_DAYS days (null = unknown)
  */
-export function buildFarmReport({ farmId, zones, latest, previous, sceneRows = [], water = null, status = null, latestScene = null, now = Date.now() }) {
+export function buildFarmReport({ farmId, zones, latest, previous, recent = new Map(), sceneRows = [], water = null, status = null, latestScene = null, now = Date.now() }) {
   const sceneMeans = new Map(sceneRows.map((r) => [r.valve, r.mean]));
   const farmMedian = sceneMeans.size >= 2 ? median([...sceneMeans.values()]) : null;
   // A zone is compared with the median of the farm's OTHER zones (with two
@@ -269,6 +309,10 @@ export function buildFarmReport({ farmId, zones, latest, previous, sceneRows = [
       level = worse(level, "watch");
       tips.push(advice("below_typical", { crop: z.crop, typical: `${crop.typical[0]}-${crop.typical[1]}` }));
     }
+    // Weak spots inside this valve's land, numbered for the field (1A, 1B, ...).
+    const spots = weakSpotsView(z.valve, cur, recent.get(z.valve) || []);
+    const weakPct = Number(cur.weak_pct) || 0;
+    if (spots.length && weakPct >= WEAK_AREA_WATCH_PCT) level = worse(level, "watch");
     if (level !== "good") {
       const w = waterOf(z.valve);
       const wOthers = waterOthers(z.valve);
@@ -291,7 +335,9 @@ export function buildFarmReport({ farmId, zones, latest, previous, sceneRows = [
       change: round(change, 3), changeDays, vsFarm: round(vsFarm, 3), cropAgeDays: ageDays,
       typical: crop?.typical || null,
       waterVsFarmPct: water && waterOthers(z.valve) ? Math.round((waterOf(z.valve) / waterOthers(z.valve)) * 100) : null,
-      advice: tips
+      advice: tips,
+      zoneMedian: round(cur.median, 3), weakPct: round(weakPct, 1), uniformPct: spots.length ? round(100 - weakPct, 0) : 100,
+      weakSpots: spots
     };
   });
 
@@ -337,6 +383,12 @@ export function buildMapGeoJson(report, pointsByValve, map, mapDates = []) {
     }
     if (z.location) {
       features.push({ type: "Feature", id: `${z.zoneId}-valve`, geometry: { type: "Point", coordinates: [z.location.lng, z.location.lat] }, properties: { kind: "valve", ...props } });
+    }
+    for (const sp of z.weakSpots || []) {
+      features.push({
+        type: "Feature", id: `${z.zoneId}-${sp.label}`, geometry: { type: "Point", coordinates: [sp.lng, sp.lat] },
+        properties: { kind: "weak_spot", zoneId: z.zoneId, valve: z.valve, label: sp.label, ndvi: sp.ndvi, rest: sp.rest, areaAcres: sp.areaAcres, persistent: sp.persistent }
+      });
     }
   }
   return {

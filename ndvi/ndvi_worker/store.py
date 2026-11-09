@@ -1,4 +1,5 @@
 """Reading zones and writing NDVI results (tables: server/src/bridge/ndviSchema.sql)."""
+import json
 from datetime import datetime, timedelta, timezone
 
 import psycopg
@@ -84,14 +85,16 @@ def save_scene_result(conn, farm_id, scene, status, clear_pct, zone_stats=None, 
                     continue
                 cur.execute(
                     """INSERT INTO ndvi_history (farm_id, valve, scene_id, acquired_at, mean, min, max, p10, p90, std,
-                                                 pixels, valid_pixels, valid_pct, usable)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                                 pixels, valid_pixels, valid_pct, usable, median, weak_spots, weak_pct)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
                        ON CONFLICT (farm_id, valve, scene_id) DO UPDATE SET mean = EXCLUDED.mean, min = EXCLUDED.min,
                          max = EXCLUDED.max, p10 = EXCLUDED.p10, p90 = EXCLUDED.p90, std = EXCLUDED.std,
                          pixels = EXCLUDED.pixels, valid_pixels = EXCLUDED.valid_pixels,
-                         valid_pct = EXCLUDED.valid_pct, usable = EXCLUDED.usable""",
+                         valid_pct = EXCLUDED.valid_pct, usable = EXCLUDED.usable, median = EXCLUDED.median,
+                         weak_spots = EXCLUDED.weak_spots, weak_pct = EXCLUDED.weak_pct""",
                     (farm_id, valve, scene.id, scene.acquired_at, st["mean"], st["min"], st["max"], st["p10"],
-                     st["p90"], st["std"], st["pixels"], st["valid_pixels"], st["valid_pct"], st["usable"]))
+                     st["p90"], st["std"], st["pixels"], st["valid_pixels"], st["valid_pct"], st["usable"],
+                     st.get("median"), json.dumps(st.get("weak_spots") or []), st.get("weak_pct") or 0.0))
             if png is not None and bounds is not None:
                 w, s, e, n = bounds
                 cur.execute("""INSERT INTO ndvi_maps (farm_id, scene_id, acquired_at, west, south, east, north, png)
@@ -122,3 +125,10 @@ def mark_checked(conn, farm_id, requested_before, error=None):
                      refresh_requested = CASE WHEN ndvi_status.refresh_requested <= %s THEN NULL
                                               ELSE ndvi_status.refresh_requested END""",
                 (farm_id, error, error, requested_before))
+
+
+def forget_farm_images(conn, farm_id):
+    """Make the next check re-read every image for the farm (e.g. after the worker learns something new)."""
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM ndvi_farm_scenes WHERE farm_id = %s", (farm_id,))
