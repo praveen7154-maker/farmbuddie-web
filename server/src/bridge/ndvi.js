@@ -18,23 +18,43 @@ export const MAX_VALVE = 64;
 export const MAX_ZONE_POINTS = 200;
 const DAY_MS = 86400000;
 
-/**
- * Typical NDVI of a healthy crop at full canopy, and roughly how many days
- * after sowing / planting that is reached (0 = perennial, always grown).
- * Indicative ranges for Sentinel-2 over South Indian conditions - a guide,
- * not a diagnosis.
- */
+// [low, high] typical NDVI at full canopy, days after sowing / planting to
+// reach it (0 = perennial / orchard, always grown), and the crop group.
+// Orchards and vines leave soil between plants, so their 10 m pixels read
+// lower than a closed field crop. Same ids as the app's crop picker.
+const C = (group, typical, canopyDays) => ({ group, typical, canopyDays });
 export const CROPS = {
-  sugarcane: { typical: [0.65, 0.85], canopyDays: 120 },
-  paddy: { typical: [0.6, 0.85], canopyDays: 60 },
-  turmeric: { typical: [0.55, 0.8], canopyDays: 90 },
-  banana: { typical: [0.65, 0.85], canopyDays: 150 },
-  coconut: { typical: [0.55, 0.8], canopyDays: 0 },
-  maize: { typical: [0.65, 0.85], canopyDays: 55 },
-  cotton: { typical: [0.55, 0.8], canopyDays: 75 },
-  groundnut: { typical: [0.55, 0.8], canopyDays: 50 },
-  vegetables: { typical: [0.45, 0.75], canopyDays: 45 },
-  other: { typical: null, canopyDays: null }
+  // cereals and millets
+  paddy: C("cereal", [0.6, 0.85], 60), maize: C("cereal", [0.65, 0.85], 55), sorghum: C("cereal", [0.55, 0.8], 60),
+  pearl_millet: C("cereal", [0.5, 0.75], 50), finger_millet: C("cereal", [0.5, 0.75], 55), wheat: C("cereal", [0.6, 0.85], 60),
+  // pulses
+  black_gram: C("pulse", [0.5, 0.75], 45), green_gram: C("pulse", [0.5, 0.75], 45), red_gram: C("pulse", [0.55, 0.8], 90),
+  bengal_gram: C("pulse", [0.5, 0.75], 50), cowpea: C("pulse", [0.5, 0.75], 45), horse_gram: C("pulse", [0.45, 0.7], 45),
+  // oilseeds
+  groundnut: C("oilseed", [0.55, 0.8], 50), sesame: C("oilseed", [0.45, 0.7], 45), sunflower: C("oilseed", [0.55, 0.8], 50),
+  castor: C("oilseed", [0.5, 0.75], 70),
+  // cash crops
+  sugarcane: C("cash", [0.65, 0.85], 120), cotton: C("cash", [0.55, 0.8], 75), turmeric: C("cash", [0.55, 0.8], 90),
+  tapioca: C("cash", [0.6, 0.85], 90), tobacco: C("cash", [0.55, 0.8], 60), betel: C("cash", [0.55, 0.8], 0),
+  // vegetables
+  tomato: C("vegetable", [0.5, 0.75], 50), brinjal: C("vegetable", [0.5, 0.75], 55), chilli: C("vegetable", [0.5, 0.75], 60),
+  onion: C("vegetable", [0.4, 0.7], 50), bhindi: C("vegetable", [0.5, 0.75], 45), cabbage: C("vegetable", [0.5, 0.8], 50),
+  cauliflower: C("vegetable", [0.5, 0.8], 50), potato: C("vegetable", [0.55, 0.8], 50), carrot: C("vegetable", [0.5, 0.75], 50),
+  beans: C("vegetable", [0.5, 0.75], 45), cucumber: C("vegetable", [0.45, 0.75], 40), gourds: C("vegetable", [0.45, 0.75], 50),
+  drumstick: C("vegetable", [0.45, 0.75], 0), greens: C("vegetable", [0.45, 0.75], 30), vegetables: C("vegetable", [0.45, 0.75], 45),
+  // fruits
+  banana: C("fruit", [0.65, 0.85], 150), mango: C("fruit", [0.45, 0.75], 0), guava: C("fruit", [0.45, 0.75], 0),
+  papaya: C("fruit", [0.5, 0.8], 120), pomegranate: C("fruit", [0.4, 0.7], 0), lemon: C("fruit", [0.45, 0.75], 0),
+  grapes: C("fruit", [0.4, 0.7], 0), sapota: C("fruit", [0.5, 0.8], 0), jackfruit: C("fruit", [0.55, 0.8], 0),
+  watermelon: C("fruit", [0.4, 0.7], 45), muskmelon: C("fruit", [0.4, 0.7], 45), amla: C("fruit", [0.45, 0.75], 0),
+  // plantation
+  coconut: C("plantation", [0.55, 0.8], 0), arecanut: C("plantation", [0.6, 0.85], 0), tea: C("plantation", [0.6, 0.85], 0),
+  coffee: C("plantation", [0.6, 0.85], 0),
+  // flowers
+  jasmine: C("flower", [0.45, 0.75], 0), marigold: C("flower", [0.5, 0.75], 45), rose: C("flower", [0.45, 0.75], 0),
+  chrysanthemum: C("flower", [0.5, 0.75], 60),
+  // others
+  fodder: C("other", [0.6, 0.85], 45), other: C("other", null, null)
 };
 
 // Level thresholds (NDVI units).
@@ -96,7 +116,7 @@ export function validateZones(input) {
 /** { crop, sowingDate } -> cleaned; crop null clears it. */
 export function validateCrop(body, now = Date.now()) {
   const crop = body?.crop === null || body?.crop === "" || body?.crop === undefined ? null : String(body.crop).toLowerCase();
-  if (crop !== null && !Object.hasOwn(CROPS, crop)) throw bad(`Unknown crop (one of ${Object.keys(CROPS).join(", ")})`);
+  if (crop !== null && !Object.hasOwn(CROPS, crop)) throw bad("Unknown crop");
   let sowingDate = body?.sowingDate ?? null;
   if (sowingDate === "") sowingDate = null;
   if (sowingDate !== null) {
