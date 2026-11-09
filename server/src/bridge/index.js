@@ -9,6 +9,7 @@ import { ensureDistributorSchema } from "./distributorStore.js";
 import { ensurePricingSchema } from "./pricingStore.js";
 import { ensureAdminGateSchema } from "./adminGateStore.js";
 import { ensureProductionSchema } from "./productionStore.js";
+import { ensureNdviSchema } from "./ndviStore.js";
 import { TOKEN_PREFIX } from "./distributors.js";
 import { auth } from "../firebaseAdmin.js";
 import { startFarmerDocCacheRefresh, startOfflineSweep } from "./firestoreMirror.js";
@@ -25,6 +26,7 @@ async function main() {
   await ensurePricingSchema();
   await ensureAdminGateSchema();
   await ensureProductionSchema();
+  await ensureNdviSchema();
   setOtaStatusHandler(ota.handleOtaStatus);
   setDeviceReplyHandler(eventLog.handleResponse);
   startRetentionCleanup();

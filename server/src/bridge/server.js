@@ -23,6 +23,9 @@ import { createAnnouncementsModule } from "./announcements.js";
 import { pgAnnouncementStore } from "./announcementStore.js";
 import { loadAudience, phoneFarmIds, sendPush, removeDevices } from "./announcementsFirebase.js";
 import { createReportService } from "./reportService.js";
+import { dayKey } from "./reports.js";
+import { createNdviRouter } from "./ndviRoutes.js";
+import { createNdviStore } from "./ndviStore.js";
 import { pgReportStore } from "./reportStore.js";
 import { MOTOR_NUMBERS } from "./motorNumbers.js";
 import { ALERTS_PAGE, alertsSince, alertPage } from "./alertHistory.js";
@@ -509,6 +512,26 @@ app.get("/reports/:farmId", async (req, res) => {
     return res.status(500).json({ error: "Failed to build the report" });
   }
 });
+
+/**
+ * Crop health (NDVI) - /api/farms/:farmId/ndvi, /api/fields/:fieldId/ndvi-map,
+ * /api/zones/:zoneId/ndvi(-history), /api/farms/:farmId/satellite-status and
+ * the zone / crop saves; see ndviRoutes.js. The water each valve got (for the
+ * advice) comes from Reports, summed over the farm's motors.
+ */
+async function waterByValve(farmId, days) {
+  const to = dayKey(Date.now());
+  const from = dayKey(Date.now() - (days - 1) * 86400000);
+  const total = new Map();
+  let seen = false;
+  for (const motor of MOTOR_NUMBERS) {
+    const rep = await reports.getReport(farmId, motor, from, to);
+    if (rep.totals?.daysWithData) seen = true;
+    for (const v of rep.totals?.valves || []) total.set(v.valve, (total.get(v.valve) || 0) + (v.waterSec || 0));
+  }
+  return seen ? total : null;
+}
+app.use("/api", createNdviRouter({ store: createNdviStore(), canAccessFarm, water: waterByValve }));
 
 /**
  * GET /alerts/:farmId?since=<epoch ms>

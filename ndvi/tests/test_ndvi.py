@@ -1,0 +1,296 @@
+"""NDVI worker tests. Pure ones always run; the database ones need
+NDVI_TEST_PG (a database whose name ends in "test"), e.g.
+NDVI_TEST_PG=postgres://fbtest:fbtest@127.0.0.1:5432/ndvitest python -m pytest tests
+"""
+import io
+import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import numpy as np
+import pytest
+from PIL import Image
+from pyproj import CRS
+from rasterio.transform import from_origin
+
+from ndvi_worker import raster, render, stac, store, worker
+from ndvi_worker.raster import FarmRaster
+from ndvi_worker.stac import Band, Scene
+
+RED = Band(href="red", scale=0.0001, offset=-0.1)
+NIR = Band(href="nir", scale=0.0001, offset=-0.1)
+UTM = CRS.from_epsg(32643)  # Erode is in UTM 43N
+
+
+def dn(refl):
+    """Reflectance -> digital number for the c1 offset (-0.1) and scale (1e-4)."""
+    return np.asarray((np.asarray(refl) + 0.1) / 0.0001, dtype=np.uint16)
+
+
+def sq(lat, lng, d=0.00055):
+    return [{"lat": lat, "lng": lng}, {"lat": lat, "lng": lng + d}, {"lat": lat + d, "lng": lng + d},
+            {"lat": lat + d, "lng": lng}]
+
+
+# ------------------------------------------------------------------ NDVI maths
+
+def test_ndvi_uses_scale_and_offset():
+    # red 0.05, nir 0.45 -> 0.8 ; without the offset it would be ~0.67
+    nd, valid, cloud, nodata = raster.compute_ndvi(dn([[0.05]]), dn([[0.45]]), np.array([[4]]), RED, NIR)
+    assert valid.all() and not cloud.any()
+    assert nd[0, 0] == pytest.approx(0.8, abs=1e-4)
+
+
+def test_cloud_shadow_nodata_and_bad_pixels_are_masked():
+    red = dn([[0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]])
+    nir = dn([[0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45]])
+    red[0, 5] = 0                                   # no data
+    red[0, 6] = 500                                 # reflectance -0.05: impossible
+    scl = np.array([[4, 3, 8, 9, 10, 4, 4]])        # veg, shadow, cloud, cloud, cirrus
+    nd, valid, cloud, nodata = raster.compute_ndvi(red, nir, scl, RED, NIR)
+    assert valid.tolist() == [[True, False, False, False, False, False, False]]
+    assert cloud.tolist() == [[False, True, True, True, True, False, False]]
+    assert nodata.tolist() == [[False, False, False, False, False, True, False]]
+    assert np.isnan(nd[0, 1:]).all()
+
+
+def test_ndvi_always_in_range():
+    rng = np.random.default_rng(1)
+    red = rng.integers(1, 12000, (50, 50)).astype(np.uint16)
+    nir = rng.integers(1, 12000, (50, 50)).astype(np.uint16)
+    nd, valid, _, _ = raster.compute_ndvi(red, nir, np.full((50, 50), 4), RED, NIR)
+    v = nd[valid]
+    assert v.size > 0 and (v >= -1).all() and (v <= 1).all()
+
+
+# ------------------------------------------------------------------ geometry
+
+def test_pin_or_line_has_no_zone():
+    assert raster.zone_polygon([{"lat": 11.45, "lng": 77.68}]) is None
+    assert raster.zone_polygon(sq(11.45, 77.68)[:2]) is None
+    assert raster.zone_polygon([]) is None
+
+
+def test_crossing_shape_is_repaired_not_dropped():
+    p = sq(11.45, 77.68)
+    bowtie = [p[0], p[2], p[1], p[3]]
+    poly = raster.zone_polygon(bowtie)
+    assert poly is not None and poly.is_valid and poly.area > 0
+
+
+def test_area():
+    a = raster.area_m2(raster.zone_polygon(sq(11.45, 77.68)))
+    assert 3500 < a < 3800       # 0.00055 deg ~ 60 m a side
+
+
+# ------------------------------------------------------------------ zone pixels
+
+def synthetic_farm(values, clouds=None, zones_m=None):
+    """A 20 x 20 grid of 10 m pixels in UTM with per-zone NDVI."""
+    t = from_origin(500000, 1300200, 10, 10)
+    h = w = 20
+    ndvi = np.full((h, w), 0.2, dtype=np.float32)
+    valid = np.ones((h, w), dtype=bool)
+    cloud = np.zeros((h, w), dtype=bool)
+    from shapely.geometry import box
+    zones_m = zones_m or {1: box(500013, 1300013, 500073, 1300073),     # 60 x 60 m, off the pixel grid
+                          2: box(500100, 1300010, 500160, 1300070),
+                          3: box(500010, 1300100, 500070, 1300160)}
+    for v, val in values.items():
+        poly = zones_m[v]
+        m = raster.geometry_mask([poly], out_shape=(h, w), transform=t, invert=True)
+        ndvi[m] = val
+    for v in (clouds or []):
+        m = raster.geometry_mask([zones_m[v]], out_shape=(h, w), transform=t, invert=True)
+        valid[m] = False
+        cloud[m] = True
+        ndvi[m] = np.nan
+    return FarmRaster(crs=UTM, transform=t, ndvi=ndvi, valid=valid, cloud=cloud,
+                      nodata=np.zeros((h, w), dtype=bool), zones_native=zones_m)
+
+
+def test_zone_uses_inner_pixels_only():
+    fr = synthetic_farm({1: 0.7, 2: 0.4, 3: 0.55})
+    # a neighbour's value on the edge mustn't leak in
+    per_zone, farm = raster.analyse(fr, 60)
+    assert per_zone[1]["pixels"] == 25           # 6 x 6 pixels, 5 m inset -> 5 x 5
+    assert per_zone[1]["mean"] == pytest.approx(0.7)
+    assert per_zone[2]["mean"] == pytest.approx(0.4)
+    assert per_zone[3]["min"] == per_zone[3]["max"] == pytest.approx(0.55)
+    assert all(z["usable"] for z in per_zone.values())
+    assert farm["clear_pct"] == 100.0
+    assert worker.classify(per_zone, farm) == "ok"
+
+
+def test_small_zone_falls_back_to_centre_pixels():
+    from shapely.geometry import box
+    tiny = {1: box(500010, 1300010, 500030, 1300030)}     # 20 x 20 m: inset leaves 1 pixel
+    fr = synthetic_farm({1: 0.6}, zones_m=tiny)
+    per_zone, _ = raster.analyse(fr, 60)
+    assert per_zone[1]["pixels"] == 4 and per_zone[1]["mean"] == pytest.approx(0.6)
+
+
+def test_cloudy_zone_is_not_usable_but_others_are():
+    fr = synthetic_farm({1: 0.7, 2: 0.4, 3: 0.55}, clouds=[2])
+    per_zone, farm = raster.analyse(fr, 60)
+    assert per_zone[2]["usable"] is False and per_zone[2]["valid_pct"] == 0
+    assert per_zone[1]["usable"] and worker.classify(per_zone, farm) == "ok"
+    fr = synthetic_farm({1: 0.7, 2: 0.4, 3: 0.55}, clouds=[1, 2, 3])
+    per_zone, farm = raster.analyse(fr, 60)
+    assert worker.classify(per_zone, farm) == "cloudy"
+
+
+def test_heatmap_png_covers_zones():
+    fr = synthetic_farm({1: 0.75, 2: 0.15, 3: 0.5}, clouds=[3])
+    png, (w, s, e, n) = render.render(fr)
+    img = Image.open(io.BytesIO(png))
+    assert img.mode == "RGBA" and img.width > 0
+    assert w < e and s < n and 74.9 < w < 75.1 and 11.6 < s < 11.9   # UTM 43N, E 500 km = 75 deg E
+    px = np.array(img)
+    colours = {tuple(c) for c in px.reshape(-1, 4) if c[3] > 0}
+    assert render.CLOUD_RGBA in colours                     # cloudy zone grey
+    assert any(c[1] > c[0] for c in colours)                # a green
+    assert any(c[0] > 200 and c[1] < 60 for c in colours)   # a red
+
+
+def test_ramp_ends():
+    out = render.ramp(np.array([0.0, 1.0], dtype=np.float32))
+    assert tuple(out[0]) == render.STOPS[0][1] and tuple(out[1]) == render.STOPS[-1][1]
+
+
+# ------------------------------------------------------------------ STAC
+
+def test_search_follows_pages_and_skips_items_without_bands():
+    def item(i, day):
+        a = {b: {"href": f"https://x/{i}/{b}.tif", "raster:bands": [{"scale": 0.0001, "offset": -0.1, "nodata": 0}]}
+             for b in ("red", "nir", "scl")}
+        return {"id": f"S{i}", "properties": {"datetime": f"2026-10-{day:02d}T05:25:00Z", "eo:cloud_cover": 10,
+                                               "grid:code": "MGRS-43PGN"}, "assets": a}
+    pages = [{"features": [item(2, 6), item(1, 1)], "links": [{"rel": "next", "href": "https://s/next", "body": {"next": "t"}}]},
+             {"features": [item(3, 11), {"id": "bad", "properties": {"datetime": "2026-10-12T00:00:00Z"}, "assets": {}}],
+              "links": []}]
+    calls = []
+
+    def post(url, body):
+        calls.append((url, body))
+        return pages[len(calls) - 1]
+    out = stac.search((77.6, 11.4, 77.7, 11.5), datetime(2026, 10, 1, tzinfo=timezone.utc),
+                      datetime(2026, 11, 1, tzinfo=timezone.utc), post=post)
+    assert [s.id for s in out] == ["S1", "S2", "S3"]
+    assert calls[1] == ("https://s/next", {"next": "t"})
+    assert out[0].bands["red"].offset == -0.1 and out[0].tile == "MGRS-43PGN"
+    assert calls[0][1]["query"]["eo:cloud_cover"]["lt"] > 0
+
+
+# ------------------------------------------------------------------ database (worker end to end)
+
+PG = os.environ.get("NDVI_TEST_PG")
+needs_pg = pytest.mark.skipif(not PG or not PG.rstrip("/").split("/")[-1].endswith("test"),
+                              reason="set NDVI_TEST_PG to a *test database")
+SCHEMA = Path(__file__).resolve().parents[2] / "server" / "src" / "bridge" / "ndviSchema.sql"
+
+
+@pytest.fixture
+def conn():
+    c = store.connect(PG)
+    with c.cursor() as cur:
+        cur.execute("DROP TABLE IF EXISTS ndvi_maps, ndvi_history, ndvi_farm_scenes, ndvi_scenes, ndvi_zones, ndvi_status CASCADE")
+        cur.execute(SCHEMA.read_text())
+    c.commit()
+    yield c
+    c.close()
+
+
+def scene(i, day, cloud=20.0):
+    return Scene(id=f"S2X_TEST_{i}", acquired_at=datetime(2026, 10, day, 5, 25, tzinfo=timezone.utc),
+                 cloud_cover=cloud, tile="MGRS-43PGN", bands={"red": RED, "nir": NIR, "scl": Band("scl")})
+
+
+def put_zones(conn, farm, zones):
+    with conn.cursor() as cur:
+        for v, pts in zones.items():
+            cur.execute("INSERT INTO ndvi_zones (farm_id, valve, points) VALUES (%s, %s, %s::jsonb)",
+                        (farm, v, __import__("json").dumps(pts)))
+    conn.commit()
+
+
+@needs_pg
+def test_worker_processes_each_image_once(conn):
+    put_zones(conn, "0003", {1: sq(11.45, 77.68), 2: sq(11.45, 77.681), 3: sq(11.451, 77.68), 4: sq(11.45, 77.69)[:2]})
+    scenes = [scene(1, 1), scene(2, 6), scene(3, 11)]
+    cloudy = {"S2X_TEST_2"}
+    reads = []
+
+    def search(bbox, start, end):
+        assert bbox[0] < 77.68 < bbox[2]
+        return scenes
+
+    def read(sc, zones):
+        reads.append(sc.id)
+        assert set(zones) == {1, 2, 3}                       # the pin-only valve 4 has no zone
+        if sc.id == "S2X_TEST_3":
+            raise OSError("HTTP 503")
+        return synthetic_farm({1: 0.7, 2: 0.4, 3: 0.55}, clouds=[1, 2, 3] if sc.id in cloudy else None)
+
+    now = datetime(2026, 10, 20, tzinfo=timezone.utc)
+    res = worker.check_farm(conn, "0003", search=search, read=read, now=now)
+    assert res == {"S2X_TEST_1": "ok", "S2X_TEST_2": "cloudy", "S2X_TEST_3": "error"}
+
+    # second round: only the failed image is tried again
+    reads.clear()
+    scenes.append(scene(4, 16))
+    res = worker.check_farm(conn, "0003", search=search, read=lambda sc, z: read(sc, z) if sc.id != "S2X_TEST_3"
+                            else synthetic_farm({1: 0.72, 2: 0.41, 3: 0.5}), now=now)
+    assert reads == ["S2X_TEST_4"] and res == {"S2X_TEST_3": "ok", "S2X_TEST_4": "ok"}
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT valve, count(*) FILTER (WHERE usable), count(*) FROM ndvi_history GROUP BY valve ORDER BY valve")
+        assert cur.fetchall() == [(1, 3, 4), (2, 3, 4), (3, 3, 4)]
+        cur.execute("SELECT count(*) FROM ndvi_maps WHERE farm_id = '0003'")
+        assert cur.fetchone()[0] == 3
+        cur.execute("SELECT last_obs_at, last_check_at IS NOT NULL, last_error FROM ndvi_status WHERE farm_id = '0003'")
+        last_obs, checked, err = cur.fetchone()
+        assert last_obs == scene(4, 16).acquired_at and checked and err is None
+    conn.rollback()
+
+
+@needs_pg
+def test_refresh_request_and_schedule(conn):
+    put_zones(conn, "0002", {1: sq(11.45, 77.68)})
+    now = datetime(2026, 10, 20, 12, tzinfo=timezone.utc)
+    assert store.farms_due(conn, 6, now) == ["0002"]           # never checked
+    worker.check_farm(conn, "0002", search=lambda *a: [], read=None, now=now)
+    assert store.farms_due(conn, 6, datetime.now(timezone.utc)) == []
+    with conn.cursor() as cur:
+        cur.execute("UPDATE ndvi_status SET refresh_requested = now() WHERE farm_id = '0002'")
+    conn.commit()
+    assert store.farms_due(conn, 6, datetime.now(timezone.utc)) == ["0002"]
+    worker.check_farm(conn, "0002", search=lambda *a: [], read=None, now=datetime.now(timezone.utc) + timedelta(seconds=5))
+    assert store.farms_due(conn, 6, datetime.now(timezone.utc)) == []
+
+
+@needs_pg
+def test_search_failure_is_recorded_and_retried(conn):
+    put_zones(conn, "0005", {1: sq(11.45, 77.68)})
+
+    def boom(*a):
+        raise OSError("catalogue down")
+    assert worker.check_farm(conn, "0005", search=boom, read=None) == {}
+    with conn.cursor() as cur:
+        cur.execute("SELECT last_error FROM ndvi_status WHERE farm_id = '0005'")
+        assert "catalogue down" in cur.fetchone()[0]
+    conn.rollback()
+
+
+@needs_pg
+def test_maps_are_pruned(conn, monkeypatch):
+    monkeypatch.setattr("ndvi_worker.config.KEEP_MAPS", 2)
+    put_zones(conn, "0006", {1: sq(11.45, 77.68)})
+    scenes = [scene(i, i) for i in range(1, 5)]
+    worker.check_farm(conn, "0006", search=lambda *a: scenes, read=lambda sc, z: synthetic_farm(
+        {1: 0.6}, zones_m={1: __import__("shapely.geometry", fromlist=["box"]).box(500010, 1300010, 500070, 1300070)}),
+        now=datetime(2026, 10, 20, tzinfo=timezone.utc))
+    with conn.cursor() as cur:
+        cur.execute("SELECT scene_id FROM ndvi_maps WHERE farm_id = '0006' ORDER BY acquired_at")
+        assert [r[0] for r in cur.fetchall()] == ["S2X_TEST_3", "S2X_TEST_4"]
+    conn.rollback()
