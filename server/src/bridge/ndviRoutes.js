@@ -106,7 +106,7 @@ export function createNdviRouter({ store, canAccessFarm, water = async () => nul
         sceneId: s.scene_id, acquiredAt: new Date(s.acquired_at).toISOString(), status: s.status,
         farmClearPct: s.clear_pct === null ? null : Math.round(s.clear_pct), tileCloudPct: Math.round(s.cloud_cover ?? 0)
       })),
-      source: "Copernicus Sentinel-2 Level-2A (10 m), free and open data",
+      accuracyM: 10,
       note: "A new image comes every few days, but only clear ones over the farm count - in cloudy weeks there may be none."
     });
   }));

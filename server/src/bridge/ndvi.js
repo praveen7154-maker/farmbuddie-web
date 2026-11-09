@@ -358,7 +358,7 @@ export function buildFarmReport({ farmId, zones, latest, previous, recent = new 
       good: out.filter((z) => z.level === "good").length, waiting: out.filter((z) => z.level === "waiting").length
     },
     zones: out,
-    note: "Satellite crop vigour (NDVI, Copernicus Sentinel-2, 10 m). It shows where to look, not what is wrong - always check on the ground. It never runs the pump."
+    note: "NDVI satellite crop vigour, accurate to about 10 m. It shows where to look, not what is wrong - always check on the ground. It never runs the pump."
   };
 }
 
