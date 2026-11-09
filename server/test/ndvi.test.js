@@ -66,11 +66,22 @@ test("a zone well below the farm's others is low; water decides the advice", () 
   assert.equal(z[3].level, "low");
   assert.equal(z[3].advice[0].code, "check_uniformity");
   assert.equal(z[3].advice[0].params.lessPct, 58);    // 3000 s vs the others' median 7100 s
+  assert.equal(z[3].waterSec, 3000);
+  assert.equal(z[3].waterOthersSec, 7100);
+  for (const zz of r.zones) for (const a of zz.advice) assert.doesNotMatch(a.text, /dripper|lateral|drip line|valve,/i);
   assert.ok(z[3].advice.some((a) => a.code === "check_soil_moisture"));
   assert.equal(z[4].level, "watch");
   assert.equal(z[4].advice[0].code, "inspect_pest_nutrient");
   assert.deepEqual(z[1].advice, []);
   assert.deepEqual(r.summary, { zones: 4, mapped: 4, low: 1, watch: 1, good: 2, waiting: 0 });
+});
+
+test("water isn't compared when the other valves barely ran", () => {
+  const latest = [obs(1, 0.7, 2, "S2"), obs(2, 0.5, 2, "S2")];
+  const z = byValve(rep({ zones: [zone(1), zone(2)], latest, water: new Map([[1, 600], [2, 12600]]) }));
+  assert.equal(z[2].level, "low");
+  assert.equal(z[2].advice[0].code, "inspect_zone");       // valve 1 ran 10 min - nothing to compare with
+  assert.equal(z[2].waterSec, 12600);
 });
 
 test("without water data the advice is to inspect; never a pump action", () => {

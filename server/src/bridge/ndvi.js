@@ -64,6 +64,8 @@ export const DROP = -0.1;
 // A zone getting less than this share of the farm's typical water.
 export const LOW_WATER_RATIO = 0.75;
 export const WATER_DAYS = 14;
+// Below this much water on the other valves, there's nothing to compare with.
+export const MIN_COMPARE_WATER_SEC = 3600;
 // Older than this, the reading is flagged (clouds hid the farm since).
 export const OLD_OBS_DAYS = 20;
 export const YOUNG_CROP_DAYS = 30;
@@ -228,13 +230,13 @@ const worse = (a, b) => (LEVEL_RANK[b] > LEVEL_RANK[a] ? b : a);
 export function adviceText(code, p = {}) {
   switch (code) {
     case "check_uniformity":
-      return `This zone got ${p.lessPct}% less water than the farm's other zones in the last ${WATER_DAYS} days. Check the valve, the line pressure and for blocked drippers or laterals.`;
+      return `This area got less water than the farm's other areas in the last ${WATER_DAYS} days. Check whether water reaches all of it evenly.`;
     case "inspect_pest_nutrient":
-      return "It got about as much water as the other zones, so water is unlikely to be the reason. Walk the zone and check for pests, disease or nutrient shortage.";
+      return "It got about as much water as the other areas, so water is unlikely to be the reason. Walk through it and check the crop for pests, disease or nutrient shortage.";
     case "inspect_zone":
-      return "Walk this zone and see what is different from the rest of the farm.";
+      return "Walk through this area and see what is different from the rest of the farm.";
     case "dropping":
-      return `Crop vigour fell by ${p.drop} since the last clear image (${p.days} days). Inspect this zone soon.`;
+      return `Crop vigour fell by ${p.drop} since the last clear image (${p.days} days). Check this area soon.`;
     case "below_typical":
       return `Lower than is typical for a full-grown ${p.crop} (${p.typical}). Compare with the crop on the ground.`;
     case "check_soil_moisture":
@@ -244,9 +246,9 @@ export function adviceText(code, p = {}) {
     case "old_observation":
       return `This reading is ${p.days} days old - clouds have hidden the farm since. It updates with the next clear image.`;
     case "spot_new":
-      return `Weak spot ${p.label} (about ${p.acres} acre, ${p.ndvi} against ${p.rest} in the rest of this valve) is new since the last clear image. Walk to it soon: check for pests, disease, or a blocked or broken dripper / lateral there.`;
+      return `Weak spot ${p.label} (about ${p.acres} acre, ${p.ndvi} against ${p.rest} in the rest of this valve) is new since the last clear image. Walk to it soon and check the crop there for pests, disease or water stress.`;
     case "spot_persistent":
-      return `Weak spot ${p.label} (about ${p.acres} acre, ${p.ndvi} against ${p.rest}) was weak in ${p.times} of the last clear images - a lasting cause. Check the soil there (salt, water-logging, hard layer), whether the drip line reaches it, and for gaps in planting.`;
+      return `Weak spot ${p.label} (about ${p.acres} acre, ${p.ndvi} against ${p.rest}) was weak in ${p.times} of the last clear images, so the cause is lasting. Check the soil there, whether water reaches it, and for gaps in planting.`;
     case "small_zone":
       return "This zone is small for 10 m satellite pixels, so its value is approximate.";
     default:
@@ -316,7 +318,7 @@ export function buildFarmReport({ farmId, zones, latest, previous, recent = new 
     if (level !== "good") {
       const w = waterOf(z.valve);
       const wOthers = waterOthers(z.valve);
-      if (w !== null && wOthers) {
+      if (w !== null && wOthers && wOthers >= MIN_COMPARE_WATER_SEC) {
         const ratio = w / wOthers;
         if (ratio < LOW_WATER_RATIO) tips.unshift(advice("check_uniformity", { lessPct: Math.round((1 - ratio) * 100) }));
         else tips.unshift(advice("inspect_pest_nutrient"));
@@ -334,7 +336,8 @@ export function buildFarmReport({ farmId, zones, latest, previous, recent = new 
       ...base, level, latest: obsView(cur), previous: obsView(prev),
       change: round(change, 3), changeDays, vsFarm: round(vsFarm, 3), cropAgeDays: ageDays,
       typical: crop?.typical || null,
-      waterVsFarmPct: water && waterOthers(z.valve) ? Math.round((waterOf(z.valve) / waterOthers(z.valve)) * 100) : null,
+      // Plain hours (a % against the other valves read as nonsense when one valve barely ran).
+      waterOthersSec: water ? Math.round(waterOthers(z.valve) ?? 0) : null,
       advice: tips,
       zoneMedian: round(cur.median, 3), weakPct: round(weakPct, 1), uniformPct: spots.length ? round(100 - weakPct, 0) : 100,
       weakSpots: spots
