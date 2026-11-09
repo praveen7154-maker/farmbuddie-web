@@ -183,6 +183,18 @@ def test_heatmap_png_covers_zones():
     assert any(c[0] > 200 and c[1] < 60 for c in colours)   # a red
 
 
+def test_big_farm_picture_stays_small():
+    from shapely.geometry import box
+    t = from_origin(500000, 1310000, 10, 10)
+    h = w = 400                                               # a 4 km farm window
+    fr = FarmRaster(crs=UTM, transform=t, ndvi=np.full((h, w), 0.6, dtype=np.float32), valid=np.ones((h, w), bool),
+                    cloud=np.zeros((h, w), bool), nodata=np.zeros((h, w), bool),
+                    zones_native={1: box(500100, 1306100, 503900, 1309900)})
+    png, _ = render.render(fr)
+    img = Image.open(io.BytesIO(png))
+    assert max(img.size) <= 1000 + render.UPSCALE
+
+
 def test_ramp_ends():
     out = render.ramp(np.array([0.0, 1.0], dtype=np.float32))
     assert tuple(out[0]) == render.STOPS[0][1] and tuple(out[1]) == render.STOPS[-1][1]

@@ -27,6 +27,7 @@ STOPS = [
 ALPHA = 215
 CLOUD_RGBA = (150, 150, 150, 170)
 UPSCALE = 8
+MAX_SIDE_PX = 1000
 
 
 def ramp(ndvi):
@@ -65,7 +66,10 @@ def render(fr):
     rgba[clear, 3] = ALPHA
     rgba[(cat_ll == 2) | (cat_ll == 3)] = CLOUD_RGBA
 
-    big = np.repeat(np.repeat(rgba, UPSCALE, axis=0), UPSCALE, axis=1)
+    # Sharp squares when the app enlarges it - but never past ~1000 px a side,
+    # so a big farm's picture stays small for the phone.
+    scale = max(1, min(UPSCALE, MAX_SIDE_PX // max(dh, dw, 1)))
+    big = np.repeat(np.repeat(rgba, scale, axis=0), scale, axis=1)
     buf = io.BytesIO()
     Image.fromarray(big, "RGBA").save(buf, format="PNG", optimize=True)
     west, south, east, north = array_bounds(dh, dw, dst_t)
