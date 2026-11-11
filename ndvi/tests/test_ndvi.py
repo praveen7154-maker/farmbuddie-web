@@ -495,3 +495,12 @@ def test_water_columns_weather_and_backfill(conn):
     # a failed fetch is recorded, not raised
     assert worker.update_weather(conn, "0003", fetch=lambda u: (_ for _ in ()).throw(OSError("503")),
                                  now=now + timedelta(days=1)) == 0
+
+
+@needs_pg
+def test_tables_ready_needs_newest_columns(conn):
+    assert store.tables_ready(conn)
+    with conn.cursor() as cur:
+        cur.execute("ALTER TABLE ndvi_status DROP COLUMN weather_at")
+    conn.commit()
+    assert not store.tables_ready(conn)    # an older schema: wait for the bridge to update it

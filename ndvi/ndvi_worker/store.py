@@ -11,10 +11,21 @@ def connect(url=None):
     return psycopg.connect(url or config.PG_URL, autocommit=False)
 
 
+# The newest columns this worker writes (ndviSchema.sql): the tables are ready only once the
+# bridge has added them - on an update both containers start together and the bridge may be later.
+NEWEST_COLUMNS = (("ndvi_history", "ndmi_usable"), ("ndvi_maps", "png_water"), ("ndvi_status", "weather_at"))
+
+
 def tables_ready(conn):
     with conn.cursor() as cur:
         cur.execute("SELECT to_regclass('public.ndvi_zones') IS NOT NULL AND to_regclass('public.ndvi_status') IS NOT NULL")
         ok = cur.fetchone()[0]
+        if ok:
+            cur.execute("""SELECT count(*) FROM information_schema.columns
+                            WHERE table_schema = 'public' AND (table_name, column_name) IN (%s)"""
+                        % ", ".join(["(%s, %s)"] * len(NEWEST_COLUMNS)),
+                        [x for pair in NEWEST_COLUMNS for x in pair])
+            ok = cur.fetchone()[0] == len(NEWEST_COLUMNS)
     conn.rollback()
     return bool(ok)
 

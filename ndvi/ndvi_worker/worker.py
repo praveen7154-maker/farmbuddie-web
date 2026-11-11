@@ -109,15 +109,19 @@ def update_weather(conn, farm_id, fetch=None, now=None):
 def run_forever():
     conn = store.connect()
     while not store.tables_ready(conn):
-        log.info("waiting for the bridge to create the NDVI tables")
+        log.info("waiting for the bridge to create or update the NDVI tables")
         time.sleep(30)
     log.info("NDVI worker started: check every %.1f h, backfill %d days", config.CHECK_HOURS, config.BACKFILL_DAYS)
-    try:
-        water_backfill(conn)
-    except Exception as e:  # noqa: BLE001
-        conn.rollback()
-        log.warning("water backfill check failed: %s", e)
+    backfilled = False
     while True:
+        if not backfilled:
+            # Once per start; tried again next round if it failed.
+            try:
+                water_backfill(conn)
+                backfilled = True
+            except Exception as e:  # noqa: BLE001
+                conn.rollback()
+                log.warning("water backfill check failed: %s", e)
         try:
             for farm_id in store.farms_due(conn, config.CHECK_HOURS):
                 check_farm(conn, farm_id)
