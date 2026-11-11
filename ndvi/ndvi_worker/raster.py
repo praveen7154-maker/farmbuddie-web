@@ -3,6 +3,13 @@ and per irrigation-zone statistics.
 
 NDVI = (B08 - B04) / (B08 + B04), on surface reflectance
 (digital number x scale + offset, both from the image's own metadata).
+
+Leaf moisture: NDMI = (B8A - B11) / (B8A + B11), the normalised difference
+moisture index - near-infrared against short-wave infrared, which water in
+the leaves absorbs. Both bands are 20 m; they are read onto the same 10 m
+grid (each 20 m pixel covers 2 x 2 grid cells). Only read where the crop
+covers the ground (NDVI >= NDMI_MIN_NDVI): over bare soil it says nothing
+about the crop.
 """
 import math
 from dataclasses import dataclass, field
@@ -104,6 +111,28 @@ def compute_ndvi(red_dn, nir_dn, scl, red_band, nir_band):
     return np.where(valid, ndvi, np.nan).astype(np.float32), valid, cloud, nodata
 
 
+# NDMI is read only where the canopy covers the ground.
+NDMI_MIN_NDVI = 0.3
+# ... and a zone gets a water reading only when at least this % of its clear
+# pixels are canopy, and at least this many (2 x 2 grid cells per 20 m pixel,
+# so 8 = two real pixels).
+NDMI_MIN_VEG_PCT = 50.0
+NDMI_MIN_PIXELS = 8
+
+
+def compute_ndmi(n8_dn, sw_dn, valid, ndvi, n8_band, sw_band):
+    """-> (ndmi with NaN where not read, mask of pixels read). [valid]/[ndvi] from compute_ndvi."""
+    n8_dn = np.asarray(n8_dn)
+    sw_dn = np.asarray(sw_dn)
+    n8 = n8_dn.astype(np.float32) * n8_band.scale + n8_band.offset
+    sw = sw_dn.astype(np.float32) * sw_band.scale + sw_band.offset
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ndmi = (n8 - sw) / (n8 + sw)
+    ok = valid & (n8_dn != n8_band.nodata) & (sw_dn != sw_band.nodata) & (n8 > 0) & (sw > 0) \
+        & np.isfinite(ndmi) & (ndmi >= -1.0) & (ndmi <= 1.0) & (np.nan_to_num(ndvi, nan=-1.0) >= NDMI_MIN_NDVI)
+    return np.where(ok, ndmi, np.nan).astype(np.float32), ok
+
+
 def zone_mask(poly_native, transform, shape):
     """Pixels belonging to a zone (polygon already in the image's CRS)."""
     inner = poly_native.buffer(-INSET_M)
@@ -131,6 +160,18 @@ def zone_stats(ndvi, valid, nodata, mask, min_clear_pct):
                    p90=round(float(np.percentile(vals, 90)), 4), std=round(float(vals.std()), 4))
     out["usable"] = bool(vals.size >= min(MIN_PIXELS, pixels) and vals.size > 0
                          and out["valid_pct"] >= min_clear_pct)
+    return out
+
+
+def ndmi_stats(ndmi, ndmi_ok, valid, mask):
+    """A zone's leaf-moisture reading over its canopy pixels (all None when it can't be read)."""
+    clear = int((mask & valid).sum())
+    vals = ndmi[mask & ndmi_ok]
+    veg_pct = round(100.0 * vals.size / clear, 1) if clear else 0.0
+    out = {"ndmi_mean": None, "ndmi_p10": None, "ndmi_median": None, "ndmi_veg_pct": veg_pct, "ndmi_usable": False}
+    if vals.size >= NDMI_MIN_PIXELS and veg_pct >= NDMI_MIN_VEG_PCT:
+        out.update(ndmi_mean=round(float(vals.mean()), 4), ndmi_p10=round(float(np.percentile(vals, 10)), 4),
+                   ndmi_median=round(float(np.median(vals)), 4), ndmi_usable=True)
     return out
 
 
@@ -168,21 +209,31 @@ def _components(mask):
     return out
 
 
-def weak_spots(ndvi, valid, mask, transform, crs):
-    """The zone's median NDVI, its weak spots (largest / worst first) and the % of its clear area they cover."""
+# Dry spots: canopy pixels of one valve clearly drier than the rest of that
+# valve on the same image (a blocked lateral, a high patch, a leak upstream).
+DRY_DROP = 0.08
+DRY_MIN_PIXELS = 12        # 3 real 20 m pixels, ~0.03 acre
+DRY_MIN_ZONE_PIXELS = 32
+
+
+def weak_spots(ndvi, valid, mask, transform, crs, drop=WEAK_DROP, min_pixels=WEAK_MIN_PIXELS,
+               min_zone_pixels=WEAK_MIN_ZONE_PIXELS, min_median=WEAK_MIN_MEDIAN):
+    """The zone's median value, its weak spots (largest / worst first) and the % of its readable area they cover.
+
+    Used for NDVI (weak crop) and, with the NDMI array and its own limits, for dry spots."""
     zone_valid = mask & valid
     vals = ndvi[zone_valid]
-    if vals.size < WEAK_MIN_ZONE_PIXELS:
+    if vals.size < min_zone_pixels:
         return None, [], 0.0
     med = float(np.median(vals))
-    if med < WEAK_MIN_MEDIAN:
+    if min_median is not None and med < min_median:
         return round(med, 4), [], 0.0
-    weak = zone_valid & (ndvi < med - WEAK_DROP)
+    weak = zone_valid & (ndvi < med - drop)
     to_ll = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
     spots = []
     for rows, cols in _components(weak):
         n = rows.size
-        if n < WEAK_MIN_PIXELS:
+        if n < min_pixels:
             continue
         v = ndvi[rows, cols]
         # centre of the spot: the pixel centres' mean, in the image's metres, then lat/lng
@@ -216,6 +267,8 @@ class FarmRaster:
     cloud: np.ndarray
     nodata: np.ndarray
     zones_native: dict = field(default_factory=dict)   # valve -> polygon in crs
+    ndmi: np.ndarray = None       # None: the image had no water bands
+    ndmi_ok: np.ndarray = None
 
 
 def read_farm(scene, zones_lonlat, opener=rasterio.open):
@@ -242,9 +295,27 @@ def read_farm(scene, zones_lonlat, opener=rasterio.open):
             swin = from_bounds(*array_bounds(shape[0], shape[1], transform), scl_ds.transform)
             scl = scl_ds.read(1, window=swin, out_shape=shape, boundless=True, fill_value=0,
                               resampling=Resampling.nearest)
+        n8b, swb = scene.bands.get("nir08"), scene.bands.get("swir16")
+        n8 = sw = None
+        if n8b is not None and swb is not None:
+            try:
+                n8, sw = (_read_onto(opener, b, shape, transform) for b in (n8b, swb))
+            except Exception:  # noqa: BLE001 - no water reading for this image, NDVI still counts
+                n8 = sw = None
     ndvi, valid, cloud, nodata = compute_ndvi(red, nir, scl, rb, nb)
+    ndmi = ndmi_ok = None
+    if n8 is not None:
+        ndmi, ndmi_ok = compute_ndmi(n8, sw, valid, ndvi, n8b, swb)
     return FarmRaster(crs=crs, transform=transform, ndvi=ndvi, valid=valid, cloud=cloud, nodata=nodata,
-                      zones_native=native)
+                      zones_native=native, ndmi=ndmi, ndmi_ok=ndmi_ok)
+
+
+def _read_onto(opener, band, shape, transform):
+    """One band read onto the farm's 10 m grid (20 m pixels repeated, no smoothing)."""
+    with opener(band.href) as ds:
+        win = from_bounds(*array_bounds(shape[0], shape[1], transform), ds.transform)
+        return ds.read(1, window=win, out_shape=shape, boundless=True, fill_value=band.nodata,
+                       resampling=Resampling.nearest)
 
 
 def analyse(fr, min_clear_pct):
@@ -257,6 +328,16 @@ def analyse(fr, min_clear_pct):
         st = zone_stats(fr.ndvi, fr.valid, fr.nodata, m, min_clear_pct)
         med, spots, weak_pct = weak_spots(fr.ndvi, fr.valid, m, fr.transform, fr.crs) if st["usable"] else (None, [], 0.0)
         st.update(median=med, weak_spots=spots, weak_pct=weak_pct)
+        water = {"ndmi_mean": None, "ndmi_p10": None, "ndmi_median": None, "ndmi_veg_pct": None, "ndmi_usable": False,
+                 "dry_spots": [], "dry_pct": 0.0}
+        if fr.ndmi is not None and st["usable"]:
+            water.update(ndmi_stats(fr.ndmi, fr.ndmi_ok, fr.valid, m))
+            if water["ndmi_usable"]:
+                _, dry, dry_pct = weak_spots(fr.ndmi, fr.ndmi_ok, m, fr.transform, fr.crs, drop=DRY_DROP,
+                                             min_pixels=DRY_MIN_PIXELS, min_zone_pixels=DRY_MIN_ZONE_PIXELS,
+                                             min_median=None)
+                water.update(dry_spots=dry, dry_pct=dry_pct)
+        st.update(water)
         per_zone[valve] = st
     total = int(all_mask.sum())
     clear = int((all_mask & fr.valid).sum())

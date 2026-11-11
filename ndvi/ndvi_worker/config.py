@@ -41,3 +41,10 @@ MIN_CLEAR_PCT = _float("NDVI_MIN_CLEAR_PCT", 60)
 # Heatmaps kept per farm (newest first); the numbers are kept for good.
 KEEP_MAPS = _int("NDVI_KEEP_MAPS", 12)
 POLL_SECONDS = _int("NDVI_POLL_SECONDS", 60)
+
+# Weather for the water balance: NASA POWER daily point data (free, public,
+# no key, commercial use allowed). Fetched per farm at most this often, this
+# many days back (its rain arrives ~2 days late, sunlight ~1 week late).
+POWER_URL = os.environ.get("NDVI_POWER_URL", "https://power.larc.nasa.gov/api/temporal/daily/point")
+WEATHER_HOURS = _float("NDVI_WEATHER_HOURS", 12)
+WEATHER_DAYS = _int("NDVI_WEATHER_DAYS", 40)

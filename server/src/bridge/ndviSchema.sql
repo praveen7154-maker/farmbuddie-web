@@ -87,3 +87,38 @@ CREATE TABLE IF NOT EXISTS ndvi_status (
   last_error         TEXT,
   last_error_at      TIMESTAMPTZ
 );
+
+-- Water status (leaf moisture + water balance) -----------------------------
+-- Leaf moisture per zone from the same images (worker raster.ndmi_stats):
+-- NDMI = (B8A - B11) / (B8A + B11) over the zone's canopy pixels; dry spots
+-- like weak spots. ndmi_usable NULL = read before this existed.
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS ndmi_mean REAL;
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS ndmi_p10 REAL;
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS ndmi_median REAL;
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS ndmi_veg_pct REAL;
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS ndmi_usable BOOLEAN;
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS dry_spots JSONB;
+ALTER TABLE ndvi_history ADD COLUMN IF NOT EXISTS dry_pct REAL;
+-- The leaf-moisture picture for the map's Water view.
+ALTER TABLE ndvi_maps ADD COLUMN IF NOT EXISTS png_water BYTEA;
+-- A valve's flow (litres per hour, set in the app) turns its run time into
+-- mm of water on its land. NULL = not set.
+ALTER TABLE ndvi_zones ADD COLUMN IF NOT EXISTS flow_lph REAL;
+-- Daily weather per farm (worker weather.py, NASA POWER): rain and FAO-56
+-- reference evaporation for the water balance.
+CREATE TABLE IF NOT EXISTS ndvi_weather (
+  farm_id       TEXT NOT NULL,
+  day           DATE NOT NULL,
+  rain_mm       REAL,
+  et0_mm        REAL,
+  tmax          REAL,
+  tmin          REAL,
+  rh            REAL,
+  wind          REAL,
+  rs            REAL,
+  rs_estimated  BOOLEAN,
+  fetched_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (farm_id, day)
+);
+ALTER TABLE ndvi_status ADD COLUMN IF NOT EXISTS weather_at TIMESTAMPTZ;
+ALTER TABLE ndvi_status ADD COLUMN IF NOT EXISTS weather_error TEXT;

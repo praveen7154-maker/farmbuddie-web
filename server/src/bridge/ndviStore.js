@@ -16,7 +16,7 @@ export function createNdviStore(db = pool) {
   return {
     async zones(farmId) {
       const { rows } = await db.query(
-        `SELECT farm_id, valve, points, area_m2, crop, to_char(sowing_date, 'YYYY-MM-DD') AS sowing_date, plotted_at, updated_at
+        `SELECT farm_id, valve, points, area_m2, crop, to_char(sowing_date, 'YYYY-MM-DD') AS sowing_date, flow_lph, plotted_at, updated_at
            FROM ndvi_zones WHERE farm_id = $1 ORDER BY valve`, [farmId]);
       return rows;
     },
@@ -88,6 +88,24 @@ export function createNdviStore(db = pool) {
           RETURNING valve, crop, to_char(sowing_date, 'YYYY-MM-DD') AS sowing_date`,
         [farmId, valve, crop, sowingDate, who]);
       return rows[0] || null;
+    },
+
+    /** A valve's flow in litres per hour (null clears it). */
+    async setFlow(farmId, valve, flowLph, who) {
+      const { rows } = await db.query(
+        `UPDATE ndvi_zones SET flow_lph = $3, updated_at = now(), updated_by = $4
+          WHERE farm_id = $1 AND valve = $2 RETURNING valve, flow_lph`,
+        [farmId, valve, flowLph, who]);
+      return rows[0] || null;
+    },
+
+    /** The farm's daily weather, newest [days] days with data, oldest first. */
+    async weather(farmId, days = 14) {
+      const { rows } = await db.query(
+        `SELECT to_char(day, 'YYYY-MM-DD') AS day, rain_mm, et0_mm FROM (
+           SELECT * FROM ndvi_weather WHERE farm_id = $1 AND et0_mm IS NOT NULL ORDER BY day DESC LIMIT $2) w
+          ORDER BY day`, [farmId, days]);
+      return rows;
     },
 
     /** Newest usable reading per valve, and the usable one before it (at least 4 days older). */

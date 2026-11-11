@@ -7,6 +7,9 @@ from datetime import datetime
 from . import config
 
 BANDS = ("red", "nir", "scl")   # B04 (10 m), B08 (10 m), scene classification (20 m)
+# Leaf moisture (NDMI = (B8A - B11) / (B8A + B11)), both 20 m. Optional: an
+# image without them still gives NDVI, just no water reading.
+WATER_BANDS = ("nir08", "swir16")
 
 
 @dataclass
@@ -41,7 +44,7 @@ def parse_item(f):
     when = datetime.fromisoformat(p["datetime"].replace("Z", "+00:00"))
     return Scene(id=f["id"], acquired_at=when, cloud_cover=float(p.get("eo:cloud_cover", 100.0)),
                  tile=str(p.get("grid:code") or p.get("s2:mgrs_tile") or ""),
-                 bands={b: _band(assets[b]) for b in BANDS})
+                 bands={b: _band(assets[b]) for b in BANDS + WATER_BANDS if b in assets})
 
 
 def _post(url, body, timeout=60):

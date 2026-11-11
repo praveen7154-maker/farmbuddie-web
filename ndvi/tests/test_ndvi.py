@@ -13,7 +13,7 @@ from PIL import Image
 from pyproj import CRS
 from rasterio.transform import from_origin
 
-from ndvi_worker import raster, render, stac, store, worker
+from ndvi_worker import raster, render, stac, store, weather, worker
 from ndvi_worker.raster import FarmRaster
 from ndvi_worker.stac import Band, Scene
 
@@ -236,7 +236,7 @@ SCHEMA = Path(__file__).resolve().parents[2] / "server" / "src" / "bridge" / "nd
 def conn():
     c = store.connect(PG)
     with c.cursor() as cur:
-        cur.execute("DROP TABLE IF EXISTS ndvi_maps, ndvi_history, ndvi_farm_scenes, ndvi_scenes, ndvi_zones, ndvi_status CASCADE")
+        cur.execute("DROP TABLE IF EXISTS ndvi_maps, ndvi_history, ndvi_farm_scenes, ndvi_scenes, ndvi_zones, ndvi_status, ndvi_weather CASCADE")
         cur.execute(SCHEMA.read_text())
     c.commit()
     yield c
@@ -339,3 +339,159 @@ def test_maps_are_pruned(conn, monkeypatch):
         cur.execute("SELECT scene_id FROM ndvi_maps WHERE farm_id = '0006' ORDER BY acquired_at")
         assert [r[0] for r in cur.fetchall()] == ["S2X_TEST_3", "S2X_TEST_4"]
     conn.rollback()
+
+
+# ------------------------------------------------------------------ leaf moisture (NDMI)
+
+N8 = Band(href="nir08", scale=0.0001, offset=-0.1)
+SW = Band(href="swir16", scale=0.0001, offset=-0.1)
+
+
+def test_ndmi_maths_and_canopy_only():
+    # canopy (NDVI 0.8): nir08 0.40, swir 0.20 -> NDMI 0.333 ; bare soil (NDVI 0.1) not read
+    ndvi = np.array([[0.8, 0.1]], dtype=np.float32)
+    valid = np.array([[True, True]])
+    nd, ok = raster.compute_ndmi(dn([[0.40, 0.30]]), dn([[0.20, 0.35]]), valid, ndvi, N8, SW)
+    assert ok.tolist() == [[True, False]]
+    assert nd[0, 0] == pytest.approx(0.3333, abs=1e-3) and np.isnan(nd[0, 1])
+
+
+def test_ndmi_never_read_on_cloud_or_nodata():
+    ndvi = np.array([[0.8, 0.8, 0.8]], dtype=np.float32)
+    valid = np.array([[False, True, True]])          # pixel 0 is cloud
+    n8 = dn([[0.40, 0.40, 0.40]])
+    n8[0, 2] = 0                                     # no data
+    nd, ok = raster.compute_ndmi(n8, dn([[0.2, 0.2, 0.2]]), valid, ndvi, N8, SW)
+    assert ok.tolist() == [[False, True, False]]
+
+
+def with_water(fr, values, dry_box=None, dry_value=None):
+    """Give a synthetic farm leaf moisture per zone (and a drier patch)."""
+    ndmi = np.full(fr.ndvi.shape, np.nan, dtype=np.float32)
+    for v, val in values.items():
+        m = raster.geometry_mask([fr.zones_native[v]], out_shape=fr.ndvi.shape, transform=fr.transform, invert=True)
+        ndmi[m] = val
+    if dry_box is not None:
+        m = raster.geometry_mask([dry_box], out_shape=fr.ndvi.shape, transform=fr.transform, invert=True)
+        ndmi[m] = dry_value
+    ok = fr.valid & np.isfinite(ndmi) & (np.nan_to_num(fr.ndvi, nan=0) >= raster.NDMI_MIN_NDVI)
+    fr.ndmi = np.where(ok, ndmi, np.nan).astype(np.float32)
+    fr.ndmi_ok = ok
+    return fr
+
+
+def test_zone_water_reading_and_dry_spot():
+    from shapely.geometry import box
+    big = {1: box(500000, 1300000, 500120, 1300120)}            # 12 x 12 pixels
+    fr = synthetic_farm({1: 0.7}, zones_m=big)
+    fr = with_water(fr, {1: 0.30}, dry_box=box(500030, 1300030, 500070, 1300070), dry_value=0.12)
+    per_zone, _ = raster.analyse(fr, 60)
+    z = per_zone[1]
+    assert z["ndmi_usable"] and z["ndmi_veg_pct"] == 100.0
+    assert z["ndmi_median"] == pytest.approx(0.30)
+    assert len(z["dry_spots"]) == 1 and z["dry_spots"][0]["pixels"] == 16 and z["dry_spots"][0]["drop"] == pytest.approx(0.18, abs=1e-3)
+    assert z["dry_pct"] > 0
+
+
+def test_no_water_reading_on_bare_field_or_without_bands():
+    fr = synthetic_farm({1: 0.15, 2: 0.7, 3: 0.7})            # zone 1 bare
+    fr = with_water(fr, {1: 0.1, 2: 0.25, 3: 0.25})
+    per_zone, _ = raster.analyse(fr, 60)
+    assert not per_zone[1]["ndmi_usable"] and per_zone[1]["ndmi_mean"] is None
+    assert per_zone[2]["ndmi_usable"]
+    plain = synthetic_farm({1: 0.7, 2: 0.7, 3: 0.7})          # image without the water bands
+    per_zone, _ = raster.analyse(plain, 60)
+    assert all(not z["ndmi_usable"] and z["dry_spots"] == [] for z in per_zone.values())
+
+
+def test_water_picture():
+    fr = with_water(synthetic_farm({1: 0.7, 2: 0.15, 3: 0.6}, clouds=[3]), {1: 0.3, 2: 0.1})
+    png, bounds = render.render_water(fr)
+    img = np.array(Image.open(io.BytesIO(png)))
+    assert img.shape[2] == 4 and (img[..., 3] > 0).any()
+    colours = {tuple(px) for px in img.reshape(-1, 4) if px[3] > 0}
+    assert render.NO_CANOPY_RGBA in colours                     # bare zone 2 drawn pale
+    assert render.CLOUD_RGBA in colours
+    assert render.render_water(synthetic_farm({1: 0.7})) == (None, None)
+
+
+def test_stac_water_bands_are_optional():
+    base = {"id": "X", "properties": {"datetime": "2026-10-01T05:25:00Z", "eo:cloud_cover": 3},
+            "assets": {b: {"href": b} for b in ("red", "nir", "scl")}}
+    assert set(stac.parse_item(base).bands) == {"red", "nir", "scl"}
+    base["assets"].update({b: {"href": b, "raster:bands": [{"scale": 0.0001, "offset": -0.1}]} for b in ("nir08", "swir16")})
+    s = stac.parse_item(base)
+    assert s.bands["swir16"].offset == -0.1 and "nir08" in s.bands
+
+
+# ------------------------------------------------------------------ weather / ET0
+
+def test_et0_fao56_example():
+    # FAO-56 example 18 (Brussels, 6 July): 3.9 mm/day with RHmax/RHmin; mean RH gives ~3.8
+    et0, est = weather.et0_pm(datetime(2026, 7, 6).date(), 50.8, 100, 21.5, 12.3, 73.5, 2.078, 22.07)
+    assert et0 == pytest.approx(3.85, abs=0.15) and not est
+    et0b, est = weather.et0_pm(datetime(2026, 7, 6).date(), 50.8, 100, 21.5, 12.3, 73.5, 2.078, None)
+    assert est and 2.5 < et0b < 5.0
+
+
+def test_power_parsing_skips_missing_days_and_estimates_sun():
+    days = {"20261101": 1, "20261102": 1, "20261103": 1}
+    data = {"geometry": {"coordinates": [78.0, 11.4, 316.0]},
+            "parameters": {"ALLSKY_SFC_SW_DWN": {"units": "MJ/m^2/day"}},
+            "properties": {"parameter": {
+                "PRECTOTCORR": {"20261101": 4.4, "20261102": 12.0, "20261103": -999.0},
+                "T2M_MAX": {"20261101": 31.0, "20261102": 30.0, "20261103": -999.0},
+                "T2M_MIN": {"20261101": 22.0, "20261102": 23.0, "20261103": -999.0},
+                "RH2M": {"20261101": 80.0, "20261102": 85.0, "20261103": -999.0},
+                "WS2M": {"20261101": 1.0, "20261102": 1.1, "20261103": -999.0},
+                "ALLSKY_SFC_SW_DWN": {"20261101": 18.0, "20261102": -999.0, "20261103": -999.0}}}}
+    seen = []
+    rows = weather.fetch_daily(11.4, 78.0, datetime(2026, 11, 1).date(), datetime(2026, 11, 3).date(),
+                               get=lambda url: seen.append(url) or data)
+    assert "PRECTOTCORR" in seen[0] and "latitude=11.4000" in seen[0]
+    assert [r["day"].isoformat() for r in rows] == ["2026-11-01", "2026-11-02"]
+    assert rows[0]["rain_mm"] == 4.4 and not rows[0]["rs_estimated"] and rows[1]["rs_estimated"]
+    assert all(1.0 < r["et0_mm"] < 7.0 for r in rows)
+    assert len(days) == 3
+
+
+@needs_pg
+def test_water_columns_weather_and_backfill(conn):
+    from shapely.geometry import box
+    put_zones(conn, "0003", {1: sq(11.45, 77.68)})
+    sc = scene(5, 2)
+    sc.bands.update({"nir08": N8, "swir16": SW})
+
+    def read(s, zones):
+        fr = synthetic_farm({1: 0.7}, zones_m={1: box(500000, 1300000, 500120, 1300120)})
+        return with_water(fr, {1: 0.28})
+
+    now = datetime(2026, 10, 20, tzinfo=timezone.utc)
+    worker.check_farm(conn, "0003", search=lambda b, s, e: [sc], read=read, now=now)
+    with conn.cursor() as cur:
+        cur.execute("SELECT ndmi_usable, ndmi_median, dry_spots FROM ndvi_history WHERE valve = 1")
+        usable, med, dry = cur.fetchone()
+        assert usable and med == pytest.approx(0.28) and dry == []
+        cur.execute("SELECT png_water IS NOT NULL FROM ndvi_maps")
+        assert cur.fetchone()[0]
+        # a row read before leaf moisture existed -> the farm is re-read once
+        cur.execute("UPDATE ndvi_history SET ndmi_usable = NULL")
+    conn.commit()
+    assert store.farms_missing_water(conn, 110, now=now) == ["0003"]
+    store.forget_farm_images(conn, "0003")
+    assert store.processed_scene_ids(conn, "0003") == set()
+
+    # weather: fetched, stored, then not again within WEATHER_HOURS
+    def fetch(url):
+        return {"geometry": {"coordinates": [77.68, 11.45, 200]}, "properties": {"parameter": {
+            "PRECTOTCORR": {"20261019": 3.0}, "T2M_MAX": {"20261019": 31.0}, "T2M_MIN": {"20261019": 22.0},
+            "RH2M": {"20261019": 70.0}, "WS2M": {"20261019": 1.5}, "ALLSKY_SFC_SW_DWN": {"20261019": 19.0}}}}
+    assert worker.update_weather(conn, "0003", fetch=fetch, now=now) == 1
+    assert worker.update_weather(conn, "0003", fetch=fetch, now=now + timedelta(hours=1)) == 0
+    with conn.cursor() as cur:
+        cur.execute("SELECT day, rain_mm, et0_mm > 0 FROM ndvi_weather WHERE farm_id = '0003'")
+        assert cur.fetchall() == [(datetime(2026, 10, 19).date(), 3.0, True)]
+    conn.rollback()
+    # a failed fetch is recorded, not raised
+    assert worker.update_weather(conn, "0003", fetch=lambda u: (_ for _ in ()).throw(OSError("503")),
+                                 now=now + timedelta(days=1)) == 0

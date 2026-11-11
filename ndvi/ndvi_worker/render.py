@@ -30,18 +30,45 @@ UPSCALE = 8
 MAX_SIDE_PX = 1000
 
 
-def ramp(ndvi):
-    """NDVI array -> uint8 RGB array."""
-    xs = np.array([s[0] for s in STOPS], dtype=np.float32)
+# Leaf moisture (NDMI): brown (dry) -> sand -> light blue -> deep blue (wet
+# leaves). Display scale only - "dry" for a valve is decided against the
+# farm's other valves of the same crop and its own trend (bridge ndvi.js).
+WATER_STOPS = [
+    (-0.15, (166, 97, 26)),
+    (0.00, (223, 194, 125)),
+    (0.15, (128, 205, 193)),
+    (0.30, (53, 151, 143)),
+    (0.45, (1, 102, 94)),
+]
+# Clear, but no canopy to read (bare / just sown): pale, so it reads as "nothing here".
+NO_CANOPY_RGBA = (235, 228, 214, 150)
+
+
+def ramp(ndvi, stops=STOPS):
+    """Value array -> uint8 RGB array on the given colour stops."""
+    xs = np.array([s[0] for s in stops], dtype=np.float32)
     out = np.zeros(ndvi.shape + (3,), dtype=np.uint8)
     v = np.nan_to_num(ndvi, nan=0.0)
     for c in range(3):
-        out[..., c] = np.interp(v, xs, np.array([s[1][c] for s in STOPS], dtype=np.float32)).astype(np.uint8)
+        out[..., c] = np.interp(v, xs, np.array([s[1][c] for s in stops], dtype=np.float32)).astype(np.uint8)
     return out
 
 
 def render(fr):
-    """-> (png bytes, (west, south, east, north))."""
+    """-> (png bytes, (west, south, east, north)) - the crop vigour (NDVI) picture."""
+    return _render(fr, fr.ndvi, STOPS, None)
+
+
+def render_water(fr):
+    """-> (png bytes, bounds) - the leaf moisture (NDMI) picture, or (None, None) without water bands."""
+    if fr.ndmi is None:
+        return None, None
+    return _render(fr, fr.ndmi, WATER_STOPS, fr.ndmi_ok)
+
+
+def _render(fr, values, stops, read_mask):
+    """[read_mask]: pixels the value was read for (None = every clear pixel); clear but
+    unread pixels (no canopy for the water picture) are drawn pale."""
     h, w = fr.ndvi.shape
     inside = geometry_mask(list(fr.zones_native.values()), out_shape=(h, w), transform=fr.transform,
                            invert=True, all_touched=True)
@@ -50,21 +77,24 @@ def render(fr):
     cat[inside & fr.valid] = 1
     cat[inside & fr.cloud] = 2
     cat[inside & ~fr.valid & ~fr.cloud & ~fr.nodata] = 3
+    if read_mask is not None:
+        cat[inside & fr.valid & ~read_mask] = 4
 
     src_bounds = array_bounds(h, w, fr.transform)
     dst_t, dw, dh = calculate_default_transform(fr.crs, "EPSG:4326", w, h, *src_bounds)
     ndvi_ll = np.full((dh, dw), np.nan, dtype=np.float32)
     cat_ll = np.zeros((dh, dw), dtype=np.uint8)
-    reproject(fr.ndvi, ndvi_ll, src_transform=fr.transform, src_crs=fr.crs, dst_transform=dst_t,
+    reproject(values, ndvi_ll, src_transform=fr.transform, src_crs=fr.crs, dst_transform=dst_t,
               dst_crs="EPSG:4326", resampling=Resampling.nearest, src_nodata=np.nan, dst_nodata=np.nan)
     reproject(cat, cat_ll, src_transform=fr.transform, src_crs=fr.crs, dst_transform=dst_t,
               dst_crs="EPSG:4326", resampling=Resampling.nearest, src_nodata=0, dst_nodata=0)
 
     rgba = np.zeros((dh, dw, 4), dtype=np.uint8)
     clear = (cat_ll == 1) & np.isfinite(ndvi_ll)
-    rgba[clear, :3] = ramp(ndvi_ll)[clear]
+    rgba[clear, :3] = ramp(ndvi_ll, stops)[clear]
     rgba[clear, 3] = ALPHA
     rgba[(cat_ll == 2) | (cat_ll == 3)] = CLOUD_RGBA
+    rgba[cat_ll == 4] = NO_CANOPY_RGBA
 
     # Sharp squares when the app enlarges it - but never past ~1000 px a side,
     # so a big farm's picture stays small for the phone.

@@ -1,22 +1,26 @@
 import express from "express";
 import {
-  buildFarmReport, buildMapGeoJson, historyView, parseZoneId, statusView, validateCrop, validateZones, zoneId, CROPS, WATER_DAYS
+  buildFarmReport, buildMapGeoJson, historyView, parseZoneId, statusView, validateCrop, validateFlow, validateZones, zoneId, CROPS, WATER_DAYS
 } from "./ndvi.js";
+import { BALANCE_DAYS, windowDays } from "./ndviWater.js";
 
 // Crop health endpoints (mounted at /api, behind the bridge's sign-in):
 //   GET    /api/farms/:farmId/ndvi                 every zone's level, latest reading and advice
-//   GET    /api/fields/:fieldId/ndvi-map[?scene=]  GeoJSON zones + valves, and the heatmap picture
+//   GET    /api/fields/:fieldId/ndvi-map[?scene=][&layer=water]  GeoJSON zones + valves, and the heatmap picture
+//                                                  (layer=water: the leaf moisture picture)
 //   GET    /api/zones/:zoneId/ndvi                 one zone (zoneId = "<farmId>-<valve>", e.g. 0003-5)
 //   GET    /api/zones/:zoneId/ndvi-history[?days=] one reading per clear day
 //   GET    /api/farms/:farmId/satellite-status     last check / update, recent images and why skipped
 //   PUT    /api/farms/:farmId/zones                the app's plotted valve lands { zones: [{ valve, points, plottedAtMs }] }
 //   PUT    /api/zones/:zoneId/crop                 { crop, sowingDate }
+//   PUT    /api/zones/:zoneId/flow                 { flowLph } - the valve's flow, litres per hour (null clears)
 //   DELETE /api/zones/:zoneId                      a valve no longer mapped
 //   GET    /api/ndvi/crops                         the crop list and typical ranges
 // One field per farm for now, so fieldId = farmId. Same access rule as
 // /reports: the farm's own phones, its distributor, admins.
 //
-// [water]: async (farmId, days) => Map valve -> seconds watered, or null.
+// [water]: async (farmId, days, endMs?) => Map valve -> seconds watered in the [days] days
+// ending on endMs's day (default today), or null.
 export function createNdviRouter({ store, canAccessFarm, water = async () => null, now = () => Date.now(), log = console }) {
   const r = express.Router();
   const who = (req) => req.decodedToken?.phone_number || req.decodedToken?.uid || null;
@@ -50,14 +54,20 @@ export function createNdviRouter({ store, canAccessFarm, water = async () => nul
   }
 
   async function report(farmId) {
-    const [zones, { latest, previous, recent }, latestScene, status] = await Promise.all([
-      store.zones(farmId), store.latestAndPrevious(farmId), store.latestOkScene(farmId), store.status(farmId)
+    const [zones, { latest, previous, recent }, latestScene, status, weather] = await Promise.all([
+      store.zones(farmId), store.latestAndPrevious(farmId), store.latestOkScene(farmId), store.status(farmId),
+      (store.weather ? store.weather(farmId, 14) : Promise.resolve([])).catch((e) => { log.warn?.("ndvi weather lookup failed:", e?.message); return []; })
     ]);
-    const [sceneRows, waterMap] = await Promise.all([
+    // Irrigation over the same days as the weather window (weather arrives ~2 days late).
+    const win = windowDays(weather);
+    const winEndMs = win.length ? Date.parse(`${win[win.length - 1].day}T00:00:00Z`) : null;
+    const waterFail = (e) => { log.warn?.("ndvi water lookup failed:", e?.message); return null; };
+    const [sceneRows, waterMap, waterWindow] = await Promise.all([
       latestScene ? store.sceneRows(farmId, latestScene.scene_id) : [],
-      water(farmId, WATER_DAYS).catch((e) => { log.warn?.("ndvi water lookup failed:", e?.message); return null; })
+      water(farmId, WATER_DAYS).catch(waterFail),
+      win.length ? water(farmId, Math.min(win.length, BALANCE_DAYS), winEndMs).catch(waterFail) : null
     ]);
-    return { zones, rep: buildFarmReport({ farmId, zones, latest, previous, recent, sceneRows, water: waterMap, status, latestScene, now: now() }) };
+    return { zones, rep: buildFarmReport({ farmId, zones, latest, previous, recent, sceneRows, water: waterMap, status, latestScene, now: now(), weather, waterWindow }) };
   }
 
   r.get("/ndvi/crops", (req, res) => res.json({ crops: Object.entries(CROPS).map(([id, c]) => ({ id, ...c })) }));
@@ -72,9 +82,10 @@ export function createNdviRouter({ store, canAccessFarm, water = async () => nul
     const farmId = req.params.fieldId;
     if (!(await allowed(req, res, farmId))) return;
     const scene = typeof req.query.scene === "string" && /^[\w.-]{1,120}$/.test(req.query.scene) ? req.query.scene : null;
+    const layer = req.query.layer === "water" ? "water" : "vigour";
     const [{ zones, rep }, map, dates] = await Promise.all([report(farmId), store.map(farmId, scene), store.mapDates(farmId)]);
     const points = new Map(zones.map((z) => [z.valve, z.points]));
-    res.type("application/geo+json").send(JSON.stringify(buildMapGeoJson(rep, points, map, dates)));
+    res.type("application/geo+json").send(JSON.stringify(buildMapGeoJson(rep, points, map, dates, layer)));
   }));
 
   r.get("/zones/:zoneId/ndvi", handle(async (req, res) => {
@@ -126,6 +137,15 @@ export function createNdviRouter({ store, canAccessFarm, water = async () => nul
     const row = await store.setCrop(z.farmId, z.valve, crop, sowingDate, who(req));
     if (!row) return res.status(404).json({ error: "Map this valve's land first" });
     res.json({ zoneId: zoneId(z.farmId, z.valve), crop: row.crop, sowingDate: row.sowing_date });
+  }));
+
+  r.put("/zones/:zoneId/flow", handle(async (req, res) => {
+    const z = zoneParam(req, res);
+    if (!z || !(await allowed(req, res, z.farmId))) return;
+    const flowLph = validateFlow(req.body);
+    const row = await store.setFlow(z.farmId, z.valve, flowLph, who(req));
+    if (!row) return res.status(404).json({ error: "Map this valve's land first" });
+    res.json({ zoneId: zoneId(z.farmId, z.valve), flowLph: row.flow_lph });
   }));
 
   r.delete("/zones/:zoneId", handle(async (req, res) => {

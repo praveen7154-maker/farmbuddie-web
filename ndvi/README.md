@@ -60,6 +60,22 @@ It combines that with the water each valve got (Reports) to give advice:
 check irrigation uniformity, inspect for pests or nutrients, check soil
 moisture. **It never starts a pump or opens a valve.**
 
+### Water status (leaf moisture + water balance)
+
+Each image also gives **leaf moisture**:
+- **What it is:** NDMI = (B8A - B11) / (B8A + B11) on the 20 m bands, read only where the crop covers the ground (NDVI ≥ 0.3).
+- **What is stored:** per valve, the median and the dry spots, plus a second heatmap (`ndvi_maps.png_water`).
+- **Older images:** a farm whose recent images were read before this existed is re-read once at worker start.
+
+Every 12 h the worker also fetches the farm's **daily weather**:
+- **Source:** NASA POWER (free, public, no key, commercial use allowed). Rain arrives ~2 days late; for recent days, sunlight is estimated from the temperature range.
+- **Computed:** **ET0** by FAO-56 Penman-Monteith (`weather.py`), stored in `ndvi_weather`.
+
+The bridge (`server/src/bridge/ndviWater.js`) turns these into a water status per valve:
+- **Leaf moisture** is compared with same-crop valves and with the valve's own trend.
+- **The 7-day balance** is crop need (ET0 × FAO-56 crop factor) against effective rain plus irrigation, in mm. Irrigation counts only when the valve's flow is set in the app.
+- **The two signals are combined** into short advice. Example: leaves drying while vigour still looks good means "water soon".
+
 ### Only farms with mapped valves
 
 NDVI needs each valve's land as an area, so a valve plotted with 3 or more

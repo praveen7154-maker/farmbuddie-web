@@ -1,9 +1,9 @@
 """Checking each mapped farm for new Sentinel-2 images and processing them."""
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from . import config, raster, render, stac, store
+from . import config, raster, render, stac, store, weather
 
 log = logging.getLogger("ndvi")
 
@@ -33,11 +33,15 @@ def process_scene(conn, farm_id, scene, zones, read=raster.read_farm, min_clear_
         fr = read(scene, zones)
         per_zone, farm = raster.analyse(fr, min_clear)
         status = classify(per_zone, farm)
-        png = bounds = None
+        png = bounds = png_water = None
         if status == "ok":
             png, bounds = render.render(fr)
+            try:
+                png_water, _ = render.render_water(fr)
+            except Exception as e:  # noqa: BLE001 - the vigour picture still counts
+                log.warning("farm %s %s: water picture failed: %s", farm_id, scene.id, e)
         store.save_scene_result(conn, farm_id, scene, status, farm["clear_pct"],
-                                per_zone if status != "no_data" else None, png, bounds)
+                                per_zone if status != "no_data" else None, png, bounds, png_water=png_water)
         log.info("farm %s %s %s: %s, clear %.0f%%", farm_id, scene.id, scene.acquired_at.date(), status,
                  farm["clear_pct"])
         return status
@@ -74,16 +78,51 @@ def check_farm(conn, farm_id, search=stac.search, read=raster.read_farm, now=Non
     return results
 
 
+def water_backfill(conn):
+    """Farms with recent images read before leaf moisture existed: read those images again (once)."""
+    for farm_id in store.farms_missing_water(conn, config.BACKFILL_DAYS - 10):
+        log.info("farm %s: re-reading recent images for leaf moisture", farm_id)
+        store.forget_farm_images(conn, farm_id)
+
+
+def update_weather(conn, farm_id, fetch=None, now=None):
+    """Daily rain and evaporation for the farm (NASA POWER), at most every WEATHER_HOURS."""
+    now = now or datetime.now(timezone.utc)
+    if not store.weather_due(conn, farm_id, config.WEATHER_HOURS, now):
+        return 0
+    zones = zones_lonlat(store.farm_zones(conn, farm_id))
+    if not zones:
+        return 0
+    c = raster.unary_union(list(zones.values())).centroid
+    try:
+        days = weather.fetch_daily(c.y, c.x, now.date() - timedelta(days=config.WEATHER_DAYS), now.date(),
+                                   **({"get": fetch} if fetch else {}))
+    except Exception as e:  # noqa: BLE001 - weather site down: next round
+        conn.rollback()
+        log.warning("farm %s: weather fetch failed: %s", farm_id, e)
+        store.mark_weather(conn, farm_id, now, error=str(e)[:300])
+        return 0
+    store.save_weather(conn, farm_id, days, now)
+    return len(days)
+
+
 def run_forever():
     conn = store.connect()
     while not store.tables_ready(conn):
         log.info("waiting for the bridge to create the NDVI tables")
         time.sleep(30)
     log.info("NDVI worker started: check every %.1f h, backfill %d days", config.CHECK_HOURS, config.BACKFILL_DAYS)
+    try:
+        water_backfill(conn)
+    except Exception as e:  # noqa: BLE001
+        conn.rollback()
+        log.warning("water backfill check failed: %s", e)
     while True:
         try:
             for farm_id in store.farms_due(conn, config.CHECK_HOURS):
                 check_farm(conn, farm_id)
+            for farm_id in store.farms_with_zones(conn):
+                update_weather(conn, farm_id)
         except Exception as e:  # noqa: BLE001 - e.g. the database restarted
             log.warning("round failed: %s", e)
             try:

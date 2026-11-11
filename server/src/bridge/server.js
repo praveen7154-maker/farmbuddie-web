@@ -519,9 +519,9 @@ app.get("/reports/:farmId", async (req, res) => {
  * the zone / crop saves; see ndviRoutes.js. The water each valve got (for the
  * advice) comes from Reports, summed over the farm's motors.
  */
-async function waterByValve(farmId, days) {
-  const to = dayKey(Date.now());
-  const from = dayKey(Date.now() - (days - 1) * 86400000);
+async function waterByValve(farmId, days, endMs = Date.now()) {
+  const to = dayKey(endMs);
+  const from = dayKey(endMs - (days - 1) * 86400000);
   const total = new Map();
   let seen = false;
   for (const motor of MOTOR_NUMBERS) {

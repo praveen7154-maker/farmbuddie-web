@@ -14,6 +14,8 @@
 //
 // Pure functions only - storage in ndviStore.js, routes in ndviRoutes.js.
 
+import { balance, kcFor, leafLevel, waterStatus, windowDays } from "./ndviWater.js";
+
 export const MAX_VALVE = 64;
 export const MAX_ZONE_POINTS = 200;
 const DAY_MS = 86400000;
@@ -106,6 +108,25 @@ export function weakSpotsView(valve, cur, recent) {
   });
 }
 
+/**
+ * The valve's dry spots (leaf moisture clearly below the rest of the valve),
+ * labelled 1D1, 1D2, ... and how often each was dry on the last clear images.
+ */
+export function drySpotsView(valve, cur, recent) {
+  const spots = Array.isArray(cur.dry_spots) ? cur.dry_spots : [];
+  const earlier = recent.filter((r) => r.scene_id !== cur.scene_id).slice(0, RECENT_IMAGES - 1);
+  return spots.map((sp, i) => {
+    const label = `${valve}D${i + 1}`;
+    const seen = 1 + earlier.filter((r) => (Array.isArray(r.dry_spots) ? r.dry_spots : [])
+      .some((o) => metresBetween(o, sp) <= SAME_SPOT_M)).length;
+    return {
+      label, lat: sp.lat, lng: sp.lng, areaM2: sp.area_m2, areaAcres: round(sp.area_m2 / 4046.86, 2),
+      ndmi: round(sp.mean, 2), rest: round(cur.ndmi_median ?? sp.mean + sp.drop, 2), seenTimes: seen,
+      outOf: 1 + earlier.length, persistent: seen >= 2
+    };
+  });
+}
+
 const bad = (message) => ({ status: 400, message });
 const round = (x, d = 2) => (x === null || x === undefined ? null : Math.round(x * 10 ** d) / 10 ** d);
 
@@ -168,6 +189,18 @@ export function validateCrop(body, now = Date.now()) {
   return { crop, sowingDate };
 }
 
+// A valve's flow: litres per hour (a drip valve is a few hundred to a few thousand).
+export const MAX_FLOW_LPH = 200000;
+
+/** { flowLph } -> a number, or null to clear; throws { status: 400 } on bad input. */
+export function validateFlow(body) {
+  const v = body?.flowLph;
+  if (v === null || v === undefined || v === "" || v === 0) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > MAX_FLOW_LPH) throw bad(`flowLph must be 0-${MAX_FLOW_LPH} litres per hour`);
+  return Math.round(n * 10) / 10;
+}
+
 export const hasArea = (points) => Array.isArray(points) && points.length >= 3;
 
 export function samePoints(a, b) {
@@ -219,40 +252,37 @@ function obsView(o) {
   return {
     sceneId: o.scene_id, acquiredAt: new Date(toMs(o.acquired_at)).toISOString(),
     mean: round(o.mean, 3), min: round(o.min, 3), max: round(o.max, 3), p10: round(o.p10, 3), p90: round(o.p90, 3),
-    validPct: round(o.valid_pct, 0), pixels: o.pixels
+    validPct: round(o.valid_pct, 0), pixels: o.pixels,
+    ndmi: o.ndmi_usable ? round(o.ndmi_median, 3) : null
   };
 }
 
 const LEVEL_RANK = { good: 0, watch: 1, low: 2 };
 const worse = (a, b) => (LEVEL_RANK[b] > LEVEL_RANK[a] ? b : a);
 
-/** Plain-English advice text (the app shows its own translation of each code). */
+/** Short plain-English advice text (the app shows its own translation of each code). */
 export function adviceText(code, p = {}) {
   switch (code) {
-    case "check_uniformity":
-      return `This area got less water than the farm's other areas in the last ${WATER_DAYS} days. Check whether water reaches all of it evenly.`;
-    case "inspect_pest_nutrient":
-      return "It got about as much water as the other areas, so water is unlikely to be the reason. Walk through it and check the crop for pests, disease or nutrient shortage.";
-    case "inspect_zone":
-      return "Walk through this area and see what is different from the rest of the farm.";
-    case "dropping":
-      return `Crop vigour fell by ${p.drop} since the last clear image (${p.days} days). Check this area soon.`;
-    case "below_typical":
-      return `Lower than is typical for a full-grown ${p.crop} (${p.typical}). Compare with the crop on the ground.`;
-    case "check_soil_moisture":
-      return "Check the soil moisture by hand or with a probe at root depth before changing the watering.";
-    case "young_crop":
-      return "Young crop: a low value is normal until the canopy covers the ground.";
-    case "old_observation":
-      return `This reading is ${p.days} days old - clouds have hidden the farm since. It updates with the next clear image.`;
-    case "spot_new":
-      return `Weak spot ${p.label} (about ${p.acres} acre, ${p.ndvi} against ${p.rest} in the rest of this valve) is new since the last clear image. Walk to it soon and check the crop there for pests, disease or water stress.`;
-    case "spot_persistent":
-      return `Weak spot ${p.label} (about ${p.acres} acre, ${p.ndvi} against ${p.rest}) was weak in ${p.times} of the last clear images, so the cause is lasting. Check the soil there, whether water reaches it, and for gaps in planting.`;
-    case "small_zone":
-      return "This zone is small for 10 m satellite pixels, so its value is approximate.";
-    default:
-      return "";
+    case "check_uniformity": return `Got ${p.lessPct}% less water than other valves. Check water reaches all of it.`;
+    case "inspect_pest_nutrient": return "Water was normal. Check for pests, disease, nutrients.";
+    case "inspect_zone": return "Walk this area. Look for what is different.";
+    case "dropping": return `Vigour fell ${p.drop} in ${p.days} days. Check soon.`;
+    case "below_typical": return `Below normal for this crop (${p.typical}).`;
+    case "check_soil_moisture": return "Feel the soil at root depth before changing watering.";
+    case "young_crop": return "Young crop - low value is normal.";
+    case "old_observation": return `Reading is ${p.days} days old (clouds).`;
+    case "spot_new": return `New weak spot ${p.label}. Check pests, disease, water.`;
+    case "spot_persistent": return `Weak spot ${p.label}, ${p.times} times. Check soil and water reach.`;
+    case "small_zone": return "Small area - value is approximate.";
+    // water status
+    case "water_early": return "Leaves drying. Water this valve soon.";
+    case "water_short": return "Too little water. Check run time, emitters, pressure.";
+    case "not_water": return "Water is fine. Check pests, disease, nutrients.";
+    case "too_much_water": return "More water than needed. Cut run time.";
+    case "rain_covered": return "Rain covered the need. You can skip a turn.";
+    case "set_flow": return "Set valve flow for exact water.";
+    case "leaf_old": return "Leaf reading is old (clouds).";
+    default: return "";
   }
 }
 
@@ -266,8 +296,10 @@ const advice = (code, params = {}) => ({ code, params, text: adviceText(code, pa
  *   sceneRows: usable history rows of the farm's newest clear image (every zone in it)
  *   water:     Map valve -> water seconds in the last WATER_DAYS days (null = unknown)
  */
-export function buildFarmReport({ farmId, zones, latest, previous, recent = new Map(), sceneRows = [], water = null, status = null, latestScene = null, now = Date.now() }) {
+export function buildFarmReport({ farmId, zones, latest, previous, recent = new Map(), sceneRows = [], water = null, status = null, latestScene = null, now = Date.now(), weather = [], waterWindow = null }) {
   const sceneMeans = new Map(sceneRows.map((r) => [r.valve, r.mean]));
+  const sceneNdmi = new Map(sceneRows.filter((r) => r.ndmi_usable && Number.isFinite(r.ndmi_median)).map((r) => [r.valve, r.ndmi_median]));
+  const window = windowDays(weather);
   const cropOf = new Map(zones.map((z) => [z.valve, z.crop || null]));
   const farmMedian = sceneMeans.size >= 2 ? median([...sceneMeans.values()]) : null;
   // A zone is compared with the median of the farm's OTHER zones (with two
@@ -286,9 +318,15 @@ export function buildFarmReport({ farmId, zones, latest, previous, recent = new 
       areaM2: Math.round(area), areaAcres: round(area / 4046.86, 2), mapped: hasArea(pts),
       location: valvePoint(pts), points: hasArea(pts) ? pts : [], waterSec: water ? (water.get(z.valve) ?? 0) : null
     };
-    if (!base.mapped) return { ...base, level: "not_mapped", latest: null, previous: null, advice: [] };
+    base.flowLph = Number.isFinite(z.flow_lph) && z.flow_lph > 0 ? z.flow_lph : null;
+    if (!base.mapped) return { ...base, level: "not_mapped", latest: null, previous: null, advice: [], water: null };
     const cur = latest.get(z.valve);
-    if (!cur) return { ...base, level: "waiting", latest: null, previous: null, advice: [] };
+    if (!cur) {
+      // No clear image yet - the weather balance can still say something.
+      const ageNow = cropAgeDays(sowing, now);
+      return { ...base, level: "waiting", latest: null, previous: null, advice: [],
+        water: waterView({ z, base, cur: null, prev: null, vigour: "waiting", ageDays: ageNow, window, waterWindow, peers: null, now }) };
+    }
 
     const prev = previous.get(z.valve) || null;
     const curMs = toMs(cur.acquired_at);
@@ -321,7 +359,12 @@ export function buildFarmReport({ farmId, zones, latest, previous, recent = new 
     const spots = weakSpotsView(z.valve, cur, recent.get(z.valve) || []);
     const weakPct = Number(cur.weak_pct) || 0;
     if (spots.length && weakPct >= WEAK_AREA_WATCH_PCT) level = worse(level, "watch");
-    if (level !== "good") {
+    const peersNdmi = cur.scene_id === latestScene?.scene_id
+      ? new Map([...sceneNdmi].filter(([v]) => v === z.valve || (cropOf.get(v) ?? null) === (z.crop ?? null))) : null;
+    const waterInfo = waterView({ z, base, cur, prev, vigour: level, ageDays: cropAgeDays(sowing, now), window, waterWindow, peers: peersNdmi, now, recentRows: recent.get(z.valve) || [] });
+    if (level !== "good" && waterInfo.level !== "unknown") {
+      // The water status says whether water is the reason (water_short / not_water).
+    } else if (level !== "good") {
       const w = waterOf(z.valve);
       const wOthers = waterOthers(z.valve);
       if (w !== null && wOthers && wOthers >= MIN_COMPARE_WATER_SEC) {
@@ -346,7 +389,8 @@ export function buildFarmReport({ farmId, zones, latest, previous, recent = new 
       waterOthersSec: water ? Math.round(waterOthers(z.valve) ?? 0) : null,
       advice: tips,
       zoneMedian: round(cur.median, 3), weakPct: round(weakPct, 1), uniformPct: spots.length ? round(100 - weakPct, 0) : 100,
-      weakSpots: spots
+      weakSpots: spots,
+      water: waterInfo
     };
   });
 
@@ -361,10 +405,32 @@ export function buildFarmReport({ farmId, zones, latest, previous, recent = new 
     summary: {
       zones: out.length, mapped: out.filter((z) => z.mapped).length,
       low: out.filter((z) => z.level === "low").length, watch: out.filter((z) => z.level === "watch").length,
-      good: out.filter((z) => z.level === "good").length, waiting: out.filter((z) => z.level === "waiting").length
+      good: out.filter((z) => z.level === "good").length, waiting: out.filter((z) => z.level === "waiting").length,
+      water: {
+        stress: out.filter((z) => z.water?.level === "stress").length, watch: out.filter((z) => z.water?.level === "watch").length,
+        ok: out.filter((z) => z.water?.level === "ok").length, unknown: out.filter((z) => z.mapped && (!z.water || z.water.level === "unknown")).length
+      }
     },
+    weather: window.length ? { lastDay: window[window.length - 1].day, days: window.length } : null,
     zones: out,
-    note: "NDVI satellite crop vigour, accurate to about 10 m. It shows where to look, not what is wrong - always check on the ground. It never runs the pump."
+    note: "NDVI crop vigour (10 m) and leaf moisture (20 m) from satellite images, plus a weather water balance. Shows where to look - check on the ground. Never runs the pump."
+  };
+}
+
+/** A valve's water block: leaf moisture, the 7-day balance, the combined level and short advice. */
+function waterView({ z, base, cur, prev, vigour, ageDays, window, waterWindow, peers, now, recentRows = [] }) {
+  const leaf = cur ? leafLevel({ valve: z.valve, cur, prev, peers, now }) : null;
+  const { kc, basis } = kcFor(z.crop, ageDays, cur ? cur.mean : null);
+  const irrigationSec = waterWindow ? (waterWindow.get(z.valve) ?? 0) : null;
+  const bal = window.length ? balance({ days: window, kc, irrigationSec, flowLph: base.flowLph, areaM2: base.areaM2 }) : null;
+  const st = waterStatus({ vigour, leaf, bal });
+  return {
+    level: st.level, tooMuch: st.tooMuch,
+    leaf,
+    balance: bal ? { ...bal, kc, kcBasis: basis, level: st.balanceLevel } : null,
+    drySpots: cur && cur.ndmi_usable ? drySpotsView(z.valve, cur, recentRows) : [],
+    dryPct: cur && cur.ndmi_usable ? round(Number(cur.dry_pct) || 0, 1) : null,
+    advice: st.advice.map((code) => advice(code))
   };
 }
 
@@ -377,14 +443,16 @@ export function statusView(s) {
 }
 
 export const LEVEL_COLORS = { good: "#1a9641", watch: "#f9c62b", low: "#d7191c", waiting: "#9e9e9e", not_mapped: "#9e9e9e" };
+export const WATER_COLORS = { ok: "#2c7fb8", watch: "#f9c62b", stress: "#a6611a", unknown: "#9e9e9e" };
 
 /** GeoJSON for the map: each zone's polygon (or the valve pin) with its level, plus the heatmap picture. */
-export function buildMapGeoJson(report, pointsByValve, map, mapDates = []) {
+export function buildMapGeoJson(report, pointsByValve, map, mapDates = [], layer = "vigour") {
   const features = [];
   for (const z of report.zones) {
     const props = {
       zoneId: z.zoneId, valve: z.valve, level: z.level, color: LEVEL_COLORS[z.level] || "#9e9e9e",
-      ndvi: z.latest?.mean ?? null, crop: z.crop, areaAcres: z.areaAcres
+      ndvi: z.latest?.mean ?? null, crop: z.crop, areaAcres: z.areaAcres,
+      water: z.water?.level ?? null, waterColor: WATER_COLORS[z.water?.level] || "#9e9e9e", ndmi: z.water?.leaf?.ndmi ?? null
     };
     const zr = z.mapped ? ring(pointsByValve.get(z.valve)) : null;
     if (zr) {
@@ -393,6 +461,12 @@ export function buildMapGeoJson(report, pointsByValve, map, mapDates = []) {
     if (z.location) {
       features.push({ type: "Feature", id: `${z.zoneId}-valve`, geometry: { type: "Point", coordinates: [z.location.lng, z.location.lat] }, properties: { kind: "valve", ...props } });
     }
+    for (const sp of z.water?.drySpots || []) {
+      features.push({
+        type: "Feature", id: `${z.zoneId}-${sp.label}`, geometry: { type: "Point", coordinates: [sp.lng, sp.lat] },
+        properties: { kind: "dry_spot", zoneId: z.zoneId, valve: z.valve, label: sp.label, ndmi: sp.ndmi, rest: sp.rest, areaAcres: sp.areaAcres, persistent: sp.persistent }
+      });
+    }
     for (const sp of z.weakSpots || []) {
       features.push({
         type: "Feature", id: `${z.zoneId}-${sp.label}`, geometry: { type: "Point", coordinates: [sp.lng, sp.lat] },
@@ -400,12 +474,13 @@ export function buildMapGeoJson(report, pointsByValve, map, mapDates = []) {
       });
     }
   }
+  const png = layer === "water" ? map?.png_water : map?.png;
   return {
-    type: "FeatureCollection", fieldId: report.fieldId, farmId: report.farmId, features,
-    image: map ? {
+    type: "FeatureCollection", fieldId: report.fieldId, farmId: report.farmId, features, layer,
+    image: map && png ? {
       sceneId: map.scene_id, acquiredAt: new Date(toMs(map.acquired_at)).toISOString(),
       bounds: { west: map.west, south: map.south, east: map.east, north: map.north },
-      pngBase64: Buffer.from(map.png).toString("base64")
+      pngBase64: Buffer.from(png).toString("base64")
     } : null,
     imageDates: mapDates.map((d) => ({ sceneId: d.scene_id, acquiredAt: new Date(toMs(d.acquired_at)).toISOString() })),
     legend: [
