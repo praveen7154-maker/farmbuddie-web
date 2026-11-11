@@ -25,7 +25,9 @@ const PUSH_EVENTS = new Set([
   69,              // manual valve switch: the new valve did not open, the old one was kept open
   70,              // a sequence valve did not open (tried twice) - skipped, others continue
   71,              // phase order fault released - the order is right again (phase reversal protection)
-  72               // a butterfly valve did not reach the end it was sent to (no feedback), or can't be driven
+  72,              // a butterfly valve did not reach the end it was sent to (no feedback), or can't be driven
+  60, 62,          // filter backwash: its valves did not respond / filter still dirty after the flush
+  73, 74, 75       // filter backwash: filter valves failed (motor stopped), backwash valves didn't close, flush motor didn't start
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
@@ -92,7 +94,12 @@ const EVENT_TEXT = {
   69: "The new valve did not open - the previous valve was kept open and the motor keeps running",
   70: "A valve did not open (tried twice) - skipped, the other valves continue. Please check it",
   71: "Phase order is correct again - the motor can start",
-  72: "A valve did not move as commanded - please check it"
+  72: "A valve did not move as commanded - please check it",
+  60: "Filter backwash could not start - its valves did not respond. Irrigation carries on; please check the backwash node",
+  62: "Filter pressure is still high after the backwash - please check and clean the filter",
+  73: "Filter backwash: the filter valves did not respond - the motor was stopped to protect the pump. Check the backwash node, then resume or stop the program",
+  74: "Filter backwash: the backwash valves did not close - water may still be draining. Please check the backwash node",
+  75: "Filter backwash could not start - the motor did not start for the flush. Irrigation carries on"
 };
 
 // EVENT_VALVE_STUCK (72): "action" open/close, "reason" no_feedback/not_drivable.

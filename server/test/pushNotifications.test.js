@@ -27,3 +27,12 @@ test("a stuck butterfly valve is pushed and says which way it failed", () => {
   // An older payload without the valve number still reads sensibly.
   assert.match(buildNotification("n", 1, { event: 72, fault: 0 }).body, /did not move/);
 });
+
+test("filter backwash failures are pushed, with their own text (same list as the app's PumpCodes.isPushWorthy)", () => {
+  for (const event of [60, 62, 73, 74, 75]) {
+    assert.equal(isPushWorthy({ event, fault: 0 }), true, `event ${event}`);
+    assert.match(buildNotification("n", 1, { event, fault: 0 }).body, /backwash|filter/i, `event ${event}`);
+  }
+  // routine backwash progress stays quiet
+  for (const event of [58, 59, 63]) assert.equal(isPushWorthy({ event, fault: 0 }), false, `event ${event}`);
+});
