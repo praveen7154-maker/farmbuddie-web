@@ -478,8 +478,10 @@ def test_water_columns_weather_and_backfill(conn):
         cur.execute("UPDATE ndvi_history SET ndmi_usable = NULL")
     conn.commit()
     assert store.farms_missing_water(conn, 110, now=now) == ["0003"]
+    assert "0003" not in store.farms_due(conn, 6, now=now)      # just checked
     store.forget_farm_images(conn, "0003")
     assert store.processed_scene_ids(conn, "0003") == set()
+    assert "0003" in store.farms_due(conn, 6, now=now)          # re-read in the next round
 
     # weather: fetched, stored, then not again within WEATHER_HOURS
     def fetch(url):

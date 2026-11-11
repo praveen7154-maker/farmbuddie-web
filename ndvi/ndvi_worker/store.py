@@ -208,3 +208,6 @@ def forget_farm_images(conn, farm_id):
     with conn.transaction():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM ndvi_farm_scenes WHERE farm_id = %s", (farm_id,))
+            # ...and check it in the next round, not at its next scheduled check (hours away).
+            cur.execute("""INSERT INTO ndvi_status (farm_id, refresh_requested) VALUES (%s, now())
+                           ON CONFLICT (farm_id) DO UPDATE SET refresh_requested = now()""", (farm_id,))
