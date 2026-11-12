@@ -27,7 +27,9 @@
 //   - production and onboarding staff logins (production_users, teamAccess)
 //   - node stock (nodes): each board's serial is on its printed QR label,
 //     so the records stay (a wipe would hand out the same serials again) -
-//     only released: every node "assigned" to a farm is "available" again
+//     only released: every node "assigned" to a farm is "available" again.
+//     --with-nodes empties it instead, and the serials start again from the
+//     first (the counters always go) - reprint every node's label then
 //   - SIM stock (simInventory): released the same way - or --with-sims
 //     empties it (upload the operator's SIM list again on Production)
 //   - any Firestore collection this script doesn't know (listed, untouched)
@@ -47,12 +49,14 @@ import { pool } from "../src/bridge/postgres.js";
 const apply = process.argv.includes("--apply");
 const withPricing = process.argv.includes("--with-pricing");
 const withSims = process.argv.includes("--with-sims");
+const withNodes = process.argv.includes("--with-nodes");
 const confirmed = process.argv.includes("--confirm=RESET-ALL");
 
 const FIRESTORE_COLLECTIONS = [
   "farmers", "controllers", "phoneIndex", "fcmTokens", "appMqttCredentials", "monitorCredentials",
   "farmValveSequences", "farmCyclicPresets", "distributors", "referrals", "bonusRedemptions", "counters",
-  ...(withSims ? ["simInventory"] : [])
+  ...(withSims ? ["simInventory"] : []),
+  ...(withNodes ? ["nodes"] : [])
 ];
 const PG_TABLES = [
   "device_events", "farm_config_cache", "report_days",
@@ -99,7 +103,7 @@ async function firestore() {
 async function releaseStock() {
   say("\n=== Stock (kept, released) ===");
   const groups = [
-    { name: "nodes", clear: { farmerDocId: FieldValue.delete(), farmerId: FieldValue.delete(), assignedAt: FieldValue.delete() } },
+    ...(withNodes ? [] : [{ name: "nodes", clear: { farmerDocId: FieldValue.delete(), farmerId: FieldValue.delete(), assignedAt: FieldValue.delete() } }]),
     ...(withSims ? [] : [{ name: "simInventory", clear: { controllerId: null, uniqueId: null, assignedAt: FieldValue.delete() } }])
   ];
   for (const g of groups) {
@@ -191,6 +195,8 @@ async function main() {
   }
   say(apply ? "APPLYING the full test reset..." : "DRY RUN - nothing is changed. Add --apply --confirm=RESET-ALL to delete.");
   if (withPricing) say("(--with-pricing: the pricing catalog and company details go too)");
+  if (withNodes) say("(--with-nodes: node stock goes too - serials start again from the first; reprint the labels)");
+  if (withSims) say("(--with-sims: SIM stock goes too - upload the SIM list again on Production)");
   await firestore();
   await releaseStock();
   await tbmq();
