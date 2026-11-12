@@ -25,8 +25,11 @@
 //   - the pricing catalog (products, variants, accessories, price lists,
 //     staff, costing, company / bank details) - add --with-pricing to empty it too
 //   - production and onboarding staff logins (production_users, teamAccess)
-//   - the stock records: node inventory and SIM inventory (nodes,
-//     simInventory) - add --with-inventory to empty them too
+//   - node stock (nodes): each board's serial is on its printed QR label,
+//     so the records stay (a wipe would hand out the same serials again) -
+//     only released: every node "assigned" to a farm is "available" again
+//   - SIM stock (simInventory): released the same way - or --with-sims
+//     empties it (upload the operator's SIM list again on Production)
 //   - any Firestore collection this script doesn't know (listed, untouched)
 //
 // Before --apply: switch off every old test hub (or it reconnects and writes
@@ -37,18 +40,19 @@
 //   cd /root && docker compose exec bridge node scripts/resetAllTestData.js
 //   cd /root && docker compose exec bridge node scripts/resetAllTestData.js --apply --confirm=RESET-ALL
 import { db, auth } from "../src/firebaseAdmin.js";
+import { FieldValue } from "firebase-admin/firestore";
 import { listCredentialsPage, deleteCredentials, disconnectClient } from "../src/tbmqClient.js";
 import { pool } from "../src/bridge/postgres.js";
 
 const apply = process.argv.includes("--apply");
 const withPricing = process.argv.includes("--with-pricing");
-const withInventory = process.argv.includes("--with-inventory");
+const withSims = process.argv.includes("--with-sims");
 const confirmed = process.argv.includes("--confirm=RESET-ALL");
 
 const FIRESTORE_COLLECTIONS = [
   "farmers", "controllers", "phoneIndex", "fcmTokens", "appMqttCredentials", "monitorCredentials",
   "farmValveSequences", "farmCyclicPresets", "distributors", "referrals", "bonusRedemptions", "counters",
-  ...(withInventory ? ["nodes", "simInventory"] : [])
+  ...(withSims ? ["simInventory"] : [])
 ];
 const PG_TABLES = [
   "device_events", "farm_config_cache", "report_days",
@@ -86,6 +90,26 @@ async function firestore() {
       say(`  deleted  ${name} (${n} documents)`);
     } else {
       say(`  delete   ${name} (${n} documents)`);
+    }
+  }
+}
+
+// Stock that stays: every record given to a (now deleted) farm / controller
+// goes back to "available".
+async function releaseStock() {
+  say("\n=== Stock (kept, released) ===");
+  const groups = [
+    { name: "nodes", clear: { farmerDocId: FieldValue.delete(), farmerId: FieldValue.delete(), assignedAt: FieldValue.delete() } },
+    ...(withSims ? [] : [{ name: "simInventory", clear: { controllerId: null, uniqueId: null, assignedAt: FieldValue.delete() } }])
+  ];
+  for (const g of groups) {
+    const snap = await db.collection(g.name).where("status", "==", "assigned").get();
+    say(`  ${apply ? "released" : "release "} ${g.name}: ${snap.size} assigned -> available`);
+    if (!apply) continue;
+    for (let i = 0; i < snap.docs.length; i += 400) {
+      const batch = db.batch();
+      for (const d of snap.docs.slice(i, i + 400)) batch.update(d.ref, { status: "available", ...g.clear, updatedAt: FieldValue.serverTimestamp() });
+      await batch.commit();
     }
   }
 }
@@ -168,11 +192,12 @@ async function main() {
   say(apply ? "APPLYING the full test reset..." : "DRY RUN - nothing is changed. Add --apply --confirm=RESET-ALL to delete.");
   if (withPricing) say("(--with-pricing: the pricing catalog and company details go too)");
   await firestore();
+  await releaseStock();
   await tbmq();
   await postgres();
   await firebaseAuth();
   say(apply
-    ? "\nDone. Now: docker compose restart bridge provision-api - and clear the apps on every phone."
+    ? "\nDone. Now: docker compose restart bridge provision-api ndvi - and clear the apps on every phone."
     : "\nDry run done - check the lists above.");
   await pool.end();
   process.exit(0);
