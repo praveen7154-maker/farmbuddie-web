@@ -12,7 +12,9 @@
 //              monitor login (monitor-...) - and drops their sessions
 //   Postgres   device events, config cache, reports, OTA releases and
 //              history, broadcast messages, distributor accounts, pricing
-//              quotes and their audit / numbering
+//              quotes and their audit / numbering, crop health (valve
+//              lands, satellite readings and pictures, weather), production
+//              staff sign-in sessions
 //   Firebase Auth  every login WITHOUT an email address (farmers' phone
 //              logins, anonymous app logins)
 // KEEPS
@@ -21,12 +23,15 @@
 //     not named like a hub / app / monitor one)
 //   - the admin access code, the table structure itself
 //   - the pricing catalog (products, variants, accessories, price lists,
-//     staff, company / bank details) - add --with-pricing to empty it too
+//     staff, costing, company / bank details) - add --with-pricing to empty it too
+//   - production and onboarding staff logins (production_users, teamAccess)
+//   - the stock records: node inventory and SIM inventory (nodes,
+//     simInventory) - add --with-inventory to empty them too
 //   - any Firestore collection this script doesn't know (listed, untouched)
 //
 // Before --apply: switch off every old test hub (or it reconnects and writes
-// again). Afterwards: docker compose restart bridge provision-api, and log
-// out / clear data of the Irrigo and Irrigo Admin apps on every phone.
+// again). Afterwards: docker compose restart bridge provision-api ndvi, and
+// log out / clear data of the Irrigo and Irrigo Admin apps on every phone.
 //
 // Usage (inside the bridge container - it has Firebase, TBMQ and Postgres):
 //   cd /root && docker compose exec bridge node scripts/resetAllTestData.js
@@ -37,24 +42,30 @@ import { pool } from "../src/bridge/postgres.js";
 
 const apply = process.argv.includes("--apply");
 const withPricing = process.argv.includes("--with-pricing");
+const withInventory = process.argv.includes("--with-inventory");
 const confirmed = process.argv.includes("--confirm=RESET-ALL");
 
 const FIRESTORE_COLLECTIONS = [
   "farmers", "controllers", "phoneIndex", "fcmTokens", "appMqttCredentials", "monitorCredentials",
-  "farmValveSequences", "farmCyclicPresets", "distributors", "referrals", "bonusRedemptions", "counters"
+  "farmValveSequences", "farmCyclicPresets", "distributors", "referrals", "bonusRedemptions", "counters",
+  ...(withInventory ? ["nodes", "simInventory"] : [])
 ];
 const PG_TABLES = [
   "device_events", "farm_config_cache", "report_days",
   "ota_node_status", "ota_release_targets", "ota_releases", "ota_firmware",
   "announcement_reads", "announcements",
   "distributor_sessions", "distributor_devices", "distributor_accounts",
-  "pricing_quotes", "pricing_audit", "pricing_counters"
+  "pricing_quotes", "pricing_audit", "pricing_counters",
+  // Crop health: valve lands, every satellite reading / picture, weather. The
+  // worker reads the images again for whatever lands are mapped afresh.
+  "ndvi_zones", "ndvi_history", "ndvi_maps", "ndvi_farm_scenes", "ndvi_scenes", "ndvi_status", "ndvi_weather",
+  "production_sessions"
 ];
 const PG_PRICING_CATALOG = [
   "price_list_items", "price_lists", "pricing_variants", "pricing_accessories", "pricing_products",
-  "pricing_staff", "pricing_settings"
+  "pricing_staff", "pricing_settings", "pricing_costing"
 ];
-const PG_ALWAYS_KEPT = ["admin_gate"];
+const PG_ALWAYS_KEPT = ["admin_gate", "production_users"];
 // Hub, app and monitor logins - see deviceProvisioning.js, routes/provisionApp.js, routes/provisionMonitor.js.
 const TEST_LOGIN = /^(FBIRG\d+|app-.+|monitor-.+)$/;
 
