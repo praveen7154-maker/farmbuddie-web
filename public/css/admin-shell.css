@@ -822,6 +822,23 @@ html[data-theme="dark"] .fb-main input[type="file"]::file-selector-button {
   background: var(--fbx-surface-2); color: var(--fbx-text);
   border: 1px solid var(--fbx-line-strong); border-radius: 8px; padding: 6px 12px; margin-right: 10px;
 }
+/* Form file pickers (fb-form-shared.css) in dark: drop-zone + green button. */
+html[data-theme="dark"] .fb-main .fb-field input[type="file"] {
+  background: var(--fbx-surface-2);
+  border: 1.5px dashed var(--fbx-line-strong);
+}
+html[data-theme="dark"] .fb-main .fb-field input[type="file"]:hover {
+  border-color: #3fae78;
+  background: #1f2d26;
+}
+html[data-theme="dark"] .fb-main .fb-field input[type="file"]::file-selector-button {
+  height: 28px; padding: 0 14px; margin: 0 10px 0 0;
+  border: 1px solid rgba(111, 211, 162, 0.35); border-radius: 8px;
+  background: rgba(46, 163, 107, 0.18); color: #8fe0b8; font-weight: 600;
+}
+html[data-theme="dark"] .fb-main .fb-field input[type="file"]:hover::file-selector-button {
+  background: rgba(46, 163, 107, 0.3); color: #b4f0d2;
+}
 html[data-theme="dark"] .fb-main table { color: var(--fbx-text); border-color: var(--fbx-line); }
 html[data-theme="dark"] .fb-main th,
 html[data-theme="dark"] .fb-main td { border-color: var(--fbx-line); }

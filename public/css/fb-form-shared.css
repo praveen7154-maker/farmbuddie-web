@@ -39,12 +39,43 @@
   box-shadow: 0 0 0 3px rgba(46,163,107,0.18);
 }
 
+/* File pickers: same width and height as the other fields, a dashed
+   drop-zone look, and a proper button (not the browser's grey one). */
 .fb-field input[type="file"] {
-  padding: 10px;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 3px 4px;
+  border: 1.5px dashed #b9d8c8;
+  border-radius: 12px;
   background: #f8fbfa;
-  border-style: dashed;
+  color: #5d6f67;
+  font-size: 14px;
+  line-height: 28px;
   cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
+.fb-field input[type="file"]:hover {
+  border-color: #2ea36b;
+  background: #f0f8f4;
+}
+.fb-field input[type="file"]::file-selector-button {
+  height: 28px;
+  margin: 0 10px 0 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #2ea36b;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 0.2s ease;
+}
+.fb-field input[type="file"]:hover::file-selector-button { background: #24895a; }
 
 .fb-btn-primary:hover {
   transform: translateY(-2px);
