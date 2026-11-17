@@ -42,6 +42,7 @@ const ERROR_TEXT = {
   image_too_big: "Image too big for the slot",
   no_ota_slot: "Unit still on the old flash layout - needs one USB flash",
   wrong_product: "Image is for another kind of unit",
+  wrong_board: "Image is for the other board (V1 ESP32 / V2 ESP32-S3) - send this unit the image built for its board",
   sha256_mismatch: "Received image didn't match - it will be fetched again",
   write_failed: "Unit couldn't write its flash",
   commit_failed: "Unit couldn't switch to the new firmware",
