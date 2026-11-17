@@ -137,9 +137,28 @@ export function nodeOutcomeOf(node) {
 }
 
 export function summarizeNodes(nodes) {
-  const s = { total: nodes.length, updated: 0, in_progress: 0, waiting: 0, busy: 0, failed: 0 };
-  for (const n of nodes) s[nodeOutcomeOf(n)]++;
+  const s = { total: nodes.length, updated: 0, in_progress: 0, waiting: 0, busy: 0, failed: 0, missing: 0 };
+  for (const n of nodes) s[n.state === "not_reporting" ? "missing" : nodeOutcomeOf(n)]++;
   return s;
+}
+
+// Motor nodes a farm should have (fleet motorNodeLabels) that this release
+// has no word from - a unit that is offline says nothing, so it used to be
+// left out and the release looked done. The hub keeps offering the image for
+// 48 h (Motor firmware NodeOtaServer SESSION_MAX_MS), so one that comes back
+// online in that time still updates itself.
+export function withMissingMotorNodes(nodes, targets, fleet) {
+  const byFarm = new Map((fleet || []).map((f) => [f.farmId, f]));
+  const out = [...nodes];
+  for (const t of targets) {
+    const expected = byFarm.get(t.farmId)?.motorNodeLabels || [];
+    for (const label of expected) {
+      if (nodes.some((n) => n.farmId === t.farmId && n.node === label)) continue;
+      out.push({ farmId: t.farmId, node: label, product: "motor-node", state: "not_reporting",
+        percent: null, error: null, version: null, updatedAt: null });
+    }
+  }
+  return out.sort((a, b) => String(a.farmId).localeCompare(String(b.farmId)) || String(a.node).localeCompare(String(b.node)));
 }
 
 // One "Range: bytes=..." range of a file `size` bytes long: {start, end}
@@ -168,6 +187,15 @@ export function parseByteRange(header, size) {
 
 export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publicKeyPem = OTA_SIGNING_PUBLIC_KEY_PEM, now = () => new Date() }) {
   const firmwareUrl = (sha256) => `${publicBaseUrl}/ota/firmware/${sha256}.bin`;
+
+  // The fleet list (every farm from Firestore) for a release's progress
+  // view, kept 30 s - the page polls it every few seconds.
+  let fleetCache = { at: 0, farms: null };
+  async function cachedFleet() {
+    if (fleetCache.farms && Date.now() - fleetCache.at < 30000) return fleetCache.farms;
+    fleetCache = { at: Date.now(), farms: await listFleet() };
+    return fleetCache.farms;
+  }
 
   function startPayload(release, size) {
     const node = isNodeProduct(release.product);
@@ -393,13 +421,21 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     try {
       const r = await store.getRelease(Number(req.params.id));
       if (!r) return res.status(404).json({ error: "No such release" });
-      const nodes = r.nodes || [];
+      let nodes = r.nodes || [];
+      if (r.release.product === "motor-node") {
+        try {
+          nodes = withMissingMotorNodes(nodes, r.targets, await cachedFleet());
+        } catch (err) {
+          console.error("[ota] expected units unavailable:", err.message);
+        }
+      }
       return res.json({
         release: r.release,
         summary: summarize(r.targets),
         targets: r.targets.map((t) => ({ ...t, outcome: outcomeOf(t) })),
         ...(isNodeProduct(r.release.product)
-          ? { nodeSummary: summarizeNodes(nodes), nodes: nodes.map((n) => ({ ...n, outcome: nodeOutcomeOf(n) })) }
+          ? { nodeSummary: summarizeNodes(nodes),
+              nodes: nodes.map((n) => ({ ...n, outcome: n.state === "not_reporting" ? "missing" : nodeOutcomeOf(n) })) }
           : {})
       });
     } catch (err) {

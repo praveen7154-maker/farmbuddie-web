@@ -47,6 +47,25 @@ export function farmUnitCounts(farmer) {
   };
 }
 
+// The motor nodes a farm is expected to have, by label ("MOTOR_2"...): the
+// ones paired in the app plus every one the hub reports in motor_nodes. The
+// OTA page lists any of these that never reported as "not reached" - a
+// unit that is offline says nothing, so without this list it just wasn't
+// shown and the release looked complete.
+export function farmMotorNodeLabels(farmer, liveMotor1 = null) {
+  const paired = farmer?.pairedUnits || {};
+  const motor1 = liveMotor1 || farmer?.deviceStatus?.motor1 || {};
+  const labels = new Set(
+    livePaired(paired, "motorNodes", "nodeLabel").map((u) => u?.nodeLabel).filter((l) => typeof l === "string" && l)
+  );
+  if (motor1.motor_nodes && typeof motor1.motor_nodes === "object") {
+    for (const k of Object.keys(motor1.motor_nodes)) if (/^\d+$/.test(k)) labels.add(`MOTOR_${k}`);
+  } else if (typeof motor1.motor2_online === "boolean") {
+    labels.add("MOTOR_2");
+  }
+  return [...labels].sort();
+}
+
 // The count that matters for an OTA product (null = the hub itself).
 export function unitsForProduct(units, product) {
   if (product === "motor-node") return units?.motorNodes || 0;

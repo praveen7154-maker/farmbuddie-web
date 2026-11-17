@@ -180,8 +180,9 @@
         <tbody id="nodeBody"></tbody>
       </table>
     </div>
-    <p class="ota-note">Units appear here as they start reporting - one that never shows is offline, out of range, or
-      not of this type. "Installed - waiting" = it has the new firmware and switches over as soon as the farm is idle.</p>
+    <p class="ota-note">Units appear here as they start reporting. A motor node the farm has but that hasn't reported shows as
+      "Not reached" (offline, powered off or out of range) - it still updates itself if it comes back within 48 h.
+      "Installed - waiting" = it has the new firmware and switches over as soon as the farm is idle.</p>
   </div>
   <p class="ota-note">"Waiting for hub" = no reply yet: the hub is offline or busy. Over GSM the hub can't send progress while it downloads
     (its one modem is busy with the download) - the row shows the time since it started instead, usually 3-6 min, then it restarts on the

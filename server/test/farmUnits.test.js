@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { farmUnitCounts, unitsForProduct } from "../src/bridge/farmUnits.js";
+import { farmUnitCounts, unitsForProduct, farmMotorNodeLabels } from "../src/bridge/farmUnits.js";
 
 test("a farm with nothing paired has no node units", () => {
   assert.deepEqual(farmUnitCounts({ deviceStatus: { motor1: { state: "OFF" } } }), { motorNodes: 0, valves: 0, backwash: 0 });
@@ -39,4 +39,14 @@ test("a removed unit an old phone uploaded again doesn't count; a new pairing do
     removed: { motorNodes: { MOTOR_2: 5000, MOTOR_3: 5000 }, valves: { V1: 5000 } }
   } };
   assert.deepEqual(farmUnitCounts(f), { motorNodes: 1, valves: 0, backwash: 0 });
+});
+
+test("motor node labels: paired in the app plus the ones the hub reports", () => {
+  assert.deepEqual(farmMotorNodeLabels({}), []);
+  assert.deepEqual(farmMotorNodeLabels({ deviceStatus: { motor1: { motor_nodes: { 2: true, 3: false } } } }), ["MOTOR_2", "MOTOR_3"]);
+  assert.deepEqual(farmMotorNodeLabels({ pairedUnits: { motorNodes: { a: { nodeLabel: "MOTOR_3" } } },
+    deviceStatus: { motor1: { motor_nodes: { 2: true } } } }), ["MOTOR_2", "MOTOR_3"]);
+  assert.deepEqual(farmMotorNodeLabels({ deviceStatus: { motor1: { motor2_online: false } } }), ["MOTOR_2"]);
+  // Live status (passed in) wins over the stored one.
+  assert.deepEqual(farmMotorNodeLabels({ deviceStatus: { motor1: { motor_nodes: { 2: true } } } }, { motor_nodes: { 3: true } }), ["MOTOR_3"]);
 });

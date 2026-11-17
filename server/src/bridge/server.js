@@ -76,7 +76,8 @@ export const ota = createOtaModule({
       online: f.online,
       fwVersion: f.deviceStatus?.health?.fw_version || null,
       board: f.deviceStatus?.health?.board || null,   // "v1" | "v2-s3" - see ota.js boardChip()
-      units: f.units
+      units: f.units,
+      motorNodeLabels: f.motorNodeLabels || []
     })),
   publicBaseUrl: config.otaPublicBaseUrl
 });

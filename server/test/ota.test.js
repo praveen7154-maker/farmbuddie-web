@@ -6,7 +6,7 @@ import express from "express";
 import {
   createOtaModule, productLabels, otaManifest, verifyReleaseSignature, nodeOutcomeOf, summarizeNodes, outcomeOf,
   imageChip, boardChip, maxFirmwareBytes, CHIP_ESP32, CHIP_ESP32S3, MAX_FIRMWARE_BYTES, MAX_FIRMWARE_BYTES_S3,
-  OTA_BROADCAST_TOPIC, parseByteRange
+  OTA_BROADCAST_TOPIC, parseByteRange, withMissingMotorNodes
 } from "../src/bridge/ota.js";
 import { loadSigningKey, signRelease, otaManifest as browserManifest } from "../../public/js/ota-crypto.js";
 
@@ -39,7 +39,7 @@ test("node outcomes", () => {
   assert.equal(nodeOutcomeOf({ state: "current" }), "updated");
   assert.equal(nodeOutcomeOf({ state: "rolled_back" }), "failed");
   assert.deepEqual(summarizeNodes([{ state: "validated" }, { state: "receiving" }, { state: "failed" }]),
-    { total: 3, updated: 1, in_progress: 1, waiting: 0, busy: 0, failed: 1 });
+    { total: 3, updated: 1, in_progress: 1, waiting: 0, busy: 0, failed: 1, missing: 0 });
   assert.equal(outcomeOf({ state: "staged" }), "updated");        // hub has it and is handing it out
   assert.equal(outcomeOf({ state: "downloaded" }), "in_progress");
   assert.equal(outcomeOf({ state: "failed", error: "hub_slot_busy" }), "busy");
@@ -430,4 +430,19 @@ test("a hub resuming a cut-off download gets just the rest of the image", async 
     assert.equal(missing.status, 404);
     await missing.arrayBuffer();
   });
+});
+
+test("a motor node the farm has but that never reported shows as not reached", () => {
+  const nodes = [{ farmId: "0002", node: "MOTOR_2", state: "current" }];
+  const targets = [{ farmId: "0002" }];
+  const fleet = [{ farmId: "0002", motorNodeLabels: ["MOTOR_2", "MOTOR_3"] }];
+  const out = withMissingMotorNodes(nodes, targets, fleet);
+  assert.deepEqual(out.map((n) => [n.node, n.state]), [["MOTOR_2", "current"], ["MOTOR_3", "not_reporting"]]);
+  const s = summarizeNodes(out);
+  assert.equal(s.total, 2);
+  assert.equal(s.updated, 1);
+  assert.equal(s.missing, 1);
+  // A farm not in this release isn't listed; no fleet data changes nothing.
+  assert.equal(withMissingMotorNodes(nodes, [], fleet).length, 1);
+  assert.equal(withMissingMotorNodes(nodes, targets, null).length, 1);
 });

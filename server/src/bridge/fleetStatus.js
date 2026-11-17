@@ -1,6 +1,6 @@
 import { db } from "../firebaseAdmin.js";
 import { MOTOR_NUMBERS } from "./motorNumbers.js";
-import { farmUnitCounts } from "./farmUnits.js";
+import { farmUnitCounts, farmMotorNodeLabels } from "./farmUnits.js";
 import { liveSnapshot } from "./firestoreMirror.js";
 
 // Same "still talking to the broker" threshold as the web admin panel's
@@ -52,6 +52,7 @@ export async function getFleetStatus() {
       online,
       lastSeen: lastSeenMs,
       units: farmUnitCounts(f),   // { motorNodes, valves, backwash } - see farmUnits.js
+      motorNodeLabels: farmMotorNodeLabels(f, deviceStatus?.motor1),   // ["MOTOR_2", ...] - see farmUnits.js
       deviceStatus: deviceStatus
         ? {
             ...Object.fromEntries(MOTOR_NUMBERS.map((n) => [`motor${n}`, deviceStatus[`motor${n}`] || null])),
