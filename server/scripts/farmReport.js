@@ -109,6 +109,13 @@ async function main() {
     } else {
       console.log("  mesh              (no mesh counters - hub firmware older than this report)");
     }
+    if (h.lora) {
+      const l = h.lora;
+      console.log(`  lora              ${l.kbps ?? "-"} kbps, channel ${l.ch ?? "-"}, module ${l.cfg ?? "-"}${l.changing ? ", SPEED CHANGE UNDER WAY" : ""}${l.change ? ` - last change: ${l.change}` : ""}`);
+      for (const u of l.units || []) {
+        console.log(`  lora ${String(u.u).padEnd(12)} ${u.dbm != null ? `${u.dbm} dBm` : "signal -"}, heard ${u.seen_s ?? "-"} s ago${u.lr === false ? ", OLD FIRMWARE (can't follow a speed change)" : ""}`);
+      }
+    }
   } else {
     console.log("  no health report in the last 15 days");
   }
@@ -134,6 +141,7 @@ async function main() {
         `mesh rebuilt ${p.mesh_restarts} time(s) since boot`);
     }
     if (p.node_rssi_pct !== undefined) console.log(`  signal at hub     ${p.node_rssi_pct}%`);
+    if (p.lora) console.log(`  lora              ${p.lora.kbps ?? "-"} kbps, channel ${p.lora.ch ?? "-"}, module ${p.lora.cfg ?? "-"}, hub heard at ${p.lora.hub_dbm != null ? `${p.lora.hub_dbm} dBm` : "-"}${p.lora.scan ? ", LOOKING FOR THE HUB (other speed)" : ""}`);
     console.log(`  clock             ${p.ts ? ist(p.ts * 1000) : "-"}${p.time_synced === false ? " (not synced)" : ""}`);
   }
 

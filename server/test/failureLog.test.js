@@ -70,3 +70,19 @@ test("a hub crash is recorded once", () => {
   assert.deepEqual(kinds(r), ["hub:hub_reboot", "hub:hub_crash"]);
   assert.deepEqual(d.onMessage("0002", "health_health", { device_uptime_sec: 340, crash: "deadbeef loopTask@0x400d1 c28 v0x0 bt:400d1" }, 2), []);
 });
+
+test("LoRa: module not set up once per boot, a reverted speed change once", () => {
+  const d = createFailureDetector();
+  const h = (up, lora) => d.onMessage("0009", "health_health", { device_uptime_sec: up, lora });
+  assert.deepEqual(h(5000, { kbps: "2.4", cfg: "ok" }).map((x) => x.kind), []);
+  assert.deepEqual(h(5600, { kbps: "2.4", cfg: "no_answer", ch: 18 }).map((x) => x.kind), ["lora_module"]);
+  assert.deepEqual(h(6200, { kbps: "2.4", cfg: "no_answer" }).map((x) => x.kind), []);
+  const rev = "reverted to 2.4 kbps: VALVE_3 (+0) not heard at 9.6";
+  const got = h(6800, { kbps: "2.4", cfg: "no_answer", change: rev });
+  assert.deepEqual(got.map((x) => x.kind), ["lora_speed_reverted"]);
+  assert.equal(got[0].detail.change, rev);
+  assert.deepEqual(h(7400, { kbps: "2.4", cfg: "no_answer", change: rev }).map((x) => x.kind), []);
+  assert.deepEqual(h(8000, { kbps: "9.6", cfg: "no_answer", change: "ok: 3 unit(s) at 9.6 kbps" }).map((x) => x.kind), []);
+  // a reboot: the module problem is noted again
+  assert.deepEqual(h(30, { kbps: "9.6", cfg: "wrong" }).map((x) => x.kind), ["hub_reboot", "lora_module"]);
+});

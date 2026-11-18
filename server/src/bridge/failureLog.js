@@ -25,6 +25,10 @@
 //   node_crash        a motor node's last crash (core dump summary - decode
 //                     the addresses with addr2line against that build)
 //   node_mesh_restart a motor node rebuilt its mesh link (hub lost / one-way link)
+//   lora_module       the hub's LoRa module doesn't answer, or its settings
+//                     couldn't be set to the farm's standard (e22.h)
+//   lora_speed_reverted a LoRa speed change the hub undid: a unit wasn't
+//                     heard at the new speed (too far for it)
 //
 // Detection is in memory: after a bridge restart the first message of each
 // unit only seeds the state (a boot seen within 15 min is still recorded).

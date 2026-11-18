@@ -69,8 +69,25 @@ export function createFailureDetector() {
         out.push({ farmId, unit: "hub", kind: "mesh_inbox_dropped", detail: { messages: inboxDropped - prev.inboxDropped } });
       }
     }
+    // LoRa radio: a module whose settings can't be set (or that doesn't
+    // answer) - once per boot; a speed change that the hub had to undo
+    // (a unit not heard at the new speed) - once per outcome.
+    const lora = p.lora && typeof p.lora === "object" ? p.lora : null;
+    let loraModuleNoted = sameBoot ? prev.loraModuleNoted : false;
+    let loraChange = prev ? prev.loraChange : null;
+    if (lora) {
+      if ((lora.cfg === "wrong" || lora.cfg === "no_answer") && !loraModuleNoted) {
+        out.push({ farmId, unit: "hub", kind: "lora_module", detail: { cfg: lora.cfg, kbps: lora.kbps ?? null, ch: num(lora.ch) } });
+        loraModuleNoted = true;
+      }
+      const change = typeof lora.change === "string" ? lora.change : null;
+      if (change && change !== loraChange && change.startsWith("reverted")) {
+        out.push({ farmId, unit: "hub", kind: "lora_speed_reverted", detail: { change } });
+      }
+      if (change) loraChange = change;
+    }
     f.hub = { up: up ?? (prev ? prev.up : 0), connects, modemResets, lowMemNoted, crash: crash || (prev ? prev.crash : null),
-      drops: mesh ? num(mesh.drops) : null, inboxDropped: mesh ? num(mesh.inbox_dropped) : null };
+      drops: mesh ? num(mesh.drops) : null, inboxDropped: mesh ? num(mesh.inbox_dropped) : null, loraModuleNoted, loraChange };
   }
 
   function onMotorNodesFlags(farmId, f, flags, atMs, out) {
