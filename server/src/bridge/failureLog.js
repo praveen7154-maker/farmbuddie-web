@@ -14,6 +14,8 @@
 //   hub_reconnect     the hub's server link dropped and came back without a
 //                     reboot (health mqtt_connects went up)
 //   hub_loop_stall    the hub's main loop stalled over 30 s (health mesh)
+//   hub_modem_reset   the hub reset its GSM modem (health modem_resets went up) -
+//                     the SIM dropped out, or the server stayed unreachable over GSM
 //   hub_low_memory    largest free heap block under 30 KB (once per boot)
 //   mesh_link_drops   painlessMesh links dropped since the last health report
 //   mesh_inbox_dropped node messages the hub dropped, its main loop too far behind

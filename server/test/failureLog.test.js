@@ -55,3 +55,10 @@ test("motor node online flags, reboot, crash, mesh restart", () => {
   // The same crash text in later statuses isn't recorded again.
   assert.deepEqual(d.onMessage("0002", "motor3_status", { device_uptime_sec: 60, crash: "abc12345 loopTask@0x400d1234 c28 v0x0 bt:400d1234" }, 3), []);
 });
+
+test("hub modem resets within a boot are recorded", () => {
+  const d = createFailureDetector();
+  d.onMessage("0002", "health_health", { device_uptime_sec: 1000, modem_resets: 0 }, 0);
+  const r = d.onMessage("0002", "health_health", { device_uptime_sec: 1300, modem_resets: 1, signal_pct: 60 }, 300000);
+  assert.deepEqual(kinds(r), ["hub:hub_modem_reset"]);
+});

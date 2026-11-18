@@ -95,14 +95,14 @@ async function main() {
     const h = health.payload;
     console.log(`  firmware          ${h.fw_version || "-"} (board ${h.board || "-"})`);
     console.log(`  up since boot     ${dur(h.device_uptime_sec)} - last reset: ${h.reset_reason || "-"}${h.restart_cause ? ` / ${h.restart_cause}` : ""}`);
-    console.log(`  link              ${h.transport || "-"}, signal ${h.signal_pct ?? "-"}%, server connects since boot ${h.mqtt_connects ?? "-"}`);
+    console.log(`  link              ${h.transport || "-"}, signal ${h.signal_pct ?? "-"}%, server connects since boot ${h.mqtt_connects ?? "-"}, modem resets ${h.modem_resets ?? "-"}`);
     console.log(`  memory            free ${h.free_heap ?? "-"} B, largest block ${h.max_alloc_heap ?? "-"} B`);
     if (h.mesh) {
       const m = h.mesh;
       console.log(`  mesh              link drops ${m.drops ?? "-"}, joins ${m.joins ?? "-"}, dropped msgs ${m.inbox_dropped ?? "-"}, ` +
         `longest wait ${m.wait_max_ms ?? "-"} ms, longest loop stall ${m.loop_busy_max_ms ?? "-"} ms (last 5 min)`);
       for (const [k, n] of Object.entries(m.motor_nodes || {})) {
-        console.log(`  motor ${k} (hub)    ${n.online ? "online" : "OFFLINE"}, heard ${n.seen_s >= 0 ? `${n.seen_s} s ago` : "never"}, ` +
+        console.log(`  motor ${k} (hub)    ${n.online ? "online" : "OFFLINE"}, heard ${Number.isFinite(n.seen_s) && n.seen_s >= 0 && n.seen_s < 4000000000 ? `${n.seen_s} s ago` : "never (since hub boot)"}, ` +
           `went offline ${n.offline_n} time(s) since hub boot, rssi ${n.rssi}, ${n.link}`);
       }
     } else {
