@@ -72,7 +72,11 @@ const eligible = (f) => (!isNode() || !f.units || unitCount(f) > 0) && !otherBoa
 const maxBytes = () => (!isNode() && fileInfo?.chip === CHIP_ESP32S3 && config?.maxFirmwareBytesS3) || config?.maxFirmwareBytes;
 const unitsText = (f) => {
   if (!f.units) return "-";
-  const parts = Object.entries(UNIT_KEY).map(([p, k]) => [p, Number(f.units[k] || 0)]).filter(([, n]) => n > 0)
+  // One entry per count: solenoid and butterfly valve units share the
+  // "valves" count (the hub can't tell them apart), so it's listed once.
+  const seen = new Set();
+  const parts = Object.entries(UNIT_KEY).filter(([, k]) => !seen.has(k) && seen.add(k))
+    .map(([p, k]) => [p, Number(f.units[k] || 0)]).filter(([, n]) => n > 0)
     .map(([p, n]) => `${n} ${UNIT_WORD[p][n === 1 ? 0 : 1]}`);
   return parts.length ? parts.join(", ") : "Hub only";
 };
