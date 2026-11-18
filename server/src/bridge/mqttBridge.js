@@ -1,6 +1,7 @@
 import mqtt from "mqtt";
 import { config } from "../config.js";
 import { insertEvent } from "./postgres.js";
+import { noteDeviceMessage } from "./failureLog.js";
 import { mirrorStatus, mirrorHealth, mirrorValves } from "./firestoreMirror.js";
 import { sendAlertPush } from "./pushNotifications.js";
 import { broadcastToFarm, rememberValves } from "./liveGateway.js";
@@ -133,6 +134,7 @@ async function handleMessage(topic, messageBuf, packet) {
   // whenever this bridge (re)subscribes. That replay only refreshes the
   // copy handed to phones on connect - it isn't a new event to store.
   if (category === "valves") {
+    if (!isRetainedReplay(packet)) await noteDeviceMessage(farmId, "valves_status", null);   // the hub is alive (failureLog.js)
     await handleValvesMessage(farmId, nodeId, topic, messageBuf, isRetainedReplay(packet));
     return;
   }
@@ -166,6 +168,9 @@ async function handleMessage(topic, messageBuf, packet) {
   // synchronous in-process Set iteration, not I/O, so there's nothing
   // here that can fail the way a Postgres/Firestore call can.
   broadcastToFarm(farmId, { topic, payload });
+
+  // Reboots, crashes, link drops, silences - kept a year (failureLog.js).
+  if (!isRetainedReplay(packet)) await noteDeviceMessage(farmId, eventType, payload);
 
   try {
     await insertEvent({ farmId, nodeId, eventType, payload });
