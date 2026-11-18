@@ -17,6 +17,7 @@
 //   hub_modem_reset   the hub reset its GSM modem (health modem_resets went up) -
 //                     the SIM dropped out, or the server stayed unreachable over GSM
 //   hub_low_memory    largest free heap block under 30 KB (once per boot)
+//   hub_crash         the hub's last crash (core dump summary, as node_crash)
 //   mesh_link_drops   painlessMesh links dropped since the last health report
 //   mesh_inbox_dropped node messages the hub dropped, its main loop too far behind
 //   node_offline / node_online   the hub's online flag for a motor node

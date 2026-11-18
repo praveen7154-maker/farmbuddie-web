@@ -96,6 +96,7 @@ async function main() {
     console.log(`  firmware          ${h.fw_version || "-"} (board ${h.board || "-"})`);
     console.log(`  up since boot     ${dur(h.device_uptime_sec)} - last reset: ${h.reset_reason || "-"}${h.restart_cause ? ` / ${h.restart_cause}` : ""}`);
     console.log(`  link              ${h.transport || "-"}, signal ${h.signal_pct ?? "-"}%, server connects since boot ${h.mqtt_connects ?? "-"}, modem resets ${h.modem_resets ?? "-"}`);
+    if (h.crash) console.log(`  last crash        ${h.crash}`);
     console.log(`  memory            free ${h.free_heap ?? "-"} B, largest block ${h.max_alloc_heap ?? "-"} B`);
     if (h.mesh) {
       const m = h.mesh;

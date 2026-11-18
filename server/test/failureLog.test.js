@@ -62,3 +62,11 @@ test("hub modem resets within a boot are recorded", () => {
   const r = d.onMessage("0002", "health_health", { device_uptime_sec: 1300, modem_resets: 1, signal_pct: 60 }, 300000);
   assert.deepEqual(kinds(r), ["hub:hub_modem_reset"]);
 });
+
+test("a hub crash is recorded once", () => {
+  const d = createFailureDetector();
+  d.onMessage("0002", "health_health", { device_uptime_sec: 9000 }, 0);
+  const r = d.onMessage("0002", "health_health", { device_uptime_sec: 40, reset_reason: "panic", crash: "deadbeef loopTask@0x400d1 c28 v0x0 bt:400d1" }, 1);
+  assert.deepEqual(kinds(r), ["hub:hub_reboot", "hub:hub_crash"]);
+  assert.deepEqual(d.onMessage("0002", "health_health", { device_uptime_sec: 340, crash: "deadbeef loopTask@0x400d1 c28 v0x0 bt:400d1" }, 2), []);
+});

@@ -41,6 +41,10 @@ export function createFailureDetector() {
     if (sameBoot && connects !== null && prev.connects !== null && connects > prev.connects) {
       out.push({ farmId, unit: "hub", kind: "hub_reconnect", detail: { times: connects - prev.connects, signal_pct: num(p.signal_pct) } });
     }
+    const crash = typeof p.crash === "string" && p.crash ? p.crash : null;
+    if (crash && (!prev || prev.crash !== crash)) {
+      out.push({ farmId, unit: "hub", kind: "hub_crash", detail: { crash, fw, reset_reason: p.reset_reason || null } });
+    }
     const modemResets = num(p.modem_resets);
     if (sameBoot && modemResets !== null && prev.modemResets !== null && modemResets > prev.modemResets) {
       out.push({ farmId, unit: "hub", kind: "hub_modem_reset", detail: { times: modemResets - prev.modemResets, signal_pct: num(p.signal_pct) } });
@@ -65,7 +69,7 @@ export function createFailureDetector() {
         out.push({ farmId, unit: "hub", kind: "mesh_inbox_dropped", detail: { messages: inboxDropped - prev.inboxDropped } });
       }
     }
-    f.hub = { up: up ?? (prev ? prev.up : 0), connects, modemResets, lowMemNoted,
+    f.hub = { up: up ?? (prev ? prev.up : 0), connects, modemResets, lowMemNoted, crash: crash || (prev ? prev.crash : null),
       drops: mesh ? num(mesh.drops) : null, inboxDropped: mesh ? num(mesh.inbox_dropped) : null };
   }
 
