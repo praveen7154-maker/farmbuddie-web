@@ -97,7 +97,9 @@ async function main() {
     console.log(`  up since boot     ${dur(h.device_uptime_sec)} - last reset: ${h.reset_reason || "-"}${h.restart_cause ? ` / ${h.restart_cause}` : ""}`);
     console.log(`  link              ${h.transport || "-"}, signal ${h.signal_pct ?? "-"}%, server connects since boot ${h.mqtt_connects ?? "-"}, modem resets ${h.modem_resets ?? "-"}`);
     if (h.crash) console.log(`  last crash        ${h.crash}`);
-    console.log(`  memory            free ${h.free_heap ?? "-"} B, largest block ${h.max_alloc_heap ?? "-"} B`);
+    console.log(`  memory            free ${h.free_heap ?? "-"} B, largest block ${h.max_alloc_heap ?? "-"} B` +
+      `${h.min_free_heap != null ? `, lowest since boot ${h.min_free_heap} B` : ""}`);
+    if (h.stack_free) console.log(`  task stack free   ${Object.entries(h.stack_free).map(([k, v]) => `${k} ${v} B`).join(", ")}`);
     if (h.mesh) {
       const m = h.mesh;
       console.log(`  mesh              link drops ${m.drops ?? "-"}, joins ${m.joins ?? "-"}, dropped msgs ${m.inbox_dropped ?? "-"}, ` +
@@ -136,6 +138,8 @@ async function main() {
     console.log(`  firmware          ${p.fw_version || "-"}${p.board ? ` (board ${p.board})` : ""}`);
     console.log(`  up since boot     ${dur(p.device_uptime_sec)} - last reset: ${p.reset_reason || "-"}${p.restart_cause ? ` / ${p.restart_cause}` : ""}`);
     if (p.crash) console.log(`  last crash        ${p.crash}`);
+    if (p.free_heap !== undefined) console.log(`  memory            free ${p.free_heap} B, largest block ${p.max_alloc_heap ?? "-"} B` +
+      `${p.min_free_heap != null ? `, lowest since boot ${p.min_free_heap} B` : ""}${p.stack_free != null ? `, loop stack free ${p.stack_free} B` : ""}`);
     if (p.mesh_restarts !== undefined) {
       console.log(`  mesh              ${p.mesh_secure === true ? "secure" : p.mesh_secure === false ? "legacy" : "-"}, peers ${p.mesh_peers}, hub last heard ${p.hub_silent_sec} s ago, ` +
         `mesh rebuilt ${p.mesh_restarts} time(s) since boot`);
