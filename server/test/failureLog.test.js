@@ -86,3 +86,12 @@ test("LoRa: module not set up once per boot, a reverted speed change once", () =
   // a reboot: the module problem is noted again
   assert.deepEqual(h(30, { kbps: "9.6", cfg: "wrong" }).map((x) => x.kind), ["hub_reboot", "lora_module"]);
 });
+
+test("an old crash isn't logged again after a bridge restart", () => {
+  const d = createFailureDetector();
+  const crash = "c9ea4ce3 IDLE0@0x40083bc1 c29 v0x00000000 bt:40083bc1 !";
+  assert.deepEqual(d.onMessage("0002", "health_health", { device_uptime_sec: 50000, crash }, 1), []);
+  assert.deepEqual(d.onMessage("0002", "motor2_status", { device_uptime_sec: 50000, crash }, 2), []);
+  const fresh = createFailureDetector();
+  assert.deepEqual(kinds(fresh.onMessage("0002", "health_health", { device_uptime_sec: 30, reset_reason: "panic", crash }, 1)), ["hub:hub_reboot", "hub:hub_crash"]);
+});

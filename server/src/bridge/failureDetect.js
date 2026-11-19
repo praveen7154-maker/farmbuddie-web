@@ -42,7 +42,10 @@ export function createFailureDetector() {
       out.push({ farmId, unit: "hub", kind: "hub_reconnect", detail: { times: connects - prev.connects, signal_pct: num(p.signal_pct) } });
     }
     const crash = typeof p.crash === "string" && p.crash ? p.crash : null;
-    if (crash && (!prev || prev.crash !== crash)) {
+    // The hub repeats its last crash in every health. Without an earlier
+    // health (the bridge restarted) it counts only on a fresh boot - an old
+    // crash from an earlier boot isn't logged again.
+    if (crash && (prev ? prev.crash !== crash : up !== null && up < FRESH_BOOT_SEC)) {
       out.push({ farmId, unit: "hub", kind: "hub_crash", detail: { crash, fw, reset_reason: p.reset_reason || null } });
     }
     const modemResets = num(p.modem_resets);
@@ -118,7 +121,7 @@ export function createFailureDetector() {
       }
     }
     const crash = typeof p.crash === "string" && p.crash ? p.crash : null;
-    if (crash && (!prev || prev.crash !== crash)) {
+    if (crash && (prev ? prev.crash !== crash : up !== null && up < FRESH_BOOT_SEC)) {
       out.push({ farmId, unit, kind: "node_crash", detail: { crash, fw, reset_reason: p.reset_reason || null } });
     }
     const restarts = num(p.mesh_restarts);
