@@ -70,6 +70,7 @@ export async function noteDeviceMessage(farmId, eventType, payload) {
   }
   for (const x of found) {
     try {
+      if (await alreadyLogged(x)) continue;
       await pool.query(
         `INSERT INTO device_failures (farm_id, unit, kind, detail) VALUES ($1, $2, $3, $4)`,
         [x.farmId, x.unit, x.kind, x.detail || {}]
@@ -79,6 +80,32 @@ export async function noteDeviceMessage(farmId, eventType, payload) {
       console.error("[failures] insert failed:", err.message);
     }
   }
+}
+
+// A restart or crash the detector sees on the FIRST message from a unit
+// after this bridge restarted (it has nothing earlier to compare with): it
+// is counted on a fresh boot, so if the bridge itself restarted within that
+// window, the previous bridge may already have logged this same boot.
+// Skipped when a row for the same boot is already there.
+async function alreadyLogged(x) {
+  const d = x.detail || {};
+  let windowS = null;
+  let sameCrash = null;
+  if ((x.kind === "hub_reboot" || x.kind === "node_reboot") && d.uptime_before_s == null) {
+    windowS = (typeof d.uptime_s === "number" ? d.uptime_s : 900) + 120;   // since this boot, plus slack
+  } else if (x.kind === "hub_crash" || x.kind === "node_crash") {
+    windowS = 900 + 120;
+    sameCrash = typeof d.crash === "string" ? d.crash : null;
+  }
+  if (windowS == null) return false;
+  const { rows } = await pool.query(
+    `SELECT 1 FROM device_failures
+      WHERE farm_id = $1 AND unit = $2 AND kind = $3 AND at > now() - make_interval(secs => $4::double precision)
+        AND ($5::text IS NULL OR detail->>'crash' = $5)
+      LIMIT 1`,
+    [x.farmId, x.unit, x.kind, windowS, sameCrash]
+  );
+  return rows.length > 0;
 }
 
 export async function cleanupOldFailures() {
