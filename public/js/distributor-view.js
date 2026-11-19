@@ -7,7 +7,8 @@ import { doc, getDoc }
 import { BRIDGE_BASE_URL } from "/js/config.js";
 import { hardcopyRows, DISTRIBUTOR_DOCS } from "/js/upload-prep.js";
 import { fmtDateTime } from "/js/time-format.js";
-import { loadCompany, sectionsFromView, recordDocHtml, printRecord, pdfRecord } from "/js/record-doc.js";
+import { loadCompany, sectionsFromView, recordDocHtml, printRecord } from "/js/record-doc.js";
+import { recordPdf } from "/js/record-pdf.js";
 
 /* ================= AUTH ================= */
 onAuthStateChanged(auth, (user) => {
@@ -174,9 +175,23 @@ window.printDistributor = async function () {
   const html = await distributorDoc();
   if (html) printRecord(html, fileName());
 };
+// Save as PDF: drawn (record-pdf.js), not a screenshot of the page.
 window.downloadPDF = async function () {
-  const html = await distributorDoc();
-  if (html) await pdfRecord(html, `${fileName()}.pdf`);
+  const d = currentDistributor;
+  if (!d) return;
+  try {
+    await recordPdf({
+      title: "DISTRIBUTOR RECORD",
+      refLabel: "Distributor ID",
+      ref: d.distributorId || docId,
+      meta: [["Distributor", d.name], ["Phone", d.primaryMobile], ["GST", d.gstNumber], ["Status", d.status]],
+      sections: sectionsFromView(viewBox),
+      company: await loadCompany(),
+      signLeft: "Distributor's signature",
+      printedBy: auth.currentUser?.email || "",
+      filename: `${fileName()}.pdf`
+    });
+  } catch (e) { alert(e.message); }
 };
 
 // Record fields (typed in by whoever onboarded the farm / distributor) are

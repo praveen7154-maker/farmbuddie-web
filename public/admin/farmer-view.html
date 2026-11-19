@@ -70,6 +70,8 @@
 <div class="view-actions">
   <button class="fb-btn-primary small" onclick="printFarmer()">🖨 Print</button>
   <button class="fb-btn-primary small" onclick="downloadPDF()"> Save as PDF</button>
+  <button class="fb-btn-primary small" onclick="downloadOnboardingForm()">📝 Onboarding Form</button>
+  <button class="fb-btn-primary small" onclick="downloadWorkCompletion()">✅ Work Completion</button>
 </div>
 
 <div class="admin-container">
@@ -77,8 +79,8 @@
 </div>
 
 </main>
-<!-- html2pdf library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- jsPDF: Save as PDF and the field forms (record-pdf.js) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <!-- Your JS file -->
 <script type="module" src="/js/farmer-view.js"></script>

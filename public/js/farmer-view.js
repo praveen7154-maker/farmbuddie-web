@@ -8,7 +8,8 @@ import { onAuthStateChanged, signOut }
 import { doc, getDoc, collection, query, where, getDocs }
   from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 import { fmtDateTime } from "/js/time-format.js";
-import { loadCompany, sectionsFromView, recordDocHtml, printRecord, pdfRecord } from "/js/record-doc.js";
+import { loadCompany, sectionsFromView, recordDocHtml, printRecord } from "/js/record-doc.js";
+import { recordPdf, onboardingFormPdf, workCompletionPdf } from "/js/record-pdf.js";
 
 /* ================= AUTH GUARD ================= */
 onAuthStateChanged(auth, (user) => {
@@ -334,9 +335,41 @@ window.printFarmer = async function () {
   const html = await farmerDoc();
   if (html) printRecord(html, fileName());
 };
+// Save as PDF: drawn (record-pdf.js), not a screenshot of the page - that
+// came out cropped on the right on some PCs.
 window.downloadPDF = async function () {
-  const html = await farmerDoc();
-  if (html) await pdfRecord(html, `${fileName()}.pdf`);
+  const f = currentFarmer;
+  if (!f) return;
+  try {
+    await recordPdf({
+      title: "FARMER RECORD",
+      refLabel: "Farm Buddie ID",
+      ref: f.farmBuddieId || docId,
+      meta: [
+        ["Farmer", [f.title, f.name].filter(Boolean).join(" ")],
+        ["Farm number", f.farmNumber],
+        ["Device ID", f.controller?.uniqueId],
+        ["Status", f.status]
+      ],
+      photoUrl: currentPhoto,
+      sections: sectionsFromView(viewBox),
+      company: await loadCompany(),
+      signLeft: "Farmer's signature",
+      printedBy: auth.currentUser?.email || "",
+      filename: `${fileName()}.pdf`
+    });
+  } catch (e) { alert(e.message); }
+};
+// The two field forms, filled from this record; the rest is written in by hand.
+window.downloadOnboardingForm = async function () {
+  if (!currentFarmer) return;
+  try { await onboardingFormPdf(currentFarmer, `Onboarding_Form_${fileName().replace(/^Farmer_/, "")}.pdf`); }
+  catch (e) { alert(e.message); }
+};
+window.downloadWorkCompletion = async function () {
+  if (!currentFarmer) return;
+  try { await workCompletionPdf(currentFarmer, `Work_Completion_${fileName().replace(/^Farmer_/, "")}.pdf`); }
+  catch (e) { alert(e.message); }
 };
 
 // Record fields (typed in by whoever onboarded the farm / distributor) are
