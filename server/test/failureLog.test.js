@@ -95,3 +95,21 @@ test("an old crash isn't logged again after a bridge restart", () => {
   const fresh = createFailureDetector();
   assert.deepEqual(kinds(fresh.onMessage("0002", "health_health", { device_uptime_sec: 30, reset_reason: "panic", crash }, 1)), ["hub:hub_reboot", "hub:hub_crash"]);
 });
+
+test("two boots in a row with the same short uptime are two restarts", () => {
+  const d = createFailureDetector();
+  const base = 1_000_000;
+  // boot at T (up 4 s), boot again ~2 min later (up 4 s again)
+  assert.deepEqual(kinds(d.onMessage("0003", "health_health", { device_uptime_sec: 4, reset_reason: "power_on" }, base)), ["hub:hub_reboot"]);
+  assert.deepEqual(kinds(d.onMessage("0003", "health_health", { device_uptime_sec: 4, reset_reason: "power_on" }, base + 130_000)), ["hub:hub_reboot"]);
+  // a normal next report 5 min on: not a restart
+  assert.deepEqual(d.onMessage("0003", "health_health", { device_uptime_sec: 304 }, base + 430_000), []);
+  // long-running hub: growing uptime, even with a late message, isn't one
+  const e = createFailureDetector();
+  e.onMessage("0003", "health_health", { device_uptime_sec: 50_000 }, base);
+  assert.deepEqual(e.onMessage("0003", "health_health", { device_uptime_sec: 50_300 }, base + 840_000), []);
+  // node: same rule
+  const n = createFailureDetector();
+  n.onMessage("0003", "motor2_status", { device_uptime_sec: 3 }, base);
+  assert.deepEqual(kinds(n.onMessage("0003", "motor2_status", { device_uptime_sec: 3 }, base + 150_000)), ["MOTOR_2:node_reboot"]);
+});

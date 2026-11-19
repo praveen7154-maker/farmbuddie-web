@@ -8,6 +8,19 @@ const LOW_BLOCK_BYTES = 30 * 1024;
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+// Restarted since its previous message: the uptime went back - or, a fresh
+// boot (under FRESH_BOOT_SEC), it grew clearly less than the time that
+// passed. Two reports straight after two boots both said "up 4 s", and
+// "uptime went back" alone missed the second restart.
+const REBOOT_SLACK_S = 30;
+function restartedSince(prev, up, atMs) {
+  if (!prev) return up < FRESH_BOOT_SEC;
+  if (up < prev.up) return true;
+  if (up >= FRESH_BOOT_SEC || prev.atMs == null || atMs == null) return false;
+  const elapsedS = (atMs - prev.atMs) / 1000;
+  return elapsedS > 2 * REBOOT_SLACK_S && up + REBOOT_SLACK_S < prev.up + elapsedS;
+}
+
 /**
  * The detector itself - pure, no I/O, so it can be tested. onMessage()
  * returns the failures a message reveals: [{ farmId, unit, kind, detail }].
@@ -24,19 +37,19 @@ export function createFailureDetector() {
     return f;
   }
 
-  function onHealth(farmId, f, p, out) {
+  function onHealth(farmId, f, p, out, atMs) {
     const up = num(p.device_uptime_sec);
     const prev = f.hub;
     const fw = p.fw_version || null;
+    const rebooted = up !== null && restartedSince(prev, up, atMs);
     if (up !== null) {
-      const rebooted = prev ? up < prev.up : up < FRESH_BOOT_SEC;
       if (rebooted) {
         out.push({ farmId, unit: "hub", kind: "hub_reboot", detail: {
           reset_reason: p.reset_reason || null, restart_cause: p.restart_cause || null, fw,
           uptime_before_s: prev ? prev.up : null, uptime_s: up } });
       }
     }
-    const sameBoot = prev && up !== null && up >= prev.up;
+    const sameBoot = prev && up !== null && !rebooted;
     const connects = num(p.mqtt_connects);
     if (sameBoot && connects !== null && prev.connects !== null && connects > prev.connects) {
       out.push({ farmId, unit: "hub", kind: "hub_reconnect", detail: { times: connects - prev.connects, signal_pct: num(p.signal_pct) } });
@@ -89,7 +102,7 @@ export function createFailureDetector() {
       }
       if (change) loraChange = change;
     }
-    f.hub = { up: up ?? (prev ? prev.up : 0), connects, modemResets, lowMemNoted, crash: crash || (prev ? prev.crash : null),
+    f.hub = { up: up ?? (prev ? prev.up : 0), atMs: up !== null ? atMs : (prev ? prev.atMs : null), connects, modemResets, lowMemNoted, crash: crash || (prev ? prev.crash : null),
       drops: mesh ? num(mesh.drops) : null, inboxDropped: mesh ? num(mesh.inbox_dropped) : null, loraModuleNoted, loraChange };
   }
 
@@ -108,12 +121,12 @@ export function createFailureDetector() {
     f.online = next;
   }
 
-  function onNodeStatus(farmId, f, unit, p, out) {
+  function onNodeStatus(farmId, f, unit, p, out, atMs) {
     const up = num(p.device_uptime_sec);
     const prev = f.nodes.get(unit);
     const fw = p.fw_version || null;
+    const rebooted = up !== null && restartedSince(prev, up, atMs);
     if (up !== null) {
-      const rebooted = prev ? up < prev.up : up < FRESH_BOOT_SEC;
       if (rebooted) {
         out.push({ farmId, unit, kind: "node_reboot", detail: {
           reset_reason: p.reset_reason || null, restart_cause: p.restart_cause || null, fw,
@@ -125,12 +138,12 @@ export function createFailureDetector() {
       out.push({ farmId, unit, kind: "node_crash", detail: { crash, fw, reset_reason: p.reset_reason || null } });
     }
     const restarts = num(p.mesh_restarts);
-    const sameBoot = prev && up !== null && up >= prev.up;
+    const sameBoot = prev && up !== null && !rebooted;
     if (sameBoot && restarts !== null && prev.restarts !== null && restarts > prev.restarts) {
       out.push({ farmId, unit, kind: "node_mesh_restart", detail: {
         times: restarts - prev.restarts, hub_silent_sec: num(p.hub_silent_sec), peers: num(p.mesh_peers) } });
     }
-    f.nodes.set(unit, { up: up ?? (prev ? prev.up : 0), crash: crash || (prev ? prev.crash : null), restarts });
+    f.nodes.set(unit, { up: up ?? (prev ? prev.up : 0), atMs: up !== null ? atMs : (prev ? prev.atMs : null), crash: crash || (prev ? prev.crash : null), restarts });
   }
 
   return {
@@ -144,11 +157,11 @@ export function createFailureDetector() {
       f.lastMsgAt = atMs;
       const p = payload && typeof payload === "object" ? payload : null;
       if (!p) return out;
-      if (eventType === "health_health") onHealth(farmId, f, p, out);
+      if (eventType === "health_health") onHealth(farmId, f, p, out, atMs);
       const m = /^motor(\d+)_status$/.exec(eventType || "");
       if (m && p.event === undefined) {
         if (m[1] === "1") onMotorNodesFlags(farmId, f, p.motor_nodes, atMs, out);
-        else onNodeStatus(farmId, f, `MOTOR_${m[1]}`, p, out);
+        else onNodeStatus(farmId, f, `MOTOR_${m[1]}`, p, out, atMs);
       }
       return out;
     }
