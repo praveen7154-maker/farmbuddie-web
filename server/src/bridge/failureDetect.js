@@ -76,7 +76,7 @@ export function createFailureDetector() {
     let loraModuleNoted = sameBoot ? prev.loraModuleNoted : false;
     let loraChange = prev ? prev.loraChange : null;
     if (lora) {
-      if ((lora.cfg === "wrong" || lora.cfg === "no_answer") && !loraModuleNoted) {
+      if ((lora.cfg === "wrong" || lora.cfg === "no_answer" || lora.cfg === "absent") && !loraModuleNoted) {
         out.push({ farmId, unit: "hub", kind: "lora_module", detail: { cfg: lora.cfg, kbps: lora.kbps ?? null, ch: num(lora.ch) } });
         loraModuleNoted = true;
       }
