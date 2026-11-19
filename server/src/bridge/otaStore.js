@@ -158,10 +158,12 @@ export const pgOtaStore = {
   },
 
   // Newest released version per product - { hub: "1.0.2", valve: "1.0.1", ... }.
+  // A release stopped on the OTA page isn't offered: the app's "Update
+  // available" badge would point at firmware nobody is meant to install.
   async latestReleaseVersions() {
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (COALESCE(product, 'hub')) COALESCE(product, 'hub') AS product, version
-         FROM ota_releases ORDER BY COALESCE(product, 'hub'), id DESC`
+         FROM ota_releases WHERE stopped_at IS NULL ORDER BY COALESCE(product, 'hub'), id DESC`
     );
     return Object.fromEntries(rows.map((r) => [r.product, r.version]));
   },
