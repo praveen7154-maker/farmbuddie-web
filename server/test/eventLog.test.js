@@ -78,7 +78,20 @@ test("serial: upper-cased, write-once error mapped", async () => {
       assert.equal(published[0].payload.test, "pass");
       const dup = await call("/event-log/1/serial", { method: "POST", body: { serial: "IRRIGO26AA10001" } });
       assert.equal(dup.status, 409);
-      assert.match(dup.body.error, /service console/);
+      assert.match(dup.body.error, /Correct serial/);
+    });
+});
+
+test("serial correction: replace passed through, mismatch mapped", async () => {
+  await withServer((p) => (p.replace && p.replace !== "IRRIGO26AA10003" ? { ok: false, error: "replace_mismatch" } : { ok: true, info: { serial: p.serial } }),
+    async ({ call, published }) => {
+      const fix = await call("/event-log/1/serial", { method: "POST", body: { serial: "IRRIGO26AA10001", replace: "irrigo26aa10003" } });
+      assert.equal(fix.status, 200);
+      assert.equal(published[0].payload.replace, "IRRIGO26AA10003");
+      const wrong = await call("/event-log/1/serial", { method: "POST", body: { serial: "IRRIGO26AA10001", replace: "IRRIGO26AA10009" } });
+      assert.equal(wrong.status, 409);
+      assert.match(wrong.body.error, /doesn't match/);
+      assert.equal((await call("/event-log/1/serial", { method: "POST", body: { serial: "IRRIGO26AA10001", replace: "bad" } })).status, 400);
     });
 });
 

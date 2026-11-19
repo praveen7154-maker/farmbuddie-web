@@ -149,7 +149,15 @@ function renderCard() {
     field("VI calibration backup", i.cal_backup ? "✔ kept on the hub" : "-"),
     field("Counting since", istDate(c.first_seen))
   ].join("");
+  // A serial is made from the hub's first farm ID; a hub that was flashed
+  // with another farm's ID (or moved farms) can carry one that doesn't end
+  // in this farm's ID - flagged, and correctable (it asks for the current one).
+  correcting = false;
   $("serialForm").hidden = !!i.serial;
+  $("serialFixRow").hidden = !i.serial;
+  const mismatch = i.serial && current.farmId && !i.serial.endsWith(String(current.farmId).padStart(4, "0"));
+  $("serialFixHint").innerHTML = mismatch
+    ? `<em class="ev-warn">This serial doesn't end in farm ${esc(current.farmId)}'s ID.</em>` : "";
 
   const tile = (label, value, sub = "", cls = "") =>
     `<div class="ev-tile ${cls}"><span>${esc(label)}</span><strong>${value}</strong>${sub ? `<small>${sub}</small>` : ""}</div>`;
@@ -176,20 +184,40 @@ function renderCard() {
   ].join("");
 }
 
+let correcting = false;
+$("serialFixBtn").addEventListener("click", () => {
+  correcting = true;
+  $("serialForm").hidden = false;
+  $("serialFixRow").hidden = true;
+  $("serialNote").innerHTML = `Correcting the serial of farm ${esc(current.farmId)}'s hub (now <b>${esc(info?.serial || "")}</b>). ` +
+    `It names the board for its warranty - change it only if it is wrong.`;
+  $("serialInput").value = `IRRIGO26AA1${String(current.farmId).padStart(4, "0")}`;
+  $("serialSaveBtn").textContent = "Replace serial";
+});
+
 $("serialSaveBtn").addEventListener("click", async () => {
   const serial = $("serialInput").value.trim().toUpperCase();
   if (!/^IRRIGO\d{2}[A-Z]{2}\d{5}$/.test(serial)) {
     showPageError("Serial format: IRRIGO + year (2 digits) + series (2 letters) + unit (5 digits), e.g. IRRIGO26AA10001");
     return;
   }
-  if (!confirm(`Write serial ${serial} to farm ${current.farmId}'s hub?\n\nIt can't be changed from the web panel afterwards.`)) return;
+  let replace = "";
+  if (correcting) {
+    const typed = prompt(`Replace the serial of farm ${current.farmId}'s hub with ${serial}?\n\nType the CURRENT serial to confirm:`, "");
+    if (typed === null) return;
+    replace = typed.trim().toUpperCase();
+    if (replace !== String(info?.serial || "").toUpperCase()) { showPageError("That isn't the hub's current serial - nothing changed."); return; }
+  } else if (!confirm(`Write serial ${serial} to farm ${current.farmId}'s hub?\n\nChanging it later needs the current serial typed in.`)) return;
   const btn = $("serialSaveBtn");
   btn.disabled = true;
   try {
+    const body = { node: current.nodeId, serial, test: $("serialTest").value };
+    if (replace) body.replace = replace;
     const d = await api(`/event-log/${current.farmId}/serial`, {
       method: "POST",
-      body: JSON.stringify({ node: current.nodeId, serial, test: $("serialTest").value })
+      body: JSON.stringify(body)
     });
+    $("serialSaveBtn").textContent = "Save serial";
     info = d.info || info;
     renderCard();
     showPageError("");

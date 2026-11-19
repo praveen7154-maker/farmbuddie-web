@@ -25,7 +25,8 @@ const MAX_PAGE = 40;
 const HUB_ERRORS = {
   no_eeprom: [404, "This hub has no event log (V1 board, or its EEPROM is missing)"],
   loading: [503, "The hub is still loading its log after a restart - try again in a few seconds"],
-  serial_already_set: [409, "This hub already has a serial number - it can only be changed at the hub's service console"],
+  serial_already_set: [409, "This hub already has a serial number - use Correct serial (it asks for the current one)"],
+  replace_mismatch: [409, "The current serial you typed doesn't match the hub's - nothing changed"],
   bad_serial_format: [400, "Serial format: IRRIGO + year (2 digits) + series (2 letters) + unit (5 digits), e.g. IRRIGO26AA10001"],
   bad_test_result: [400, "Test result must be pass or fail"],
   eeprom_read_error: [502, "The hub could not read its EEPROM at boot - restart it and try again"],
@@ -129,15 +130,20 @@ export function createEventLogModule({ publishCommand, timeoutMs = DEFAULT_TIMEO
     }));
   });
 
-  // POST /event-log/:farmId/serial {node, serial, test} - write-once.
+  // POST /event-log/:farmId/serial {node, serial, test, replace?} - write-once;
+  // with replace (the hub's CURRENT serial) a deliberate correction.
   adminRouter.post("/:farmId/serial", async (req, res) => {
     const t = target(req, res);
     if (!t) return;
     const serial = String(req.body?.serial || "").trim().toUpperCase();
     const testResult = String(req.body?.test || "");
+    const replace = String(req.body?.replace || "").trim().toUpperCase();
     if (!SERIAL_RE.test(serial)) return res.status(400).json({ error: HUB_ERRORS.bad_serial_format[1] });
+    if (replace && !SERIAL_RE.test(replace)) return res.status(400).json({ error: HUB_ERRORS.bad_serial_format[1] });
     if (!["", "pass", "fail"].includes(testResult)) return res.status(400).json({ error: HUB_ERRORS.bad_test_result[1] });
-    await relay(res, t.farmId, t.nodeId, { cmd: "eventlog_set_serial", serial, test: testResult }, (r) => ({ info: r.info || {} }));
+    const cmd = { cmd: "eventlog_set_serial", serial, test: testResult };
+    if (replace) cmd.replace = replace;
+    await relay(res, t.farmId, t.nodeId, cmd, (r) => ({ info: r.info || {} }));
   });
 
   return { adminRouter, handleResponse, pendingCount: () => pending.size };

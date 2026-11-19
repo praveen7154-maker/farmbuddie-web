@@ -89,8 +89,8 @@
   <h2><span class="ota-step">2</span> Warranty card <span class="ota-muted" id="cardMeta"></span></h2>
   <div class="ev-grid" id="cardGrid"></div>
   <div class="ev-serial" id="serialForm" hidden>
-    <p class="ota-note">No serial number on this hub yet. It can be set once from here (after that only at the hub's
-      service console). Format: IRRIGO + year + series + unit, e.g. <b>IRRIGO26AA10001</b>.</p>
+    <p class="ota-note" id="serialNote">No serial number on this hub yet. It can be set once from here. Format: IRRIGO + year +
+      series + unit, e.g. <b>IRRIGO26AA10001</b>.</p>
     <div class="ota-row">
       <label class="ota-field narrow"><span>Serial number</span>
         <input type="text" id="serialInput" maxlength="15" placeholder="IRRIGO26AA10001" autocomplete="off"></label>
@@ -99,6 +99,8 @@
       <button class="fb-btn-primary" id="serialSaveBtn">Save serial</button>
     </div>
   </div>
+  <p class="ota-note" id="serialFixRow" hidden><button class="fb-btn-primary" id="serialFixBtn">Correct serial</button>
+    <span id="serialFixHint"></span></p>
   <h3 class="ota-subhead">Lifetime</h3>
   <div class="ev-tiles" id="counterTiles"></div>
   <h3 class="ota-subhead">Faults (all time)</h3>
