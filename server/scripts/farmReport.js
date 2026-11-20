@@ -138,6 +138,34 @@ async function main() {
   }
   if (status?.payload?.motor_nodes) console.log(`  node flags        ${JSON.stringify(status.payload.motor_nodes)}`);
 
+  // ---- valve units (the hub's valves topic snapshot) ----
+  {
+    const { rows: vs } = await pool.query(
+      `SELECT payload, recorded_at FROM device_events WHERE farm_id = $1 AND event_type = 'valves_status'
+         AND recorded_at > now() - make_interval(days => $2) ORDER BY recorded_at`, [farmId, days]);
+    const last = vs.length ? vs[vs.length - 1] : await latest("valves_status");
+    const units = Array.isArray(last?.payload?.units) ? last.payload.units : [];
+    if (units.length) {
+      // Online / offline changes per unit across the window's snapshots.
+      const flips = {}, prevOn = {};
+      for (const r of vs) for (const u of r.payload?.units || []) {
+        if (prevOn[u.u] !== undefined && prevOn[u.u] !== !!u.on) {
+          flips[u.u] = flips[u.u] || { off: 0, on: 0, lastOff: null };
+          if (u.on) flips[u.u].on++; else { flips[u.u].off++; flips[u.u].lastOff = r.recorded_at; }
+        }
+        prevOn[u.u] = !!u.on;
+      }
+      console.log("\nVALVE UNITS");
+      console.log(`  last snapshot     ${ist(last.recorded_at)} (${ago(last.recorded_at)})`);
+      for (const u of units) {
+        const f = flips[u.u];
+        console.log(`  ${String(u.u).padEnd(17)} ${u.on ? "online " : "OFFLINE"}, valves ${u.o + 1}-${u.o + u.n}, signal ${u.sig ?? "-"}%, ` +
+          `${u.lk || "-"}, fw ${u.fw || "-"}` +
+          (f ? ` - went offline ${f.off}x, back ${f.on}x in the window${f.lastOff ? ` (last off ${ist(f.lastOff)})` : ""}` : ""));
+      }
+    }
+  }
+
   // ---- motor nodes ----
   const { rows: nodeTypes } = await pool.query(
     `SELECT DISTINCT event_type FROM device_events
