@@ -104,6 +104,21 @@ async function main() {
       const m = h.mesh;
       console.log(`  mesh              link drops ${m.drops ?? "-"}, joins ${m.joins ?? "-"}, dropped msgs ${m.inbox_dropped ?? "-"}, ` +
         `longest wait ${m.wait_max_ms ?? "-"} ms, longest loop stall ${m.loop_busy_max_ms ?? "-"} ms (last 5 min)`);
+      // Which device linked / dropped last: painlessMesh's node id is the
+      // last 4 bytes of its WiFi MAC - matched to a unit that reported that
+      // MAC (its station MAC, or the AP one, +1), else shown as the MAC end.
+      for (const [what, id] of [["linked", m.last_join], ["dropped", m.last_drop]]) {
+        if (!id) continue;
+        const hex = (Number(id) >>> 0).toString(16).padStart(8, "0").toUpperCase();
+        const near = [hex, ((Number(id) - 1) >>> 0).toString(16).padStart(8, "0").toUpperCase()];
+        const { rows: who } = await pool.query(
+          `SELECT DISTINCT ON (event_type) event_type, upper(payload->>'mac') AS mac FROM device_events
+            WHERE farm_id = $1 AND recorded_at > now() - interval '60 days'
+              AND (upper(payload->>'mac') LIKE '%' || $2 OR upper(payload->>'mac') LIKE '%' || $3)
+            ORDER BY event_type, recorded_at DESC`, [farmId, near[0], near[1]]);
+        const name = who.length ? who.map((w) => w.event_type.replace(/_status$/, "").replace(/^motor(\d+)/, "MOTOR_$1")).join(", ") : "not a unit that has reported here";
+        console.log(`  last device ${what.padEnd(7)} id ${id} (MAC ..:${hex.match(/../g).join(":")}) - ${name}`);
+      }
       for (const [k, n] of Object.entries(m.motor_nodes || {})) {
         console.log(`  motor ${k} (hub)    ${n.online ? "online" : "OFFLINE"}, heard ${Number.isFinite(n.seen_s) && n.seen_s >= 0 && n.seen_s < 4000000000 ? `${n.seen_s} s ago` : "never (since hub boot)"}, ` +
           `went offline ${n.offline_n} time(s) since hub boot, rssi ${n.rssi}, ${n.link}`);
