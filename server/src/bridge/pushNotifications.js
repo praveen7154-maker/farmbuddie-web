@@ -117,6 +117,9 @@ export function buildNotification(nodeId, motorNum, payload) {
   const motorLabel = `Motor ${normalizeMotorNum(motorNum)}`;
   const { event } = payload;
   const tripped = trippedFault(payload);
+  if (tripped === 5 && payload.loss_on === "motor") {
+    return { title: motorLabel, body: "Phase loss on the motor side - the supply is fine but one phase had no current. Check the contactor, terminals and motor cable, then press Clear in the app" };
+  }
   if (tripped) {
     return { title: motorLabel, body: FAULT_TEXT[tripped] || "Fault - the motor was stopped" };
   }
