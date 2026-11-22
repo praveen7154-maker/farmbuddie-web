@@ -25,7 +25,7 @@ export const CODES = {
   138: "Node OTA failed", 139: "EEPROM error", 140: "RTC error", 141: "Clock corrected",
   142: "Log cleared", 143: "Serial set", 144: "Service mode", 145: "Records skipped",
   146: "Calibration changed", 147: "Calibration restored", 148: "Installed", 149: "Farm changed",
-  150: "App motor command"
+  150: "App motor command", 151: "SMS command"
 };
 
 // Kept in the hub's "critical" ring - never pushed out by routine events.
@@ -101,6 +101,11 @@ export function describe(code, value, aux) {
     case 148: return `farm ${value}`;
     case 149: return `farm ${aux} -> ${value}`;
     case 150: return (value ? "ON" : "OFF") + (aux ? " - refused" : "");
+    case 151: {
+      const act = ["", "ON", "OFF", "SOS", "STATUS", "HELP"][value] || `cmd ${value}`;
+      const res = ["done", "failed", "refused", "offline", "too late", "SMS control off", "unknown number", "not set up", "already"][aux] || `result ${aux}`;
+      return `${act} - ${res}`;
+    }
     case 144: case 146: case 147: return "";
     default: return value === 0 && aux === 0 ? "" : `${value} V, ${(aux / 100).toFixed(2)} A`;
   }

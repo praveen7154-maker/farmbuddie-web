@@ -113,6 +113,31 @@ function valveStuckText(valve, payload) {
   return `Valve ${valve} did not close - no closed signal from the valve in 30 s, it may still be open. Please check Valve ${valve}`;
 }
 
+// EVENT_SMS_COMMAND (76): a motor command received by SMS (SMS fallback).
+function smsCommandText(p) {
+  const act = p.sms_action || "";
+  const res = p.sms_result || "";
+  if (act === "sos") {
+    return res === "done" || res === "already"
+      ? "SOS by SMS - all motors switched off"
+      : "SOS by SMS - not every motor confirmed it stopped, please check";
+  }
+  if (act === "status") return "Status asked by SMS - the reply was sent";
+  const m = typeof p.motor === "number" && p.motor > 0 ? p.motor : null;
+  const what = m ? `Motor ${m} ${act === "on" ? "ON" : "OFF"} by SMS` : "Command by SMS";
+  const how = {
+    done: "done",
+    already: act === "on" ? "it was already running" : "it was already off",
+    failed: act === "on" ? "the motor did not start" : "the motor did not stop - check the panel",
+    refused: "refused (a fault or a safety limit stands)",
+    offline: "the motor was not reachable",
+    stale: "not done - the SMS arrived too late",
+    disabled: "ignored - SMS fallback is off for this farm",
+    not_set_up: "this motor isn't set up on this farm"
+  }[res] || res;
+  return `${what} - ${how}`;
+}
+
 export function buildNotification(nodeId, motorNum, payload) {
   const motorLabel = `Motor ${normalizeMotorNum(motorNum)}`;
   const { event } = payload;
@@ -136,6 +161,9 @@ export function buildNotification(nodeId, motorNum, payload) {
   }
   if (valve && event === 70) {
     return { title: motorLabel, body: `Valve ${valve} did not open (tried twice) - skipped, the other valves continue. Please check Valve ${valve}` };
+  }
+  if (event === 76) {
+    return { title: motorLabel, body: smsCommandText(payload) };
   }
   if (payload.took_over_manual === true) {
     return { title: motorLabel, body: "Scheduled cyclic started - your manual run was switched to this schedule" };
