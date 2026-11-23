@@ -125,8 +125,8 @@ function autoRestartText(p) {
     5: "the phases are normal again", 6: "the phases are normal again", 7: "the phases are normal again",
     2: "after an overload"
   }[p.cause];
-  if (typeof p.cause !== "number") return "AUTO RESTART - the motor was started again by itself";
-  return `AUTO RESTART - motor started again (${why || "the fault was cleared"})`;
+  if (typeof p.cause !== "number") return "AUTO RESTART - starting the motor again by itself";
+  return `AUTO RESTART - starting the motor again (${why || "the fault was cleared"})`;
 }
 
 // EVENT_SMS_COMMAND (76): a motor command received by SMS (SMS fallback).
