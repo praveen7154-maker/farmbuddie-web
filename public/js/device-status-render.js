@@ -27,6 +27,7 @@ export const FAULT_LABELS = {
   5: "Phase Loss",
   6: "Phase Imbalance",
   7: "Phase Order Reversed",
+  8: "Motor Did Not Start",
   10: "Power Outage",
 };
 

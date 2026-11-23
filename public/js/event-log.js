@@ -179,7 +179,7 @@ function renderCard() {
   $("faultTiles").innerHTML = [
     faultTile("Dry run", f.dry_run), faultTile("Overload", f.overload), faultTile("Low voltage", f.low_voltage),
     faultTile("High voltage", f.high_voltage), faultTile("Phase loss", f.phase_loss),
-    faultTile("Phase imbalance", f.phase_imbalance), faultTile("Stop not confirmed", f.stuck_contactor),
+    faultTile("Phase imbalance", f.phase_imbalance), faultTile("Starter (stop not confirmed / did not start)", f.stuck_contactor),
     faultTile("Restarted while running", f.restarted_while_running)
   ].join("");
 }

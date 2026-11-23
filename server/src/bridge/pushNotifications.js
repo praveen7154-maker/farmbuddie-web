@@ -28,18 +28,19 @@ const PUSH_EVENTS = new Set([
   72,              // a butterfly valve did not reach the end it was sent to (no feedback), or can't be driven
   60, 62,          // filter backwash: its valves did not respond / filter still dirty after the flush
   73, 74, 75,      // filter backwash: filter valves failed (motor stopped), backwash valves didn't close, flush motor didn't start
-  77, 78           // AUTO RESTART: the motor started again by itself / gave up after 3 tries
+  77, 78,          // AUTO RESTART: the motor started again by itself / gave up after 3 tries
+  79               // dry-run recovery gave up - the well was still dry after 5 restarts, the motor stays off
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
-// A fault trip is sent with the fault code as its event (1-7, or 10 for a
+// A fault trip is sent with the fault code as its event (1-8, or 10 for a
 // power outage). "fault" is the motor's fault at send time, which can still
 // be an earlier one (phase loss tripping while phase-reversed is active) -
-// so a 1-7 event is a trip of that fault whatever "fault" says.
+// so a 1-8 event is a trip of that fault whatever "fault" says.
 function trippedFault(payload) {
   const { event, fault } = payload;
   if (typeof event !== "number") return 0;
-  if (event >= 1 && event <= 7) return event;
+  if (event >= 1 && event <= 8) return event;   // 8 = the motor did not start (no current after START)
   if (typeof fault === "number" && fault !== 0 && event === fault) return fault;
   return 0;
 }
@@ -66,6 +67,7 @@ const FAULT_TEXT = {
   5: "Phase loss - a phase is missing, the motor was stopped",
   6: "Phase imbalance - the motor was stopped",
   7: "Phase order reversed - the motor will not start. Swap any two phases at the panel",
+  8: "Motor did not start - no current after the START signal, though the supply is fine. Check the starter (contactor and coil, overload relay or SPP tripped, START wiring), then press Clear in the app",
   10: "Power outage - no supply on any phase"
 };
 const EVENT_TEXT = {
@@ -100,7 +102,8 @@ const EVENT_TEXT = {
   62: "Filter pressure is still high after the backwash - please check and clean the filter",
   73: "Filter backwash: the filter valves did not respond - the motor was stopped to protect the pump. Check the backwash node, then resume or stop the program",
   74: "Filter backwash: the backwash valves did not close - water may still be draining. Please check the backwash node",
-  75: "Filter backwash could not start - the motor did not start for the flush. Irrigation carries on"
+  75: "Filter backwash could not start - the motor did not start for the flush. Irrigation carries on",
+  79: "Dry run - the well was still dry after 5 restarts. The motor stays off: press Clear and start it when the water is back"
 };
 
 // EVENT_VALVE_STUCK (72): "action" open/close, "reason" no_feedback/not_drivable.

@@ -45,3 +45,17 @@ test("AUTO RESTART restarts and give-ups are pushed, with the reason", () => {
   assert.match(buildNotification("n", 1, { event: 77, fault: 0, cause: 0 }).body, /fault was cleared/);
   assert.match(buildNotification("n", 1, { event: 78, fault: 0 }).body, /did not run after 3 tries/);
 });
+
+test("dry-run recovery giving up is pushed, with its own text", () => {
+  assert.equal(isPushWorthy({ event: 79, fault: 1 }), true);
+  assert.match(buildNotification("n", 1, { event: 79, fault: 1 }).body, /still dry after 5 restarts/);
+});
+
+test("the motor not starting (fault 8) is pushed as its own fault, not a dry run", () => {
+  assert.equal(isPushWorthy({ event: 8, fault: 8 }), true);
+  // "fault" can still be an earlier one at send time - event 8 is the trip.
+  assert.equal(isPushWorthy({ event: 8, fault: 0 }), true);
+  const body = buildNotification("n", 2, { event: 8, fault: 8 }).body;
+  assert.match(body, /^Motor did not start/);
+  assert.match(body, /contactor/);
+});
