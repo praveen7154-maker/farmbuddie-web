@@ -36,3 +36,12 @@ test("filter backwash failures are pushed, with their own text (same list as the
   // routine backwash progress stays quiet
   for (const event of [58, 59, 63]) assert.equal(isPushWorthy({ event, fault: 0 }), false, `event ${event}`);
 });
+
+test("AUTO RESTART restarts and give-ups are pushed, with the reason", () => {
+  assert.equal(isPushWorthy({ event: 77, fault: 0 }), true);
+  assert.equal(isPushWorthy({ event: 78, fault: 0 }), true);
+  assert.match(buildNotification("n", 1, { event: 77, fault: 0, cause: 10 }).body, /^AUTO RESTART .*power is back/);
+  assert.match(buildNotification("n", 2, { event: 77, fault: 0, cause: 2 }).body, /overload/);
+  assert.match(buildNotification("n", 1, { event: 77, fault: 0, cause: 0 }).body, /fault was cleared/);
+  assert.match(buildNotification("n", 1, { event: 78, fault: 0 }).body, /did not run after 3 tries/);
+});

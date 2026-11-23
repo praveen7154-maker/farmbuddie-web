@@ -27,7 +27,8 @@ const PUSH_EVENTS = new Set([
   71,              // phase order fault released - the order is right again (phase reversal protection)
   72,              // a butterfly valve did not reach the end it was sent to (no feedback), or can't be driven
   60, 62,          // filter backwash: its valves did not respond / filter still dirty after the flush
-  73, 74, 75       // filter backwash: filter valves failed (motor stopped), backwash valves didn't close, flush motor didn't start
+  73, 74, 75,      // filter backwash: filter valves failed (motor stopped), backwash valves didn't close, flush motor didn't start
+  77, 78           // AUTO RESTART: the motor started again by itself / gave up after 3 tries
 ]);
 const LEGACY_VOLTAGE_RESTORED = 10; // older firmware - same value as FAULT_POWER_OUTAGE, told apart by fault == 0
 
@@ -113,6 +114,18 @@ function valveStuckText(valve, payload) {
   return `Valve ${valve} did not close - no closed signal from the valve in 30 s, it may still be open. Please check Valve ${valve}`;
 }
 
+// EVENT_AUTO_RESTARTED (77): "cause" is the fault that had stopped the motor.
+function autoRestartText(p) {
+  const why = {
+    10: "power is back", 255: "power is back",
+    3: "the voltage is normal again", 4: "the voltage is normal again",
+    5: "the phases are normal again", 6: "the phases are normal again", 7: "the phases are normal again",
+    2: "after an overload"
+  }[p.cause];
+  if (typeof p.cause !== "number") return "AUTO RESTART - the motor was started again by itself";
+  return `AUTO RESTART - motor started again (${why || "the fault was cleared"})`;
+}
+
 // EVENT_SMS_COMMAND (76): a motor command received by SMS (SMS fallback).
 function smsCommandText(p) {
   const act = p.sms_action || "";
@@ -161,6 +174,12 @@ export function buildNotification(nodeId, motorNum, payload) {
   }
   if (valve && event === 70) {
     return { title: motorLabel, body: `Valve ${valve} did not open (tried twice) - skipped, the other valves continue. Please check Valve ${valve}` };
+  }
+  if (event === 77) {
+    return { title: motorLabel, body: autoRestartText(payload) };
+  }
+  if (event === 78) {
+    return { title: motorLabel, body: "AUTO RESTART stopped - the motor did not run after 3 tries. Check it and start it yourself" };
   }
   if (event === 76) {
     return { title: motorLabel, body: smsCommandText(payload) };

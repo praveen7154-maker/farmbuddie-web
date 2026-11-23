@@ -19,7 +19,7 @@ export const CODES = {
   57: "Valve closed mid run", 58: "Backwash started", 60: "Backwash valves failed",
   62: "Backwash timed out", 63: "Backwash complete", 64: "Voltage restored", 65: "Restarted while running",
   66: "Load limit stop", 67: "Load limit blocked", 68: "Schedule not started", 69: "Valve did not open",
-  70: "Valve not opening", 71: "Phase order OK", 72: "Valve stuck",
+  70: "Valve not opening", 71: "Phase order OK", 72: "Valve stuck", 77: "Auto restart", 78: "Auto restart gave up",
   128: "Boot", 129: "Firmware changed", 130: "OTA start", 131: "OTA failed", 132: "OTA ok",
   133: "OTA rollback", 134: "Cloud back", 135: "Node offline", 136: "Node online", 137: "Node OTA ok",
   138: "Node OTA failed", 139: "EEPROM error", 140: "RTC error", 141: "Clock corrected",
