@@ -35,11 +35,16 @@ export function normalizeFarmElectrical(farmId, doc) {
     .map((s, i) => ({ serviceNumber: intNumber(s?.serviceNumber) || i + 1, sanctionedHp: hpNumber(s?.sanctionedHp) }));
 
   const mainDigits = String(doc?.primaryMobile ?? "").replace(/\D/g, "").slice(-10);
+  const simDigits = String(doc?.sim?.msisdn ?? "").replace(/\D/g, "");
   return {
     farmId,
     // The farm's main farmer number - the only SMS alert number (see
     // farmSms.js); shown read-only on every app user's Profile screen.
     mainPhone: mainDigits.length === 10 ? `+91${mainDigits}` : null,
+    // The hub SIM's own number (sim.msisdn, from the controller chosen at
+    // onboarding - an M2M SIM's is 13 digits): where the app's SMS fallback
+    // sends motor commands. Shown read-only in the app's Transport page.
+    deviceSim: simDigits.length >= 10 ? simDigits : null,
     // Main farmer's SMS alert switch (Profile screen) - see farmSms.js.
     smsAlertsEnabled: doc?.smsAlertsEnabled !== false,
     pumps: pumps.filter((p) => p.hp !== null && p.service !== null),
