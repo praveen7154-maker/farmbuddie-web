@@ -434,7 +434,8 @@ test("a hub resuming a cut-off download gets just the rest of the image", async 
 
 test("a motor node the farm has but that never reported shows as not reached", () => {
   const nodes = [{ farmId: "0002", node: "MOTOR_2", state: "current" }];
-  const targets = [{ farmId: "0002" }];
+  // The hub has been handing the image out for longer than a unit needs to answer.
+  const targets = [{ farmId: "0002", state: "staged", updatedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString() }];
   const fleet = [{ farmId: "0002", motorNodeLabels: ["MOTOR_2", "MOTOR_3"] }];
   const out = withMissingMotorNodes(nodes, targets, fleet);
   assert.deepEqual(out.map((n) => [n.node, n.state]), [["MOTOR_2", "current"], ["MOTOR_3", "not_reporting"]]);
@@ -445,4 +446,19 @@ test("a motor node the farm has but that never reported shows as not reached", (
   // A farm not in this release isn't listed; no fleet data changes nothing.
   assert.equal(withMissingMotorNodes(nodes, [], fleet).length, 1);
   assert.equal(withMissingMotorNodes(nodes, targets, null).length, 1);
+});
+
+test("a unit isn't 'not reached' while its hub is still getting the image, or just began handing it out", () => {
+  const fleet = [{ farmId: "0003", motorNodeLabels: ["MOTOR_2"] }];
+  const now = Date.parse("2026-11-23T16:20:00Z");
+  const stateFor = (target) => withMissingMotorNodes([], [{ farmId: "0003", ...target }], fleet, now)[0].state;
+  assert.equal(stateFor({}), "hub_preparing");                                   // sent, no reply yet
+  assert.equal(stateFor({ state: "downloading" }), "hub_preparing");             // the field case: GSM download
+  assert.equal(stateFor({ state: "failed", error: "download_failed" }), "hub_failed");
+  assert.equal(stateFor({ state: "staged", updatedAt: "2026-11-23T16:18:00Z" }), "offered");        // 2 min ago
+  assert.equal(stateFor({ state: "staged", updatedAt: "2026-11-23T16:05:00Z" }), "not_reporting");  // 15 min ago
+  // Only "not_reporting" counts as not reached - the others are waiting.
+  const s = summarizeNodes(withMissingMotorNodes([], [{ farmId: "0003", state: "downloading" }], fleet, now));
+  assert.equal(s.missing, 0);
+  assert.equal(s.waiting, 1);
 });

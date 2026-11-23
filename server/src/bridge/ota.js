@@ -142,19 +142,38 @@ export function summarizeNodes(nodes) {
   return s;
 }
 
+// A unit that can hear its hub answers its offer within seconds (the hub
+// offers every 20 s - Motor firmware NodeOtaServer OFFER_INTERVAL_MS); one
+// still silent this long after the hub began handing out is not reached.
+export const NODE_ANSWER_MS = 5 * 60 * 1000;
+
 // Motor nodes a farm should have (fleet motorNodeLabels) that this release
 // has no word from - a unit that is offline says nothing, so it used to be
-// left out and the release looked done. The hub keeps offering the image for
-// 48 h (Motor firmware NodeOtaServer SESSION_MAX_MS), so one that comes back
-// online in that time still updates itself.
-export function withMissingMotorNodes(nodes, targets, fleet) {
+// left out and the release looked done. A unit can only answer once its hub
+// has the image ("staged" - it downloads it first, 3-6 min over GSM):
+//   hub still getting it (or no reply yet)  -> hub_preparing ("Waiting for the hub")
+//   hub's download failed                    -> hub_failed
+//   hub handing out, under NODE_ANSWER_MS    -> offered
+//   hub handing out, silent longer           -> not_reporting ("Not reached")
+// Every unit used to read "Not reached" from the first second, while the hub
+// was still downloading - nothing was wrong with it or its link. The hub keeps
+// offering the image for 48 h (SESSION_MAX_MS), so one that comes back online
+// in that time still updates itself.
+export function withMissingMotorNodes(nodes, targets, fleet, nowMs = Date.now()) {
   const byFarm = new Map((fleet || []).map((f) => [f.farmId, f]));
   const out = [...nodes];
   for (const t of targets) {
     const expected = byFarm.get(t.farmId)?.motorNodeLabels || [];
+    let state = "hub_preparing";
+    if (t.state === "staged" || t.state === "validated") {
+      const at = t.updatedAt ? new Date(t.updatedAt).getTime() : NaN;
+      state = Number.isFinite(at) && nowMs - at < NODE_ANSWER_MS ? "offered" : "not_reporting";
+    } else if (t.state === "failed" || t.state === "rolled_back") {
+      state = "hub_failed";
+    }
     for (const label of expected) {
       if (nodes.some((n) => n.farmId === t.farmId && n.node === label)) continue;
-      out.push({ farmId: t.farmId, node: label, product: "motor-node", state: "not_reporting",
+      out.push({ farmId: t.farmId, node: label, product: "motor-node", state,
         percent: null, error: null, version: null, updatedAt: null });
     }
   }

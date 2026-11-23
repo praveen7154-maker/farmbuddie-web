@@ -101,7 +101,15 @@ function productLabels(bytes) {
 const PRODUCT_TEXT = { hub: "Hub / Master Motor", "motor-node": "Motor Node", valve: "Valve Node", "filter-backwash": "Filter Backwash Node", "butterfly-valve": "Butterfly Valve Node" };
 const NODE_STATE_TEXT = {
   receiving: "Receiving", installed: "Installed - waiting", validated: "Updated", current: "Already on it",
-  failed: "Failed", rolled_back: "Rolled back", not_reporting: "Not reached"
+  failed: "Failed", rolled_back: "Rolled back", not_reporting: "Not reached",
+  hub_preparing: "Waiting for the hub", offered: "Offered", hub_failed: "Not sent"
+};
+// Units the hub hasn't heard from yet (server: withMissingMotorNodes).
+const NODE_WAIT_TEXT = {
+  hub_preparing: "The hub is getting the update first (3-6 min over GSM) - it hands it to this unit right after, over the mesh, LoRa or RS485.",
+  offered: "The hub has the update and is offering it - waiting for this unit to answer (usually under a minute).",
+  hub_failed: "The hub's own download failed, so this unit got nothing - send the update to this farm again.",
+  not_reporting: "No word from this unit - offline, powered off or out of range. The hub keeps offering the update for 48 h; it updates itself once it's back online."
 };
 const STATE_TEXT = {
   sent: "Waiting for hub", starting: "Starting", downloading: "Downloading", verifying: "Verifying",
@@ -530,6 +538,7 @@ function renderRelease({ release, summary, targets, nodeSummary, nodes }) {
 function renderNodes(release, s, nodes) {
   $("nodeSummaryText").textContent = s && s.total
     ? `- ${s.updated} updated, ${s.in_progress} in progress, ${s.failed} failed` +
+      (s.waiting ? `, ${s.waiting} waiting` : "") +
       (s.missing ? `, ${s.missing} not reached` : "")
     : "- none reporting yet (the hub hands it out a minute or so after staging)";
   $("nodeBody").innerHTML = nodes.length ? nodes.map((n) => {
@@ -542,9 +551,7 @@ function renderNodes(release, s, nodes) {
       <td><span class="ota-pill ${n.outcome === "missing" ? "busy" : n.outcome}">${esc(NODE_STATE_TEXT[n.state] || n.state)}</span></td>
       <td>${pct}</td>
       <td>${esc(n.version || "")}</td>
-      <td>${esc(n.error ? (ERROR_TEXT[n.error] || n.error)
-        : n.state === "not_reporting" ? "No word from this unit - offline, powered off or out of range. The hub keeps offering the update for 48 h; it updates itself once it's back online."
-        : "")}</td>
+      <td>${esc(n.error ? (ERROR_TEXT[n.error] || n.error) : NODE_WAIT_TEXT[n.state] || "")}</td>
       <td>${fmtTime(n.updatedAt)}</td>
     </tr>`;
   }).join("") : `<tr><td colspan="7">No unit has reported yet</td></tr>`;
