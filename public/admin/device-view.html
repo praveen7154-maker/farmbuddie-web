@@ -191,7 +191,7 @@
     <label>Dry-run Current (A) <input type="number" step="any" id="fs_iDry"></label>
     <label>Overload Current (A) <input type="number" step="any" id="fs_iOverload"></label>
     <label>Dry-run Restart (min) <input type="number" step="1" id="fs_dryRunRestartMinutes"></label>
-    <label>Phase Loss Detect (V) <input type="number" step="any" id="fs_phaseLossDetectV"></label>
+    <label>Phase Loss Detect (V) <input type="number" step="any" min="50" max="100" id="fs_phaseLossDetectV" title="50-100 V - the controller keeps it at 50 V at least"></label>
     <label>Phase Loss Debounce (ms) <input type="number" step="1" id="fs_phaseLossDebounceMs"></label>
     <label>Phase Imbalance Max (V) <input type="number" step="any" id="fs_phaseImbalanceMax"></label>
     <label>Cyclic Resume Cooldown (s, 30-600) <input type="number" step="1" min="30" max="600" id="fs_cyclicResumeCooldownSec"></label>
