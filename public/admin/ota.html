@@ -184,7 +184,8 @@
       "Not reached" (offline, powered off or out of range) - it still updates itself if it comes back within 48 h.
       "Installed - waiting" = it has the new firmware and switches over as soon as the farm is idle.</p>
   </div>
-  <p class="ota-note">"Waiting for hub" = no reply yet: the hub is offline or busy. Over GSM the hub can't send progress while it downloads
+  <p class="ota-note">"Waiting for hub" = no reply yet: the hub is offline or busy. A hub that was offline when the update was sent gets it
+    sent again by itself once it is back online (after 10 min without a reply, up to 5 tries in 48 h) - or press Retry. Over GSM the hub can't send progress while it downloads
     (its one modem is busy with the download) - the row shows the time since it started instead, usually 3-6 min, then it restarts on the
     new firmware. Refreshes every 5 seconds.</p>
   <div class="ota-actions">

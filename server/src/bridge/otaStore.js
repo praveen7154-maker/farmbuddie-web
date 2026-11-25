@@ -211,6 +211,18 @@ export const pgOtaStore = {
     return rows.map((r) => r.farmId);
   },
 
+  // This farm's releases still at "sent" (no reply from its hub at all), not
+  // stopped, sent since `since` - newest first, with what a re-send needs.
+  async unansweredTargets(farmId, since) {
+    const { rows } = await pool.query(
+      `SELECT t.release_id AS "releaseId", t.farm_id AS "farmId", t.node_id AS "nodeId", t.attempts, t.sent_at AS "sentAt",
+              r.product, r.version, r.url, r.sha256, r.signature
+         FROM ota_release_targets t JOIN ota_releases r ON r.id = t.release_id
+        WHERE t.farm_id = $1 AND t.state = 'sent' AND r.stopped_at IS NULL AND t.sent_at > $2
+        ORDER BY t.release_id DESC`, [farmId, since]);
+    return rows.map((r) => ({ ...r, releaseId: Number(r.releaseId) }));
+  },
+
   async markSent(releaseId, farmIds, at) {
     await pool.query(
       `UPDATE ota_release_targets SET state = 'sent', percent = NULL, error = NULL, attempts = attempts + 1,

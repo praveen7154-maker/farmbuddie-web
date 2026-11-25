@@ -147,11 +147,21 @@ export function summarizeNodes(nodes) {
 // still silent this long after the hub began handing out is not reached.
 export const NODE_ANSWER_MS = 5 * 60 * 1000;
 
+// A hub that hasn't answered a release this long after it was sent never got
+// it: it connects with a clean session, so a command sent while it was
+// offline (a power cut on its battery, no network) is gone. When it is heard
+// again it is sent once more by itself - see handleHubSeen().
+export const HUB_ANSWER_MS = 10 * 60 * 1000;
+export const AUTO_RESEND_MAX_TRIES = 5;                    // the first send included
+export const AUTO_RESEND_WINDOW_MS = 48 * 60 * 60 * 1000;
+const HUB_SEEN_CHECK_MS = 2 * 60 * 1000;                   // per farm - a hub talks every few seconds
+
 // Motor nodes a farm should have (fleet motorNodeLabels) that this release
 // has no word from - a unit that is offline says nothing, so it used to be
 // left out and the release looked done. A unit can only answer once its hub
 // has the image ("staged" - it downloads it first, 3-6 min over GSM):
 //   hub still getting it (or no reply yet)  -> hub_preparing ("Waiting for the hub")
+//   no reply from the hub HUB_ANSWER_MS on  -> hub_no_reply ("Hub not answering")
 //   hub's download failed                    -> hub_failed
 //   hub handing out, under NODE_ANSWER_MS    -> offered
 //   hub handing out, silent longer           -> not_reporting ("Not reached")
@@ -165,7 +175,10 @@ export function withMissingMotorNodes(nodes, targets, fleet, nowMs = Date.now())
   for (const t of targets) {
     const expected = byFarm.get(t.farmId)?.motorNodeLabels || [];
     let state = "hub_preparing";
-    if (t.state === "staged" || t.state === "validated") {
+    const sentAt = t.sentAt ? new Date(t.sentAt).getTime() : NaN;
+    if ((t.state === "sent" || !t.state) && Number.isFinite(sentAt) && nowMs - sentAt >= HUB_ANSWER_MS) {
+      state = "hub_no_reply";
+    } else if (t.state === "staged" || t.state === "validated") {
       const at = t.updatedAt ? new Date(t.updatedAt).getTime() : NaN;
       state = Number.isFinite(at) && nowMs - at < NODE_ANSWER_MS ? "offered" : "not_reporting";
     } else if (t.state === "failed" || t.state === "rolled_back") {
@@ -533,6 +546,40 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     }
   });
 
+  // Called when a hub is heard (a live status / health message). Its releases
+  // still at "sent" HUB_ANSWER_MS after the last send never reached it -
+  // sent again: the newest of each product only (a hub takes one at a time),
+  // up to AUTO_RESEND_MAX_TRIES, within AUTO_RESEND_WINDOW_MS.
+  const lastHubCheck = new Map();
+  async function handleHubSeen(farmId) {
+    if (!store.unansweredTargets) return 0;
+    const at = now();
+    const t = at.getTime();
+    if (t - (lastHubCheck.get(farmId) || 0) < HUB_SEEN_CHECK_MS) return 0;
+    lastHubCheck.set(farmId, t);
+    let resent = 0;
+    try {
+      const rows = await store.unansweredTargets(farmId, new Date(t - AUTO_RESEND_WINDOW_MS));
+      const products = new Set();
+      for (const r of rows) {
+        const product = r.product || "hub";
+        if (products.has(product)) continue;   // an older one of the same kind - the newer supersedes it
+        products.add(product);
+        if ((r.attempts || 1) >= AUTO_RESEND_MAX_TRIES) continue;
+        if (t - new Date(r.sentAt).getTime() < HUB_ANSWER_MS) continue;
+        const fw = await store.getFirmwareMeta(r.sha256);
+        if (!fw) continue;
+        await store.markSent(r.releaseId, [farmId], at);
+        await sendToFarms(r, fw.size, [{ farmId, nodeId: r.nodeId }]);
+        console.log(`[ota] release ${r.releaseId} sent again to farm ${farmId} - its hub is back and never answered (try ${(r.attempts || 1) + 1})`);
+        resent++;
+      }
+    } catch (err) {
+      console.error("[ota] resend on hub back failed:", err);
+    }
+    return resent;
+  }
+
   // Called for every farm/<id>/<node>/ota/status message the bridge receives.
   async function handleOtaStatus(farmId, payload) {
     if (!payload || payload.type !== "ota_status" || typeof payload.state !== "string") return;
@@ -547,5 +594,5 @@ export function createOtaModule({ store, publish, listFleet, publicBaseUrl, publ
     }
   }
 
-  return { publicRouter, adminRouter, handleOtaStatus };
+  return { publicRouter, adminRouter, handleOtaStatus, handleHubSeen };
 }

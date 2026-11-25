@@ -80,6 +80,13 @@ export function setOtaStatusHandler(fn) {
   otaStatusHandler = fn;
 }
 
+// Set by index.js - a hub heard again gets the OTA releases it never
+// answered sent once more (ota.js handleHubSeen()).
+let hubSeenHandler = null;
+export function setHubSeenHandler(fn) {
+  hubSeenHandler = fn;
+}
+
 // Set by index.js - replies to commands the bridge itself sent and is
 // waiting on (admin Event Log page, eventLog.js). Returns true when it
 // took the message: it's then not stored or sent to the farm's phones.
@@ -171,6 +178,9 @@ async function handleMessage(topic, messageBuf, packet) {
 
   // Reboots, crashes, link drops, silences - kept a year (failureLog.js).
   if (!isRetainedReplay(packet)) await noteDeviceMessage(farmId, eventType, payload);
+  if (hubSeenHandler && !isRetainedReplay(packet) && (category === "health" || (category === "motor" && leaf === "status"))) {
+    hubSeenHandler(farmId).catch((err) => console.error("[bridge] hub-seen handler failed:", err));
+  }
 
   try {
     await insertEvent({ farmId, nodeId, eventType, payload });

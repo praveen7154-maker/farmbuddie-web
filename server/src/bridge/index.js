@@ -2,7 +2,7 @@ import { config } from "../config.js";
 import { ensureSchema, startRetentionCleanup } from "./postgres.js";
 import { ensureFailureSchema, cleanupOldFailures } from "./failureLog.js";
 import { ensureFarmConfigCacheSchema } from "./farmConfigCache.js";
-import { connectBridge, publishCommand, setOtaStatusHandler, setDeviceReplyHandler } from "./mqttBridge.js";
+import { connectBridge, publishCommand, setOtaStatusHandler, setHubSeenHandler, setDeviceReplyHandler } from "./mqttBridge.js";
 import { ensureOtaSchema } from "./otaStore.js";
 import { ensureAnnouncementSchema } from "./announcementStore.js";
 import { ensureReportSchema } from "./reportStore.js";
@@ -30,6 +30,7 @@ async function main() {
   await ensureNdviSchema();
   await ensureFailureSchema();
   setOtaStatusHandler(ota.handleOtaStatus);
+  setHubSeenHandler(ota.handleHubSeen);
   setDeviceReplyHandler(eventLog.handleResponse);
   startRetentionCleanup();
   setInterval(cleanupOldFailures, 60 * 60 * 1000);   // failure log: one year (failureLog.js)

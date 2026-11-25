@@ -6,7 +6,7 @@ import express from "express";
 import {
   createOtaModule, productLabels, otaManifest, verifyReleaseSignature, nodeOutcomeOf, summarizeNodes, outcomeOf,
   imageChip, boardChip, maxFirmwareBytes, CHIP_ESP32, CHIP_ESP32S3, MAX_FIRMWARE_BYTES, MAX_FIRMWARE_BYTES_S3,
-  OTA_BROADCAST_TOPIC, parseByteRange, withMissingMotorNodes
+  OTA_BROADCAST_TOPIC, parseByteRange, withMissingMotorNodes, HUB_ANSWER_MS, AUTO_RESEND_MAX_TRIES
 } from "../src/bridge/ota.js";
 import { loadSigningKey, signRelease, otaManifest as browserManifest } from "../../public/js/ota-crypto.js";
 
@@ -461,4 +461,53 @@ test("a unit isn't 'not reached' while its hub is still getting the image, or ju
   const s = summarizeNodes(withMissingMotorNodes([], [{ farmId: "0003", state: "downloading" }], fleet, now));
   assert.equal(s.missing, 0);
   assert.equal(s.waiting, 1);
+});
+
+test("a unit whose hub never answered says so instead of 'getting the update first' for hours", () => {
+  const fleet = [{ farmId: "0002", motorNodeLabels: ["MOTOR_2"] }];
+  const now = Date.parse("2026-11-25T16:46:00Z");
+  const stateFor = (target) => withMissingMotorNodes([], [{ farmId: "0002", ...target }], fleet, now)[0].state;
+  assert.equal(stateFor({ state: "sent", sentAt: "2026-11-25T16:40:00Z" }), "hub_preparing");   // 6 min - may still answer
+  assert.equal(stateFor({ state: "sent", sentAt: "2026-11-25T10:06:03Z" }), "hub_no_reply");    // the field case: 6 h
+  assert.equal(summarizeNodes(withMissingMotorNodes([], [{ farmId: "0002", state: "sent", sentAt: "2026-11-25T10:06:03Z" }], fleet, now)).waiting, 1);
+});
+
+test("a hub heard again gets the releases it never answered sent once more", async () => {
+  const t0 = Date.parse("2026-11-25T16:46:00Z");
+  let clock = t0;
+  const published = [], marked = [];
+  const old = new Date(t0 - 6 * 3600 * 1000).toISOString();
+  const rows = {
+    "0002": [   // newest first
+      { releaseId: 21, farmId: "0002", nodeId: "MOTOR_1", attempts: 1, sentAt: old, product: "motor-node", version: "1.0.1",
+        url: "https://x/a.bin", sha256: SHA, signature: "sig" },
+      { releaseId: 19, farmId: "0002", nodeId: "MOTOR_1", attempts: 1, sentAt: old, product: "motor-node", version: "1.0.0",
+        url: "https://x/b.bin", sha256: SHA, signature: "sig" },   // older, same kind - superseded
+      { releaseId: 20, farmId: "0002", nodeId: "MOTOR_1", attempts: AUTO_RESEND_MAX_TRIES, sentAt: old, product: null, version: "2.0.0",
+        url: "https://x/c.bin", sha256: SHA, signature: "sig" },   // tries used up
+    ],
+    "0003": [{ releaseId: 22, farmId: "0003", nodeId: "MOTOR_1", attempts: 1, sentAt: new Date(t0 - HUB_ANSWER_MS / 2).toISOString(),
+      product: "valve", version: "1.0.0", url: "https://x/d.bin", sha256: SHA, signature: "sig" }],   // sent 5 min ago
+  };
+  const ota = createOtaModule({
+    store: {
+      async unansweredTargets(farmId) { return rows[farmId] || []; },
+      async getFirmwareMeta() { return { size: 1234 }; },
+      async markSent(id, farms) { marked.push([id, ...farms]); },
+    },
+    publish: async (topic, payload) => published.push({ topic, payload }),
+    listFleet: async () => [], publicBaseUrl: "https://example.test", publicKeyPem: PUB_PEM, now: () => new Date(clock),
+  });
+  assert.equal(await ota.handleHubSeen("0002"), 1);
+  assert.deepEqual(marked, [[21, "0002"]]);
+  assert.equal(published[0].topic, "farm/0002/MOTOR_1/ota/cmd");
+  assert.equal(published[0].payload.cmd, "node_ota_start");
+  assert.equal(published[0].payload.version, "1.0.1");
+  assert.equal(published[0].payload.size, 1234);
+  assert.equal(await ota.handleHubSeen("0002"), 0, "checked at most every 2 min per farm");
+  assert.equal(await ota.handleHubSeen("0003"), 0, "just sent - it may still answer");
+  clock += 3 * 60 * 1000;
+  assert.equal(await ota.handleHubSeen("0003"), 0, "still under 10 min");
+  clock += 3 * 60 * 1000;
+  assert.equal(await ota.handleHubSeen("0003"), 1, "10 min on, no reply: sent again");
 });
