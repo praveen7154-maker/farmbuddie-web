@@ -195,7 +195,7 @@
     <label>Phase Loss Debounce (ms) <input type="number" step="1" id="fs_phaseLossDebounceMs"></label>
     <label>Phase Imbalance Max (V) <input type="number" step="any" id="fs_phaseImbalanceMax"></label>
     <label>Cyclic Resume Cooldown (s, 30-600) <input type="number" step="1" min="30" max="600" id="fs_cyclicResumeCooldownSec"></label>
-    <label>DOL Pulse (ms) <input type="number" step="1" id="fs_dolPulseMs"></label>
+    <label>DOL Pulse (ms, 200-15000) <input type="number" step="100" min="200" max="15000" id="fs_dolPulseMs" title="200 ms - 15 s: how long the starter relay is held to start or stop the motor"></label>
     <label>Confirm Timeout (s) <input type="number" step="1" id="fs_confirmTimeoutSec"></label>
     <label>Phase Reverse Protection
       <select id="fs_phaseReversalProtect">
