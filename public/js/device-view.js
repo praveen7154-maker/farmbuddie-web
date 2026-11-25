@@ -54,7 +54,8 @@ onSnapshot(farmerRef, (snap) => {
     document.getElementById("valveGrid"),
     valveLists ? valveLists.valves : data.motor1?.valves,
     isOnline,
-    valveLists ? valveLists.valvesOnline : data.motor1?.valves_online
+    valveLists ? valveLists.valvesOnline : data.motor1?.valves_online,
+    valveLists ? valveLists.valvesPaired : null
   );
   updateDeviceControl(farmerData);
 });

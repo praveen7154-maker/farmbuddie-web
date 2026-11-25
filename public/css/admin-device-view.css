@@ -228,6 +228,20 @@ a.back-industrial[hidden] { display: none; }
   font-weight: 600;
 }
 
+.valve-closed {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.valve-unknown {
+  color: #6b7280;
+}
+
+.valve-last {
+  color: #6b7280;
+  font-size: 10px;
+}
+
 
 .motor-light{
   margin-top:6px;

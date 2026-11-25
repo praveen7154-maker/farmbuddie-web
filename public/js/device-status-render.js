@@ -161,9 +161,12 @@ export function renderMotorsInto(grid, data, hubOnline) {
  * means "no valve mesh configured", not "everything closed".
  */
 /**
- * Open/online lists (index 0 = valve 1) from the hub's valves-topic
+ * Open/online/paired lists (index 0 = valve 1) from the hub's valves-topic
  * snapshot (deviceStatus.valves - hex bit masks, bit v-1 = valve v, up to
  * 64 valves), or null when there is none (older firmware or valve mode off).
+ * `paired`: valves of a unit the hub knows (units[]: o = offset, n = valve
+ * count) - online or not. A unit that loses power (a power cut, its supply
+ * phase gone) or its radio link goes offline but its valves are still there.
  */
 export function valveListsFromSnapshot(snapshot) {
   if (!snapshot || typeof snapshot.open !== "string") return null;
@@ -180,17 +183,30 @@ export function valveListsFromSnapshot(snapshot) {
     valves.push((open & bit) !== 0n);
     valvesOnline.push((online & bit) !== 0n);
   }
-  return { valves, valvesOnline };
+  let valvesPaired = null;
+  if (Array.isArray(snapshot.units)) {
+    valvesPaired = new Array(max).fill(false);
+    for (const u of snapshot.units) {
+      const o = Number(u?.o), n = Number(u?.n);
+      if (!Number.isInteger(o) || !Number.isInteger(n) || o < 0 || n <= 0) continue;
+      for (let i = o; i < Math.min(o + n, max); i++) valvesPaired[i] = true;
+    }
+  }
+  return { valves, valvesOnline, valvesPaired };
 }
 
-export function renderValvesInto(grid, valves, isOnline, valvesOnline) {
+export function renderValvesInto(grid, valves, isOnline, valvesOnline, valvesPaired) {
   grid.innerHTML = "";
 
-  // The hub sends a fixed-length valves array whenever its mesh is on
-  // (pairing Motor 2 turns it on too) - only valves that have actually
-  // reported (valves_online) are real, paired valves.
+  // Every valve of a unit the hub knows (valvesPaired), online or not - a
+  // unit that loses power or its link used to vanish from here, leaving
+  // only a valve whose last report said open (a 6-valve farm showed just
+  // "V1 OPEN" through a power cut). Without the unit list (older firmware):
+  // the valves that report (valves_online), and any still marked open.
   const paired = (valves || []).map((open, idx) => ({ open, idx }))
-    .filter(({ open, idx }) => !Array.isArray(valvesOnline) || valvesOnline[idx] || open);
+    .filter(({ open, idx }) =>
+      (Array.isArray(valvesPaired) && valvesPaired[idx]) ||
+      !Array.isArray(valvesOnline) || valvesOnline[idx] || open);
 
   if (paired.length === 0) {
     grid.innerHTML = `<div class="valve-box">No valves paired</div>`;
@@ -201,13 +217,21 @@ export function renderValvesInto(grid, valves, isOnline, valvesOnline) {
 
     const div = document.createElement("div");
     div.className = "valve-box";
+    const reporting = !Array.isArray(valvesOnline) || valvesOnline[idx];
 
     if (!isOnline) {
-      div.innerHTML = `V${idx + 1}<br><span class="valve-offline">--</span>`;
+      div.innerHTML = `V${idx + 1}<br><span class="valve-unknown">--</span>`;
+    } else if (!reporting) {
+      // Its unit is offline: what it last said, not what it is now.
+      div.innerHTML = `
+        V${idx + 1}<br>
+        <span class="valve-offline">OFFLINE</span>
+        ${open ? `<br><span class="valve-last">last: open</span>` : ""}
+      `;
     } else {
       div.innerHTML = `
         V${idx + 1}<br>
-        <span class="${open ? "valve-open" : "valve-offline"}">
+        <span class="${open ? "valve-open" : "valve-closed"}">
           ${open ? "OPEN" : "CLOSED"}
         </span>
       `;

@@ -53,6 +53,15 @@ html[data-theme="dark"] .valve-open {
 html[data-theme="dark"] .valve-offline {
   color: #e97575;
 }
+html[data-theme="dark"] .valve-closed {
+  color: #a0aea9;
+}
+html[data-theme="dark"] .valve-unknown {
+  color: #a0aea9;
+}
+html[data-theme="dark"] .valve-last {
+  color: #a0aea9;
+}
 html[data-theme="dark"] .motor-light {
   color: #b5c0bc;
 }
