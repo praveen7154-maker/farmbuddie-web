@@ -27,7 +27,7 @@ if (!farmId) {
   process.exit(1);
 }
 
-const ist = (d) => (d ? new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }) : "-");
+const ist = (d) => (d ? new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hourCycle: "h23" }) : "-");
 const ago = (d) => {
   if (!d) return "never";
   const s = Math.round((Date.now() - new Date(d).getTime()) / 1000);
